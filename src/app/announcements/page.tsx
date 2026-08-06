@@ -1,5 +1,7 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+export const dynamic = "force-dynamic";
+
+import { useState, useEffect, useRef, Suspense } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -79,8 +81,8 @@ const lbl: React.CSSProperties = {
   marginBottom: 7,
 };
 
-// ─── Main page ────────────────────────────────────────────────────────
-export default function AnnouncementsPage() {
+// ─── Main content component (wrapped in Suspense) ────────────────────
+function AnnouncementsContent() {
   const searchParams = useSearchParams();
   const router       = useRouter();
   const tabParam     = searchParams.get("tab");
@@ -192,6 +194,19 @@ export default function AnnouncementsPage() {
         )}
       </main>
     </div>
+  );
+}
+
+// ─── Wrapper with Suspense boundary ──────────────────────────────────
+export default function AnnouncementsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--bg-page)", color: "var(--text-muted)" }}>
+        Loading communications...
+      </div>
+    }>
+      <AnnouncementsContent />
+    </Suspense>
   );
 }
 
