@@ -1,0 +1,729 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  userIdRef    String?    @unique
+  password     String
+  phone        String?
+  photo        String?    
+  jobTitle     String?
+  gradeLevel   String?
+  role         Role       @default(STAFF)
+  staffId      String?    @unique
+  departmentId String?
+  unitId       String?
+  department   Department? @relation(fields: [departmentId], references: [id])
+  unit         Unit?       @relation(fields: [unitId], references: [id])
+  dailyLogs    DailyLog[]
+  supervisedLogs DailyLog[] @relation("SupervisorLogs")
+  notifications Notification[]
+  auditLogs    AuditLog[]
+  internLogs      InternLog[]
+  leaveRequests LeaveRequest[]
+  examAttempts  ExamAttempt[]
+  isActive     Boolean     @default(true)
+  assignedTasks   Task[]  @relation("AssignedTasks")
+  createdTasks    Task[]  @relation("CreatedTasks")
+  checkIns     CheckIn[]
+  announcements Announcement[]
+  chatParticipants ChatParticipant[]
+  chatMessages     ChatMessage[]
+  memos          Memo[]
+  receivedMemos  MemoRecipient[]
+  submittedRevenue  RevenueItem[]  @relation("SubmittedRevenue")
+  reviewedRevenue   RevenueItem[]  @relation("ReviewedRevenue")
+  evcAnnotations    EVCAnnotation[]  @relation("EVCAnnotations")
+  evcVaultFiles     EVCVaultFile[]   @relation("EVCVault")
+  evcTasksAssigned  EVCTask[]        @relation("EVCAssignedTasks")
+  evcTasksCreated   EVCTask[]        @relation("EVCCreatedTasks")
+  raisedPayments    PaymentWorkflow[] @relation("RaisedPayments")
+  confirmedPayments PaymentWorkflow[] @relation("ConfirmedPayments")
+  initiatedTransfers CaseTransfer[] @relation("InitiatedTransfers")
+  acceptedTransfers  CaseTransfer[] @relation("AcceptedTransfers")
+  targetTransfers    CaseTransfer[] @relation("TargetTransfers")
+  forwardedFromTasks Task[] @relation("ForwardedFrom")
+  forwardedToTasks   Task[] @relation("ForwardedTo")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  shortCode   String   @unique
+  category    DeptCategory
+  description String?
+  headId      String?
+  units       Unit[]
+  users       User[]
+  kpis        KPI[]
+  taskTemplates TaskTemplate[]
+  tasks           Task[]
+  createdAt   DateTime @default(now())
+}
+
+model Unit {
+  id           String     @id @default(cuid())
+  name         String
+  shortCode    String
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  users        User[]
+  createdAt    DateTime   @default(now())
+  @@unique([departmentId, shortCode])
+}
+
+model TaskTemplate {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  title        String
+  description  String?
+  requiresEvidence Boolean @default(false)
+  requiresCaseRef  Boolean @default(false)
+  requiresAmount   Boolean @default(false)
+  category     String
+  createdAt    DateTime   @default(now())
+}
+
+model DailyLog {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  date             DateTime  @default(now())
+  taskTitle        String
+  taskCategory     String
+  description      String
+  timeSpent        Float
+  priority         Priority  @default(MEDIUM)
+  status           LogStatus @default(SUBMITTED)
+  caseReference    String?
+  amountInvolved   Float?
+  evidence         String?
+  notes            String?
+  supervisorId     String?
+  supervisor       User?     @relation("SupervisorLogs", fields: [supervisorId], references: [id])
+  supervisorComment String?
+  supervisorScore  Int?
+  reviewedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model KPI {
+  id           String     @id @default(cuid())
+  title        String
+  description  String?
+  target       Float
+  current      Float      @default(0)
+  unit         String
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  period       Period     @default(MONTHLY)
+  startDate    DateTime
+  endDate      DateTime
+  createdAt    DateTime   @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  read      Boolean  @default(false)
+  actionUrl String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())   // ← ADDED @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  detail    String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model InternLog {
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  date            DateTime  @default(now())
+  taskTitle       String
+  description     String
+  skillsLearned   String?
+  supervisorName  String?
+  hoursSpent      Float
+  status          LogStatus @default(SUBMITTED)
+  supervisorComment String?
+  evidence        String?
+  weekNumber      Int?
+  createdAt       DateTime  @default(now())
+}
+
+model LeaveRequest {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  type            LeaveType
+  startDate       DateTime
+  endDate         DateTime
+  days            Int
+  reason          String
+  status          LeaveStatus @default(PENDING)
+  approvedById    String?
+  approverComment String?
+  createdAt       DateTime    @default(now())
+}
+
+model CheckIn {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  date          DateTime
+  checkInAt     DateTime
+  checkOutAt    DateTime?
+  hoursWorked   Float?
+  status        CheckInStatus @default(PRESENT)
+  note          String?
+  ipAddress     String?
+  isOnPremises  Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  gpsLat         Float?
+  gpsLng         Float?
+  locationMethod String?
+  @@unique([userId, date])
+}
+
+model Exam {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  targetRole  String
+  gradeLevel  String?
+  duration    Int
+  passMark    Int           @default(60)
+  isActive    Boolean       @default(false)
+  questions   Question[]
+  attempts    ExamAttempt[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  examId        String
+  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  text          String
+  optionA       String
+  optionB       String
+  optionC       String
+  optionD       String
+  correctAnswer String
+  marks         Int      @default(1)
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+}
+
+model ExamAttempt {
+  id          String    @id @default(cuid())
+  examId      String
+  userId      String
+  exam        Exam      @relation(fields: [examId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+  answers     Json
+  score       Int       @default(0)
+  percentage  Int       @default(0)
+  passed      Boolean   @default(false)
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  @@unique([examId, userId])
+}
+
+model Task {
+  id                 String     @id @default(cuid())
+  title              String
+  description        String
+  departmentId       String
+  department         Department @relation(fields: [departmentId], references: [id])
+  assignedToId       String?
+  createdById        String
+  assignedTo         User?      @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  createdBy          User       @relation("CreatedTasks",  fields: [createdById],  references: [id])
+  priority           Priority   @default(MEDIUM)
+  status             TaskStatus @default(PENDING)
+  dueDate            DateTime?
+  completedAt        DateTime?
+  notes              String?
+  caseReference      String?
+  directorComment    String?
+  taskRef            String?    @unique
+  forwardedFromId    String?
+  forwardedToId      String?
+  treatmentStatus    String?    @default("PENDING")
+  documentData       String?
+  documentName       String?
+  documentType       String?
+  documentSize       Int?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  office             String?
+  forwardNote        String?
+  escalationReason   String?
+  escalatedAt        DateTime?
+  isPaymentRequest   Boolean   @default(false)
+  paymentRouting     String?
+  paymentRecipientId String?
+  taskSource         String?   @default("DEPARTMENT")
+  forwardedFrom      User?     @relation("ForwardedFrom", fields: [forwardedFromId], references: [id])
+  forwardedTo        User?     @relation("ForwardedTo", fields: [forwardedToId], references: [id])
+}
+
+model Announcement {
+  id           String   @id @default(cuid())
+  title        String
+  body         String
+  authorId     String
+  author       User     @relation(fields: [authorId], references: [id])
+  targetDeptId String?
+  isPinned     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model ChatConversation {
+  id           String          @id @default(cuid())
+  name         String?
+  isGroup      Boolean         @default(false)
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model ChatParticipant {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id])
+  createdAt      DateTime         @default(now())
+}
+
+model ChatMessage {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User             @relation(fields: [senderId], references: [id])
+  content        String?
+  fileUrl        String?
+  fileName       String?
+  fileType       String?
+  createdAt      DateTime         @default(now())
+}
+
+model Memo {
+  id          String          @id @default(cuid())
+  subject     String
+  body        String
+  senderId    String
+  sender      User            @relation(fields: [senderId], references: [id])
+  fileUrl     String?
+  fileName    String?
+  fileType    String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  recipients  MemoRecipient[]
+}
+
+model MemoRecipient {
+  id        String    @id @default(cuid())
+  memoId    String
+  memo      Memo      @relation(fields: [memoId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  read      Boolean   @default(false)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model RevenueItem {
+  id            String    @id @default(cuid())
+  title         String
+  amount        Float
+  source        String
+  reference     String?
+  department    String?
+  notes         String?
+  documentData  String?
+  documentName  String?
+  documentType  String?
+  status        String    @default("PENDING_EVC_APPROVAL")
+  evcComment    String?
+  submittedById String
+  submittedBy   User      @relation("SubmittedRevenue", fields: [submittedById], references: [id])
+  reviewedById  String?
+  reviewedBy    User?     @relation("ReviewedRevenue",  fields: [reviewedById],  references: [id])
+  reviewedAt    DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+model EVCAnnotation {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("EVCAnnotations", fields: [userId], references: [id])
+  subject   String
+  content   String
+  priority  String   @default("NORMAL")
+  createdAt DateTime @default(now())
+}
+
+model EVCVaultFile {
+  id          String   @id @default(cuid())
+  ownerId     String
+  owner       User     @relation("EVCVault", fields: [ownerId], references: [id])
+  title       String
+  description String?
+  category    String
+  fileName    String
+  fileType    String
+  fileSize    Int
+  fileData    String
+  isEncrypted Boolean  @default(false)
+  tags        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model EVCTask {
+  id              String    @id @default(cuid())
+  title           String
+  description     String
+  assignedToId    String
+  createdById     String
+  assignedTo      User      @relation("EVCAssignedTasks",  fields: [assignedToId], references: [id])
+  createdBy       User      @relation("EVCCreatedTasks",   fields: [createdById],  references: [id])
+  priority        String    @default("HIGH")
+  status          String    @default("PENDING")
+  category        String    @default("General")
+  isConfidential  Boolean   @default(false)
+  dueDate         DateTime?
+  completedAt     DateTime?
+  evcComment      String?
+  notes           String?
+  documentData    String?
+  documentName    String?
+  documentType    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model RegisteredBusiness {
+  id              String    @id @default(cuid())
+  businessName    String
+  rcNumber        String    @unique
+  tin             String?   @unique
+  sector          String
+  email           String    @unique
+  phone           String
+  address         String
+  state           String
+  contactPerson   String
+  contactRole     String
+  password        String
+  status          BizStatus @default(PENDING_VERIFICATION)
+  registrationFee Float     @default(50000)
+  feePaid         Boolean   @default(false)
+  feeReference    String?
+  verifiedAt      DateTime?
+  verifiedById    String?
+  notes           String?
+  complianceScore Int       @default(0)
+  complianceReports ComplianceReport[]
+  fines             ComplianceFine[]
+  payments          BizPayment[]
+  auditLogs         BizAuditLog[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ComplianceReport {
+  id             String    @id @default(cuid())
+  businessId     String
+  business       RegisteredBusiness @relation(fields: [businessId], references: [id])
+  reportType     String
+  title          String
+  description    String
+  period         String
+  attachmentUrl  String?
+  status         ReportStatus @default(SUBMITTED)
+  reviewedById   String?
+  reviewNote     String?
+  reviewedAt     DateTime?
+  submittedAt    DateTime  @default(now())
+  dueDate        DateTime?
+  createdAt      DateTime  @default(now())
+}
+
+model ComplianceFine {
+  id             String    @id @default(cuid())
+  businessId     String
+  business       RegisteredBusiness @relation(fields: [businessId], references: [id])
+  reason         String
+  amount         Float
+  paid           Boolean   @default(false)
+  paidAt         DateTime?
+  paidReference  String?
+  issuedById     String?
+  dueDate        DateTime
+  status         FineStatus @default(UNPAID)
+  notes          String?
+  payments       BizPayment[]
+  createdAt      DateTime  @default(now())
+}
+
+model BizPayment {
+  id           String    @id @default(cuid())
+  businessId   String
+  business     RegisteredBusiness @relation(fields: [businessId], references: [id])
+  fineId       String?
+  fine         ComplianceFine? @relation(fields: [fineId], references: [id])
+  amount       Float
+  type         PaymentType
+  reference    String    @unique
+  status       PaymentStatus @default(PENDING)
+  confirmedAt  DateTime?
+  confirmedById String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+}
+
+model BizAuditLog {
+  id         String   @id @default(cuid())
+  businessId String
+  business   RegisteredBusiness @relation(fields: [businessId], references: [id])
+  action     String
+  detail     String?
+  doneById   String?
+  createdAt  DateTime @default(now())
+}
+
+model PaymentWorkflow {
+  id              String   @id @default(cuid())
+  caseReference   String
+  caseType        String
+  companyName     String
+  expectedAmount  Float
+  actualAmount    Float?
+  currency        String   @default("NGN")
+  notes           String?
+  status          PaymentWorkflowStatus @default(PENDING_CONFIRMATION)
+  raisedById      String
+  raisedBy        User     @relation("RaisedPayments", fields: [raisedById], references: [id])
+  confirmedById   String?
+  confirmedBy     User?    @relation("ConfirmedPayments", fields: [confirmedById], references: [id])
+  bankReference   String?
+  paymentDate     DateTime?
+  financeNotes    String?
+  documentUrl     String?
+  documentName    String?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CaseTransfer {
+  id              String         @id @default(cuid())
+  caseRef         String
+  caseTitle       String
+  caseType        String
+  description     String
+  fromOffice      String
+  toOffice        String
+  transferType    TransferType
+  priority        Priority       @default(MEDIUM)
+  status          TransferStatus @default(PENDING_ACCEPTANCE)
+  transferNote    String
+  attachmentUrl   String?
+  attachmentName  String?
+  initiatedById   String
+  initiatedBy     User           @relation("InitiatedTransfers", fields: [initiatedById], references: [id])
+  acceptedById    String?
+  acceptedBy      User?          @relation("AcceptedTransfers", fields: [acceptedById], references: [id])
+  rejectedReason  String?
+  completedNote   String?
+  targetUserId    String?
+  targetUser      User?          @relation("TargetTransfers", fields: [targetUserId], references: [id])
+  dueDate         DateTime?
+  acceptedAt      DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+enum TransferType {
+  ZONE_TO_ZONE
+  ZONE_TO_HQ
+  HQ_TO_ZONE
+  INTERSTATE
+  INTER_DEPARTMENTAL
+}
+
+enum TransferStatus {
+  PENDING_ACCEPTANCE
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  RECALLED
+}
+
+enum PaymentWorkflowStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  REJECTED
+  PARTIALLY_PAID
+  OVERPAID
+}
+
+enum BizStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum ReportStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  OVERDUE
+}
+
+enum FineStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  WAIVED
+  DISPUTED
+}
+
+enum PaymentType {
+  REGISTRATION_FEE
+  ANNUAL_RENEWAL
+  FINE_PAYMENT
+  PROCESSING_FEE
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  REFUNDED
+}
+
+enum CheckInStatus {
+  PRESENT
+  LATE
+  HALF_DAY
+  ABSENT
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  CANCELLED
+}
+
+enum Role {
+  STAFF
+  SUPERVISOR
+  HR
+  DIRECTOR
+  ADMIN
+  EXECUTIVE
+  INTERN
+  IT_SIWES
+  CORPER
+  CONTRACT
+  CONSULTANT
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum LogStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  QUERIED
+}
+
+enum Period {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  ANNUAL
+}
+
+enum DeptCategory {
+  OPERATIONS
+  CORPORATE
+  STANDALONE
+  EXECUTIVE
+}
+
+enum NotifType {
+  INFO
+  WARNING
+  ALERT
+  SUCCESS
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  MATERNITY
+  PATERNITY
+  CASUAL
+  STUDY
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ALERT
+  SUCCESS
+}

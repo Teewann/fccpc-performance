@@ -1,0 +1,1 @@
+UPDATE "User" SET "userIdRef" = CONCAT('U', UPPER(SUBSTRING(MD5(id::text) FOR 7))) WHERE "userIdRef" IS NULL;
