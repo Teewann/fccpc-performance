@@ -1,5 +1,5 @@
-"use client";
-import { useState, useEffect, useCallback } from "react";
+﻿"use client";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
@@ -114,7 +114,7 @@ function buildTimeline(task: HistoryTask) {
   return events.sort((a,b) => new Date(a.time).getTime() - new Date(b.time).getTime());
 }
 
-export default function TaskHistoryPage() {
+function TaskHistoryContent() {
   const router      = useRouter();
   const searchParams= useSearchParams();
 
@@ -487,5 +487,17 @@ export default function TaskHistoryPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function TaskHistoryPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--bg-page)", color: "var(--text-muted)" }}>
+        Loading task history...
+      </div>
+    }>
+      <TaskHistoryContent />
+    </Suspense>
   );
 }

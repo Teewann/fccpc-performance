@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
@@ -160,8 +160,8 @@ function DocumentViewer({ documentName, documentData, documentType, onClose }: {
 }
 
 // ── Main page ──────────────────────────────────────────────────────────
-export default function TasksPage() {
-  const searchParams = useSearchParams();
+function TasksContent() {
+    const searchParams = useSearchParams();
   const router       = useRouter();
 
   const [tasks,      setTasks]      = useState<Task[]>([]);
@@ -1139,5 +1139,16 @@ export default function TasksPage() {
         </div>
       </main>
     </div>
+  );
+}
+export default function TasksPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--bg-page)", color: "var(--text-muted)" }}>
+        Loading tasks...
+      </div>
+    }>
+      <TasksContent />
+    </Suspense>
   );
 }
