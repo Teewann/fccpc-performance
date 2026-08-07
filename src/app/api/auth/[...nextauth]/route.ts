@@ -27,13 +27,17 @@ export const authOptions: NextAuthOptions = {
         if (!valid) return null;
 
         // Log the sign-in
-        await prisma.auditLog.create({
-          data: {
-            userId: user.id,
-            action: "USER_LOGIN",
-            detail: `Login by ${user.email}`,
-          },
-        });
+        try {
+          await prisma.auditLog.create({
+            data: {
+              userId: user.id,
+              action: "USER_LOGIN",
+              detail: `Login by ${user.email}`,
+            },
+          });
+        } catch (logError) {
+          console.error("Failed to create audit log:", logError);
+        }
 
         return {
           id:           user.id,
@@ -43,7 +47,6 @@ export const authOptions: NextAuthOptions = {
           departmentId: user.departmentId,
           department:   user.department?.name ?? null,
           staffId:      user.staffId,
-          // PHOTO IS REMOVED FROM SESSION
         };
       },
     }),
@@ -56,7 +59,6 @@ export const authOptions: NextAuthOptions = {
         token.departmentId = (user as any).departmentId;
         token.department   = (user as any).department;
         token.staffId      = (user as any).staffId;
-        // NO PHOTO in token
       }
       return token;
     },
@@ -68,7 +70,6 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).departmentId = token.departmentId;
         (session.user as any).department   = token.department;
         (session.user as any).staffId      = token.staffId;
-        // NO PHOTO in session
       }
       return session;
     },
