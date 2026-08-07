@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 
 // GET — list my conversations
 export async function GET(request: NextRequest) {
@@ -95,3 +95,4 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({ conversation });
 }
+

@@ -7,7 +7,7 @@ export default function LogoutButton() {
 
   async function handleConfirmLogout() {
     setShowConfirm(false);
-    await signOut({ callbackUrl: "/login" });
+    await signOut({ callbackUrl: "/auth/login" });
   }
 
   return (

@@ -205,7 +205,7 @@ export default function ForgotPasswordPage() {
         {/* Back to login */}
         <div style={{ textAlign: "center", marginTop: 22 }}>
           <a
-            href="/login"
+           href="/auth/login"
             style={{ fontSize: 14, color: "#22c55e", textDecoration: "none", fontWeight: 500 }}
           >
             ← Back to sign in
@@ -222,3 +222,4 @@ export default function ForgotPasswordPage() {
     </div>
   );
 }
+

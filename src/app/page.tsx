@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -7,7 +7,7 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.push('/auth/login');   // ✅ Redirect to secure auth login
+    router.push('/auth/login');  // ? Changed from /login to /auth/login
   }, [router]);
 
   return (
