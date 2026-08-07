@@ -7,7 +7,7 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.push('/login');
+    router.push('/auth/login');   // ✅ Redirect to secure auth login
   }, [router]);
 
   return (
