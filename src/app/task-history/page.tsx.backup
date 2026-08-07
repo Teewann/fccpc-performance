@@ -1,0 +1,16 @@
+﻿import { Suspense } from 'react';
+
+// Your existing imports and code go here
+// Move everything inside a function called TaskHistoryContent
+
+function TaskHistoryContent() {
+  // PASTE YOUR EXISTING CODE HERE
+}
+
+export default function TaskHistoryPage() {
+  return (
+    <Suspense fallback={<div>Loading task history...</div>}>
+      <TaskHistoryContent />
+    </Suspense>
+  );
+}

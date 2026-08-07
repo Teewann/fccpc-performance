@@ -1,8 +1,13 @@
 "use client";
+
+export const dynamic = "force-dynamic";
+
 import { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
 import { AGENCY } from "@/config/agency.config";
+import UserAvatar from "@/components/UserAvatar";
+import { useAutoLogout } from "@/hooks/useAutoLogout";
 import {
   LineChart, Line,
   BarChart, Bar,
@@ -10,8 +15,6 @@ import {
   XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
-import UserAvatar from "@/components/UserAvatar";
-import { useAutoLogout } from "@/hooks/useAutoLogout";
 
 // ─── Types ────────────────────────────────────────────────────────────
 type Filter = "today" | "week" | "month" | "year" | "custom";

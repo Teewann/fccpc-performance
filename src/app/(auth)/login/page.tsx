@@ -1,4 +1,6 @@
 "use client";
+export const dynamic = "force-dynamic";
+
 import { AGENCY } from "@/config/agency.config";
 import { useState, useEffect } from "react";
 import { signIn } from "next-auth/react";

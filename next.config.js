@@ -3,9 +3,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  serverExternalPackages: ["@prisma/client", "prisma"],
 };
 
 module.exports = nextConfig;
