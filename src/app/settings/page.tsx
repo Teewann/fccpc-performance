@@ -515,7 +515,7 @@ export default function SettingsPage() {
                 <div style={{ marginTop: 28 }}>
                   <button onClick={async () => {
                     const { signOut } = await import("next-auth/react");
-                    signOut({ callbackUrl: "/auth/login" });
+                    signOut({ callbackUrl: "/login" });
                   }} style={{
                     padding: "12px 28px", borderRadius: 10, border: "0.5px solid #7f1d1d",
                     background: "#1f0707", color: "#f87171", fontSize: 15, fontWeight: 600, cursor: "pointer",

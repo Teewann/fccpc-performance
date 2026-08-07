@@ -16,7 +16,7 @@ export function useAutoLogout() {
   }, []);
 
   const logout = useCallback(() => {
-    signOut({ callbackUrl: "/auth/login" });
+    signOut({ callbackUrl: "/login" });
   }, []);
 
   const resetTimer = useCallback(() => {

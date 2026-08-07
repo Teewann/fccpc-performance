@@ -277,4 +277,3 @@ export default function InternPage() {
     </div>
   );
 }
-

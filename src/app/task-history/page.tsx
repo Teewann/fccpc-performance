@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
@@ -35,16 +35,16 @@ type HistoryTask = {
 type StaffOption = { id: string; name: string; role: string; department: { name: string } | null };
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string; icon: string }> = {
-  PENDING:           { color:"#60a5fa", bg:"#0c1a2e", border:"#1e3a5f", label:"Pending",           icon:"?" },
-  ACKNOWLEDGED:      { color:"#a78bfa", bg:"#1a0a2e", border:"#4c1d95", label:"Acknowledged",      icon:"??" },
-  UNDER_TREATMENT:   { color:"#f59e0b", bg:"#1c1107", border:"#78350f", label:"Under Treatment",   icon:"??" },
-  AWAITING_RESPONSE: { color:"#fb923c", bg:"#1c1107", border:"#9a3412", label:"Awaiting Response", icon:"??" },
-  TREATED:           { color:"#86efac", bg:"#052e16", border:"#166534", label:"Treated",           icon:"??" },
-  COMPLETED:         { color:"#4ade80", bg:"#052e16", border:"#14532d", label:"Completed",         icon:"?" },
-  ESCALATED:         { color:"#f87171", bg:"#1f0707", border:"#7f1d1d", label:"Escalated",         icon:"??" },
-  FORWARDED:         { color:"#38bdf8", bg:"#0c1a2e", border:"#0369a1", label:"Forwarded",         icon:"??" },
-  CANCELLED:         { color:"#6b7280", bg:"#1a1d28", border:"#374151", label:"Cancelled",         icon:"??" },
-  IN_PROGRESS:       { color:"#818cf8", bg:"#1e1b4b", border:"#3730a3", label:"In Progress",       icon:"??" },
+  PENDING:           { color:"#60a5fa", bg:"#0c1a2e", border:"#1e3a5f", label:"Pending",           icon:"⏳" },
+  ACKNOWLEDGED:      { color:"#a78bfa", bg:"#1a0a2e", border:"#4c1d95", label:"Acknowledged",      icon:"👁" },
+  UNDER_TREATMENT:   { color:"#f59e0b", bg:"#1c1107", border:"#78350f", label:"Under Treatment",   icon:"⚙️" },
+  AWAITING_RESPONSE: { color:"#fb923c", bg:"#1c1107", border:"#9a3412", label:"Awaiting Response", icon:"💬" },
+  TREATED:           { color:"#86efac", bg:"#052e16", border:"#166534", label:"Treated",           icon:"✔️" },
+  COMPLETED:         { color:"#4ade80", bg:"#052e16", border:"#14532d", label:"Completed",         icon:"✅" },
+  ESCALATED:         { color:"#f87171", bg:"#1f0707", border:"#7f1d1d", label:"Escalated",         icon:"🔺" },
+  FORWARDED:         { color:"#38bdf8", bg:"#0c1a2e", border:"#0369a1", label:"Forwarded",         icon:"➡️" },
+  CANCELLED:         { color:"#6b7280", bg:"#1a1d28", border:"#374151", label:"Cancelled",         icon:"🚫" },
+  IN_PROGRESS:       { color:"#818cf8", bg:"#1e1b4b", border:"#3730a3", label:"In Progress",       icon:"🔄" },
 };
 
 const PRIORITY_COLOR: Record<string,string> = { LOW:"#4ade80",MEDIUM:"#60a5fa",HIGH:"#f59e0b",CRITICAL:"#f87171" };
@@ -54,20 +54,20 @@ function buildTimeline(task: HistoryTask) {
   const events: { time: string; icon: string; color: string; title: string; detail: string }[] = [];
 
   // Created
-  events.push({ time:task.createdAt, icon:"??", color:"#60a5fa",
+  events.push({ time:task.createdAt, icon:"📋", color:"#60a5fa",
     title:"Task created",
     detail:`Created by ${task.createdBy.name}${task.assignedTo ? ` and assigned to ${task.assignedTo.name}` : " (unassigned)"}` });
 
   // Forwarded
   if (task.forwardedFrom) {
-    events.push({ time:task.updatedAt, icon:"??", color:"#38bdf8",
+    events.push({ time:task.updatedAt, icon:"➡️", color:"#38bdf8",
       title:"Task forwarded",
-      detail:`Forwarded by ${task.forwardedFrom.name}${task.forwardedTo ? ` to ${task.forwardedTo.name}` : ""}${task.forwardNote ? ` � Note: "${task.forwardNote}"` : ""}` });
+      detail:`Forwarded by ${task.forwardedFrom.name}${task.forwardedTo ? ` to ${task.forwardedTo.name}` : ""}${task.forwardNote ? ` — Note: "${task.forwardNote}"` : ""}` });
   }
 
   // Escalated
   if (task.escalationReason) {
-    events.push({ time:task.escalatedAt||task.updatedAt, icon:"??", color:"#f87171",
+    events.push({ time:task.escalatedAt||task.updatedAt, icon:"🔺", color:"#f87171",
       title:"Task escalated",
       detail:`Reason: "${task.escalationReason}"` });
   }
@@ -75,21 +75,21 @@ function buildTimeline(task: HistoryTask) {
   // Treatment statuses
   if (task.treatmentStatus && task.treatmentStatus !== "PENDING") {
     const sc = STATUS_CONFIG[task.treatmentStatus];
-    events.push({ time:task.updatedAt, icon:sc?.icon||"??", color:sc?.color||"#f59e0b",
+    events.push({ time:task.updatedAt, icon:sc?.icon||"⚙️", color:sc?.color||"#f59e0b",
       title:`Marked as ${sc?.label||task.treatmentStatus}`,
       detail:`Treatment status updated${task.assignedTo ? ` (assigned to ${task.assignedTo.name})` : ""}` });
   }
 
   // Director comment
   if (task.directorComment) {
-    events.push({ time:task.updatedAt, icon:"??", color:"#a78bfa",
+    events.push({ time:task.updatedAt, icon:"💬", color:"#a78bfa",
       title:"Comment added",
-      detail:`"${task.directorComment.slice(0,120)}${task.directorComment.length>120?"�":""}"` });
+      detail:`"${task.directorComment.slice(0,120)}${task.directorComment.length>120?"…":""}"` });
   }
 
   // Completed
   if (task.completedAt) {
-    events.push({ time:task.completedAt, icon:"?", color:"#4ade80",
+    events.push({ time:task.completedAt, icon:"✅", color:"#4ade80",
       title:"Task completed",
       detail:`Completed${task.assignedTo ? ` by ${task.assignedTo.name}` : ""}` });
   }
@@ -103,7 +103,7 @@ function buildTimeline(task: HistoryTask) {
       const isTransfer  = prefix.toLowerCase().includes("transfer");
       const isRebalance = prefix.toLowerCase().includes("rebalance");
       const isReassign  = prefix.toLowerCase().includes("reassign");
-      events.push({ time:task.updatedAt, icon:isTransfer?"??":isRebalance?"??":isReassign?"??":"??",
+      events.push({ time:task.updatedAt, icon:isTransfer?"🔀":isRebalance?"⚖️":isReassign?"👤":"📝",
         color:isTransfer?"#f59e0b":isRebalance?"#60a5fa":isReassign?"#a78bfa":"#94a3b8",
         title:isTransfer?"Task transferred":isRebalance?"Task rebalanced":isReassign?"Task reassigned":"Note added",
         detail:note.replace(/^\[[^\]]+\]\s*/,"").slice(0,160) });
@@ -160,7 +160,7 @@ function TaskHistoryContent() {
       else if (viewMode==="staff" && staffFilter) url += `view=all&userId=${staffFilter}`;
       else url += `view=all`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
-      // Include all statuses in history � no status filter in URL, filter client-side
+      // Include all statuses in history — no status filter in URL, filter client-side
       const res  = await fetch(url);
       const data = await res.json();
       if (res.ok) setTasks(data.tasks||[]);
@@ -215,17 +215,17 @@ function TaskHistoryContent() {
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <button onClick={() => router.back()}
                 style={{ padding:"8px 16px", borderRadius:9, border:"1.5px solid #f87171", background:"#1f0707", color:"#f87171", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                ? Back
+                ← Back
               </button>
               <div>
-                <h1 style={{ fontSize:20, fontWeight:700, color:"var(--text-primary)", margin:0 }}>?? Task History & Activity</h1>
+                <h1 style={{ fontSize:20, fontWeight:700, color:"var(--text-primary)", margin:0 }}>📋 Task History & Activity</h1>
                 <p style={{ fontSize:12, color:"var(--text-muted)", margin:0, marginTop:2 }}>{today}</p>
               </div>
             </div>
             <div style={{ display:"flex", gap:10 }}>
               <button onClick={() => router.push("/tasks")}
                 style={{ padding:"9px 18px", borderRadius:9, border:"1.5px solid #60a5fa", background:"#0c1a2e", color:"#60a5fa", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                ? Go to Tasks
+                → Go to Tasks
               </button>
               <ThemeToggleButton />
             </div>
@@ -250,26 +250,26 @@ function TaskHistoryContent() {
 
           {/* Filters row */}
           <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
-            <input style={{...inp,width:220}} placeholder="?? Search tasks�" value={search} onChange={e=>setSearch(e.target.value)} />
+            <input style={{...inp,width:220}} placeholder="🔍 Search tasks…" value={search} onChange={e=>setSearch(e.target.value)} />
 
             {viewMode==="staff" && isPrivileged && (
               <select style={inp} value={staffFilter} onChange={e=>setStaffFilter(e.target.value)}>
-                <option value="">Select staff member�</option>
+                <option value="">Select staff member…</option>
                 {staff.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} � {s.role}{s.department?` (${s.department.name})`:""}</option>
+                  <option key={s.id} value={s.id}>{s.name} — {s.role}{s.department?` (${s.department.name})`:""}</option>
                 ))}
               </select>
             )}
 
             <select style={inp} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
               <option value="ALL">All statuses</option>
-              <option value="PENDING">? Pending</option>
-              <option value="UNDER_TREATMENT">?? Under Treatment</option>
-              <option value="TREATED">?? Treated</option>
-              <option value="ESCALATED">?? Escalated</option>
-              <option value="FORWARDED">?? Forwarded</option>
-              <option value="COMPLETED">? Completed</option>
-              <option value="CANCELLED">?? Cancelled</option>
+              <option value="PENDING">⏳ Pending</option>
+              <option value="UNDER_TREATMENT">⚙️ Under Treatment</option>
+              <option value="TREATED">✔️ Treated</option>
+              <option value="ESCALATED">🔺 Escalated</option>
+              <option value="FORWARDED">➡️ Forwarded</option>
+              <option value="COMPLETED">✅ Completed</option>
+              <option value="CANCELLED">🚫 Cancelled</option>
             </select>
 
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -312,11 +312,11 @@ function TaskHistoryContent() {
           <div style={{ overflowY:"auto", padding:"16px 28px" }}>
             {loading ? (
               <div style={{ textAlign:"center", padding:60, color:"var(--text-muted)", fontSize:15 }}>
-                <div style={{ fontSize:36, marginBottom:12 }}>?</div>Loading history�
+                <div style={{ fontSize:36, marginBottom:12 }}>⏳</div>Loading history…
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ textAlign:"center", padding:60, color:"var(--text-muted)" }}>
-                <div style={{ fontSize:36, marginBottom:12 }}>??</div>
+                <div style={{ fontSize:36, marginBottom:12 }}>📭</div>
                 <div style={{ fontSize:16, fontWeight:500 }}>No history found</div>
                 <div style={{ fontSize:13, marginTop:6 }}>Try adjusting your filters</div>
               </div>
@@ -352,12 +352,12 @@ function TaskHistoryContent() {
                       <div style={{ fontSize:12, color:"var(--text-muted)", marginBottom:8 }}>
                         {task.department.name}
                         {task.assignedTo && (
-                          <> � <span style={{ color:"#60a5fa", cursor:"pointer" }}
+                          <> · <span style={{ color:"#60a5fa", cursor:"pointer" }}
                             onClick={e=>{ e.stopPropagation(); router.push(`/staff-directory?userId=${task.assignedTo!.id}`); }}>
                             {task.assignedTo.name}
                           </span></>
                         )}
-                        {" � By "}
+                        {" · By "}
                         <span style={{ color:"#a78bfa", cursor:"pointer" }}
                           onClick={e=>{ e.stopPropagation(); router.push(`/staff-directory?userId=${task.createdBy.id}`); }}>
                           {task.createdBy.name}
@@ -367,14 +367,14 @@ function TaskHistoryContent() {
                       {/* Activity badges */}
                       <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
                         <span style={{ fontSize:11, color:"var(--text-muted)" }}>
-                          ?? {new Date(task.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}
+                          📅 {new Date(task.createdAt).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})}
                         </span>
-                        {task.completedAt && <span style={{ fontSize:11, color:"#4ade80" }}>? Done {new Date(task.completedAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</span>}
-                        {task.escalationReason && <span style={{ fontSize:11, color:"#f87171", fontWeight:600 }}>?? Escalated</span>}
-                        {(task.forwardedFrom||task.forwardedTo) && <span style={{ fontSize:11, color:"#38bdf8", fontWeight:600 }}>?? Forwarded</span>}
-                        {task.directorComment && <span style={{ fontSize:11, color:"#a78bfa" }}>?? Commented</span>}
-                        {od && <span style={{ fontSize:11, color:"#f87171", fontWeight:700 }}>? Overdue</span>}
-                        {task.caseReference && <span style={{ fontSize:11, color:"var(--text-muted)" }}>?? {task.caseReference}</span>}
+                        {task.completedAt && <span style={{ fontSize:11, color:"#4ade80" }}>✅ Done {new Date(task.completedAt).toLocaleDateString("en-GB",{day:"numeric",month:"short"})}</span>}
+                        {task.escalationReason && <span style={{ fontSize:11, color:"#f87171", fontWeight:600 }}>🔺 Escalated</span>}
+                        {(task.forwardedFrom||task.forwardedTo) && <span style={{ fontSize:11, color:"#38bdf8", fontWeight:600 }}>➡️ Forwarded</span>}
+                        {task.directorComment && <span style={{ fontSize:11, color:"#a78bfa" }}>💬 Commented</span>}
+                        {od && <span style={{ fontSize:11, color:"#f87171", fontWeight:700 }}>⚠ Overdue</span>}
+                        {task.caseReference && <span style={{ fontSize:11, color:"var(--text-muted)" }}>🔖 {task.caseReference}</span>}
                       </div>
                     </div>
                   );
@@ -393,9 +393,9 @@ function TaskHistoryContent() {
                   <div style={{ display:"flex", gap:8 }}>
                     <button onClick={() => router.push(`/tasks?taskId=${selectedTask.id}`)}
                       style={{ padding:"6px 12px", borderRadius:7, border:"0.5px solid #60a5fa", background:"#0c1a2e", color:"#60a5fa", fontSize:12, fontWeight:600, cursor:"pointer" }}>
-                      Open task ?
+                      Open task ↗
                     </button>
-                    <button onClick={() => setSelectedTask(null)} style={{ background:"none", border:"none", color:"var(--text-muted)", fontSize:18, cursor:"pointer" }}>?</button>
+                    <button onClick={() => setSelectedTask(null)} style={{ background:"none", border:"none", color:"var(--text-muted)", fontSize:18, cursor:"pointer" }}>✕</button>
                   </div>
                 </div>
                 <div style={{ fontSize:13, fontWeight:600, color:"var(--text-primary)", marginTop:8 }}>{selectedTask.title}</div>
@@ -462,22 +462,22 @@ function TaskHistoryContent() {
                   <div style={{ fontSize:12, fontWeight:700, color:"var(--text-muted)", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:4 }}>Quick actions</div>
                   <button onClick={() => router.push(`/tasks?taskId=${selectedTask.id}`)}
                     style={{ padding:"10px", borderRadius:9, border:"1.5px solid #60a5fa", background:"#0c1a2e", color:"#60a5fa", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                    ?? Open full task view ?
+                    📋 Open full task view ↗
                   </button>
                   {selectedTask.assignedTo && (
                     <button onClick={() => router.push(`/staff-directory?userId=${selectedTask.assignedTo!.id}`)}
                       style={{ padding:"10px", borderRadius:9, border:"0.5px solid var(--border)", background:"var(--bg-input)", color:"var(--text-muted)", fontSize:13, cursor:"pointer" }}>
-                      ?? View {selectedTask.assignedTo.name}'s profile
+                      👤 View {selectedTask.assignedTo.name}'s profile
                     </button>
                   )}
                   <button onClick={() => router.push(`/staff-directory?userId=${selectedTask.createdBy.id}`)}
                     style={{ padding:"10px", borderRadius:9, border:"0.5px solid var(--border)", background:"var(--bg-input)", color:"var(--text-muted)", fontSize:13, cursor:"pointer" }}>
-                    ?? View creator's profile ({selectedTask.createdBy.name})
+                    👤 View creator's profile ({selectedTask.createdBy.name})
                   </button>
                   {selectedTask.department && (
                     <button onClick={() => router.push(`/departments`)}
                       style={{ padding:"10px", borderRadius:9, border:"0.5px solid var(--border)", background:"var(--bg-input)", color:"var(--text-muted)", fontSize:13, cursor:"pointer" }}>
-                      ?? Go to {selectedTask.department.name} department
+                      🏛 Go to {selectedTask.department.name} department
                     </button>
                   )}
                 </div>
