@@ -232,6 +232,17 @@ export default function Sidebar() {
   );
   const [userIdRef,      setUserIdRef]      = useState<string>("");
   const [collapsed,      setCollapsed]      = useState(false);
+  const [expandedWidth, setExpandedWidth] = useState<number>(() => {
+  if (typeof window === "undefined") return 232;
+  try {
+    const raw = sessionStorage.getItem("sidebar_width");
+    return raw ? Number(raw) : 232;
+  } catch {
+    return 232;
+  }
+});
+const isResizing = useRef(false);
+
   // Load from sessionStorage on mount so state persists across navigation
   const [closedSections, setClosedSections] = useState<Set<string>>(() => loadClosedSections());
 
@@ -258,9 +269,41 @@ export default function Sidebar() {
       return next;
     });
   }, []);
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+  if (collapsed) return;
+  e.preventDefault();
+  isResizing.current = true;
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+}, [collapsed]);
+
+useEffect(() => {
+  function handleMouseMove(e: MouseEvent) {
+    if (!isResizing.current) return;
+    const newWidth = Math.min(400, Math.max(180, e.clientX));
+    setExpandedWidth(newWidth);
+  }
+  function handleMouseUp() {
+    if (isResizing.current) {
+      isResizing.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setExpandedWidth((w) => {
+        try { sessionStorage.setItem("sidebar_width", String(w)); } catch {}
+        return w;
+      });
+    }
+  }
+  window.addEventListener("mousemove", handleMouseMove);
+  window.addEventListener("mouseup", handleMouseUp);
+  return () => {
+    window.removeEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("mouseup", handleMouseUp);
+  };
+}, []);
 
   const navItems     = getNavItems(role);
-  const sidebarWidth = collapsed ? 62 : 232;
+  const sidebarWidth = collapsed ? 62 : expandedWidth;
 
   return (
     <>
@@ -320,9 +363,9 @@ export default function Sidebar() {
                 }}>
                   {AGENCY.shortName}
                 </div>
-                <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 3, whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 15, color: "var(--text-muted)", marginTop: 3, whiteSpace: "normal", lineHeight: 1.35 }}>
                   {AGENCY.tagline}
-                </div>
+                  </div>
               </div>
             </div>
           )}
@@ -605,6 +648,24 @@ export default function Sidebar() {
             </>
           )}
         </div>
+        {!collapsed && (
+          <div
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              width: 5,
+              height: "100%",
+              cursor: "col-resize",
+              zIndex: 50,
+              background: "transparent",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent)"; e.currentTarget.style.opacity = "0.35"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.opacity = "1"; }}
+          />
+        )}
       </aside>
 
       <style>{`

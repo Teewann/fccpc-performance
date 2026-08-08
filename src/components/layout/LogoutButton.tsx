@@ -1,14 +1,32 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { signOut } from "next-auth/react";
 
 export default function LogoutButton() {
   const [showConfirm, setShowConfirm] = useState(false);
+  const confirmBtnRef = useRef<HTMLButtonElement>(null);
 
   async function handleConfirmLogout() {
     setShowConfirm(false);
-    await signOut({ callbackUrl: "/login" });
+    await signOut({ callbackUrl: "/auth/login" });
   }
+
+  // Auto-focus the "Sign out" button when the dialog opens, so Enter works immediately
+  useEffect(() => {
+    if (showConfirm) {
+      confirmBtnRef.current?.focus();
+    }
+  }, [showConfirm]);
+
+  // Escape to cancel while the dialog is open
+  useEffect(() => {
+    if (!showConfirm) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setShowConfirm(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showConfirm]);
 
   return (
     <>
@@ -91,6 +109,7 @@ export default function LogoutButton() {
                 Cancel
               </button>
               <button
+                ref={confirmBtnRef}
                 onClick={handleConfirmLogout}
                 style={{
                   padding: "10px 24px",

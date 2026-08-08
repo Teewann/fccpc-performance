@@ -101,20 +101,57 @@ export default function AIAssistant() {
   const onMouseUp = useCallback(() => {
     setIsDragging(false);
   }, []);
+const onTouchStart = (e: React.TouchEvent) => {
+  const touch = e.touches[0];
+  setIsDragging(true);
+  dragStart.current = {
+    x: touch.clientX,
+    y: touch.clientY,
+    startLeft: position.x,
+    startTop: position.y,
+  };
+};
+
+const onTouchMove = useCallback((e: TouchEvent) => {
+  if (!isDragging) return;
+  const touch = e.touches[0];
+  const dx = touch.clientX - dragStart.current.x;
+  const dy = touch.clientY - dragStart.current.y;
+  let newLeft = dragStart.current.startLeft + dx;
+  let newTop  = dragStart.current.startTop + dy;
+
+  const maxX = window.innerWidth - (fabRef.current?.offsetWidth || 52) - 20;
+  const maxY = window.innerHeight - (fabRef.current?.offsetHeight || 52) - 20;
+  newLeft = clamp(newLeft, 20, maxX);
+  newTop  = clamp(newTop, 20, maxY);
+
+  setPosition({ x: newLeft, y: newTop });
+}, [isDragging]);
+
+const onTouchEnd = useCallback(() => {
+  setIsDragging(false);
+}, []);
+
 
   useEffect(() => {
-    if (isDragging) {
-      window.addEventListener("mousemove", onMouseMove);
-      window.addEventListener("mouseup", onMouseUp);
-    } else {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    }
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [isDragging, onMouseMove, onMouseUp]);
+  if (isDragging) {
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd);
+  } else {
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+    window.removeEventListener("touchmove", onTouchMove);
+    window.removeEventListener("touchend", onTouchEnd);
+  }
+  return () => {
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+    window.removeEventListener("touchmove", onTouchMove);
+    window.removeEventListener("touchend", onTouchEnd);
+  };
+}, [isDragging, onMouseMove, onMouseUp, onTouchMove, onTouchEnd]);
 
   // ─── Chat logic ────────────────────────────────────────────────────
   // Scroll to bottom on new messages
@@ -248,13 +285,14 @@ export default function AIAssistant() {
     <>
       {/* ── Draggable floating button ───────────────────────────────── */}
       <button
-        ref={fabRef}
-        onClick={() => !isDragging && setOpen((p) => !p)}
-        onMouseDown={onMouseDown}
-        style={fabStyle}
-        aria-label="Open AI assistant"
-        title="Drag to move · Click to open"
-      >
+  ref={fabRef}
+  onClick={() => !isDragging && setOpen((p) => !p)}
+  onMouseDown={onMouseDown}
+  onTouchStart={onTouchStart}
+  style={fabStyle}
+  aria-label="Open AI assistant"
+  title="Drag to move · Click to open"
+>
         <span style={{ fontSize: 22, color: "#4ade80" }}>
           {open ? "✕" : "✦"}
         </span>

@@ -3,8 +3,6 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import Providers from "@/components/provider";
 import AIAssistant from "@/components/layout/AIAssistant";
-import { AutoLogoutWrapper } from "@/components/AutoLogoutWrapper";
-
 
 export const metadata: Metadata = {
   title: "FCCPC Performance Intelligence System",
