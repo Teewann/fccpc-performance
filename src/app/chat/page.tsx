@@ -14,9 +14,19 @@ type Message = {
   fileUrl?: string | null;
   fileName?: string | null;
   fileType?: string | null;
+  edited?: boolean;
   createdAt: string;
   sender: { id: string; name: string; photo?: string | null };
+  replyTo?: {
+    id: string;
+    content?: string | null;
+    fileName?: string | null;
+    sender: { name: string };
+  } | null;
+  reactions?: { id: string; emoji: string; userId: string; user: { name: string } }[];
 };
+
+type ReadParticipant = { userId: string; lastReadAt: string | null; user: { name: string; lastSeen: string | null } };
 
 type Conversation = {
   id: string;
@@ -774,6 +784,7 @@ function UploadingToast({ fileName }: { fileName: string }) {
 }
 
 // ─── FIX #3: Message context menu ────────────────────────────────────
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const menuItemStyle: React.CSSProperties = {
   display: "block",
   width: "100%",
@@ -795,6 +806,7 @@ function MessageMenu({
   onCopy,
   onDelete,
   onEdit,
+  onReact,
 }: {
   messageId: string;
   isMine: boolean;
@@ -803,13 +815,13 @@ function MessageMenu({
   onCopy: () => void;
   onDelete: () => void;
   onEdit: (newText: string) => void;
+  onReact: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(content || "");
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -857,6 +869,9 @@ function MessageMenu({
             boxShadow: "0 6px 20px rgba(0,0,0,0.25)",
           }}
         >
+          <button onClick={() => { onReact(); setOpen(false); }} style={menuItemStyle}>
+            😀 React
+          </button>
           <button onClick={() => { onReply(); setOpen(false); }} style={menuItemStyle}>
             ↩ Reply
           </button>
@@ -883,7 +898,6 @@ function MessageMenu({
         </div>
       )}
 
-      {/* Inline edit input */}
       {editing && (
         <div
           style={{
@@ -975,6 +989,10 @@ export default function ChatPage() {
 
   // FIX #2: file caption state
   const [fileToSend, setFileToSend] = useState<{ url: string; name: string; type: string } | null>(null);
+  // Reply, reactions, read receipts, online status
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [participants, setParticipants] = useState<ReadParticipant[]>([]);
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
 
   // FIX #1: smart scroll — ref to the messages container
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -1011,6 +1029,17 @@ export default function ChatPage() {
       const res = await fetch(`/api/chat/messages?conversationId=${convId}`);
       const data = await res.json();
       setMessages(data.messages || []);
+      setParticipants(data.participants || []);
+    } catch {}
+  }, []);
+
+  const markAsRead = useCallback(async (convId: string) => {
+    try {
+      await fetch("/api/chat/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId: convId }),
+      });
     } catch {}
   }, []);
 
@@ -1018,9 +1047,13 @@ export default function ChatPage() {
     if (pollRef.current) clearInterval(pollRef.current);
     if (!activeConv) return;
     fetchMessages(activeConv);
-    pollRef.current = setInterval(() => fetchMessages(activeConv), 3000);
+    markAsRead(activeConv);
+    pollRef.current = setInterval(() => {
+      fetchMessages(activeConv);
+      markAsRead(activeConv);
+    }, 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [activeConv, fetchMessages]);
+  }, [activeConv, fetchMessages, markAsRead]);
 
   // ── FIX #1: Smart auto-scroll — only scroll down if already near bottom ──
   const prevMessageCountRef = useRef(0);
@@ -1070,9 +1103,11 @@ export default function ChatPage() {
       fileUrl: fileInfo?.url || null,
       fileName: fileInfo?.name || null,
       fileType: fileInfo?.type || null,
+      replyToId: replyingTo?.id || null,
     };
     setInput("");
     setFileToSend(null);
+    setReplyingTo(null);
     try {
       await fetch("/api/chat/messages", {
         method: "POST",
@@ -1086,7 +1121,7 @@ export default function ChatPage() {
     } finally {
       setSending(false);
     }
-  }, [activeConv, input, fileToSend, fetchMessages, fetchConversations]);
+  }, [activeConv, input, fileToSend, replyingTo, fetchMessages, fetchConversations]);
 
   // ── FIX #2: File upload — store file, don't auto-send ─────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1151,8 +1186,38 @@ export default function ChatPage() {
   };
 
   const handleReply = (msg: Message) => {
-    setInput(`@${msg.sender.name} `);
+    setReplyingTo(msg);
     inputRef.current?.focus();
+  };
+
+  const handleReact = async (messageId: string, emoji: string) => {
+    setReactionPickerFor(null);
+    // Optimistic local update
+    setMessages((prev) => prev.map((m) => {
+      if (m.id !== messageId) return m;
+      const others = (m.reactions || []).filter((r) => r.userId !== currentUser?.id);
+      return { ...m, reactions: [...others, { id: "temp", emoji, userId: currentUser?.id, user: { name: currentUser?.name } } as any] };
+    }));
+    try {
+      await fetch("/api/chat/reactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId, emoji }),
+      });
+      if (activeConv) fetchMessages(activeConv);
+    } catch {}
+  };
+
+  const handleRemoveReaction = async (messageId: string) => {
+    setMessages((prev) => prev.map((m) =>
+      m.id === messageId
+        ? { ...m, reactions: (m.reactions || []).filter((r) => r.userId !== currentUser?.id) }
+        : m
+    ));
+    try {
+      await fetch(`/api/chat/reactions?messageId=${messageId}`, { method: "DELETE" });
+      if (activeConv) fetchMessages(activeConv);
+    } catch {}
   };
 
   const handleCopy = (text?: string | null) => {
@@ -1176,6 +1241,21 @@ export default function ChatPage() {
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" });
   };
 
+  const formatLastSeen = (ts: string | null) => {
+    if (!ts) return "Offline";
+    const diffMs = Date.now() - new Date(ts).getTime();
+    if (diffMs < 2 * 60 * 1000) return "Online";
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 60) return `Last seen ${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `Last seen ${hrs}h ago`;
+    return `Last seen ${new Date(ts).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+  };
+
+  const isMessageRead = (msg: Message) => {
+    if (participants.length === 0) return false;
+    return participants.every((p) => p.lastReadAt && new Date(p.lastReadAt) >= new Date(msg.createdAt));
+  };
   const formatMessageTime = (ts: string) =>
     new Date(ts).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 
@@ -1247,6 +1327,7 @@ export default function ChatPage() {
           overflow: "hidden",
         }}
       >
+       
         {/* ── Top bar ──────────────────────────────────────────────── */}
         <div
           style={{
@@ -1476,9 +1557,27 @@ export default function ChatPage() {
               minWidth: 0,
               minHeight: 0,
               overflow: "hidden",
+              position: "relative",
               background: "var(--bg-page)",
+              backgroundImage:
+                "linear-gradient(rgba(34,197,94,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(34,197,94,0.035) 1px,transparent 1px)",
+              backgroundSize: "36px 36px",
             }}
           >
+            {/* Ambient glow */}
+            <div
+              style={{
+                position: "absolute",
+                pointerEvents: "none",
+                width: 500,
+                height: 500,
+                borderRadius: "50%",
+                background: "radial-gradient(circle, rgba(34,197,94,0.05) 0%, transparent 70%)",
+                top: "20%",
+                right: "10%",
+                zIndex: 0,
+              }}
+            />
             {activeConv && activeConvData ? (
               <>
                 {/* Chat header */}
@@ -1532,12 +1631,18 @@ export default function ChatPage() {
                     >
                       {activeConvData.name}
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
-                      {activeConvData.isGroup
-                        ? `${activeConvData.participants.length} members`
-                        : getOtherParticipants(activeConvData)[0]?.name
-                        ? "Staff member"
-                        : ""}
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1, display: "flex", alignItems: "center", gap: 5 }}>
+                      {activeConvData.isGroup ? (
+                        `${activeConvData.participants.length} members`
+                      ) : (
+                        <>
+                          {participants[0]?.user?.lastSeen &&
+                            Date.now() - new Date(participants[0].user.lastSeen).getTime() < 2 * 60 * 1000 && (
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", display: "inline-block", flexShrink: 0 }} />
+                            )}
+                          {formatLastSeen(participants[0]?.user?.lastSeen || null)}
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -1666,33 +1771,99 @@ export default function ChatPage() {
                                     flexDirection: isMine ? "row-reverse" : "row",
                                   }}
                                 >
-                                  <div
-                                    style={{
-                                      padding: msg.fileUrl && !msg.content ? "6px" : "10px 14px",
-                                      borderRadius: isMine
-                                        ? "16px 16px 4px 16px"
-                                        : "16px 16px 16px 4px",
-                                      background: isMine ? "#052e16" : "var(--bg-card)",
-                                      border: `1px solid ${isMine ? "#14532d" : "var(--border)"}`,
-                                      color: isMine ? "#86efac" : "var(--text-primary)",
-                                      fontSize: 14,
-                                      lineHeight: 1.55,
-                                      wordBreak: "break-word",
-                                      boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
-                                    }}
-                                  >
-                                    {msg.content && <div>{msg.content}</div>}
-                                    {msg.fileUrl && (
-                                      <FileAttachment
-                                        url={msg.fileUrl}
-                                        fileName={msg.fileName}
-                                        fileType={msg.fileType}
-                                        isMine={isMine}
-                                      />
+                                  <div style={{ position: "relative" }}>
+                                    <div
+                                      style={{
+                                        padding: msg.fileUrl && !msg.content ? "6px" : "10px 14px",
+                                        borderRadius: isMine
+                                          ? "16px 16px 4px 16px"
+                                          : "16px 16px 16px 4px",
+                                        background: isMine ? "#052e16" : "var(--bg-card)",
+                                        border: `1px solid ${isMine ? "#14532d" : "var(--border)"}`,
+                                        color: isMine ? "#86efac" : "var(--text-primary)",
+                                        fontSize: 14,
+                                        lineHeight: 1.55,
+                                        wordBreak: "break-word",
+                                        boxShadow: "0 1px 4px rgba(0,0,0,0.12)",
+                                      }}
+                                    >
+                                      {/* Quoted reply preview */}
+                                      {msg.replyTo && (
+                                        <div
+                                          style={{
+                                            borderLeft: "3px solid #22c55e",
+                                            background: "rgba(255,255,255,0.06)",
+                                            borderRadius: 6,
+                                            padding: "5px 9px",
+                                            marginBottom: 6,
+                                            fontSize: 12.5,
+                                          }}
+                                        >
+                                          <div style={{ fontWeight: 700, color: "#4ade80", marginBottom: 1 }}>
+                                            {msg.replyTo.sender.name}
+                                          </div>
+                                          <div style={{ opacity: 0.8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                            {msg.replyTo.content || (msg.replyTo.fileName ? `📎 ${msg.replyTo.fileName}` : "Attachment")}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {msg.content && <div>{msg.content}</div>}
+                                      {msg.fileUrl && (
+                                        <FileAttachment
+                                          url={msg.fileUrl}
+                                          fileName={msg.fileName}
+                                          fileType={msg.fileType}
+                                          isMine={isMine}
+                                        />
+                                      )}
+                                      {msg.edited && (
+                                        <span style={{ fontSize: 10, opacity: 0.6, marginLeft: 4 }}>(edited)</span>
+                                      )}
+                                    </div>
+
+                                    {/* Reaction picker popup */}
+                                    {reactionPickerFor === msg.id && (
+                                      <div
+                                        style={{
+                                          position: "absolute",
+                                          bottom: "100%",
+                                          [isMine ? "right" : "left"]: 0,
+                                          marginBottom: 4,
+                                          background: "var(--bg-card)",
+                                          border: "0.5px solid var(--border)",
+                                          borderRadius: 20,
+                                          padding: "6px 8px",
+                                          display: "flex",
+                                          gap: 4,
+                                          zIndex: 150,
+                                          boxShadow: "0 6px 20px rgba(0,0,0,0.3)",
+                                        }}
+                                      >
+                                        {QUICK_REACTIONS.map((emo) => (
+                                          <button
+                                            key={emo}
+                                            onClick={() => handleReact(msg.id, emo)}
+                                            style={{
+                                              background: "none",
+                                              border: "none",
+                                              fontSize: 18,
+                                              cursor: "pointer",
+                                              padding: 2,
+                                              lineHeight: 1,
+                                              transition: "transform 0.1s",
+                                            }}
+                                            onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.3)"; }}
+                                            onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+                                          >
+                                            {emo}
+                                          </button>
+                                        ))}
+                                      </div>
                                     )}
                                   </div>
 
-                                  {/* FIX #3: Context menu ⋯ button */}
+                                  {/* FIX #3: Context menu ⋯ button, now with React */}
                                   <MessageMenu
                                     messageId={msg.id}
                                     isMine={isMine}
@@ -1701,8 +1872,39 @@ export default function ChatPage() {
                                     onCopy={() => handleCopy(msg.content)}
                                     onDelete={() => handleDeleteMessage(msg.id)}
                                     onEdit={(newText) => handleEditMessage(msg.id, newText)}
+                                    onReact={() => setReactionPickerFor(reactionPickerFor === msg.id ? null : msg.id)}
                                   />
                                 </div>
+
+                                {/* Reaction pills */}
+                                {msg.reactions && msg.reactions.length > 0 && (
+                                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                                    {Object.entries(
+                                      msg.reactions.reduce((acc: Record<string, number>, r) => {
+                                        acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                                        return acc;
+                                      }, {})
+                                    ).map(([emoji, count]) => {
+                                      const mine = msg.reactions!.some((r) => r.emoji === emoji && r.userId === currentUser?.id);
+                                      return (
+                                        <button
+                                          key={emoji}
+                                          onClick={() => mine ? handleRemoveReaction(msg.id) : handleReact(msg.id, emoji)}
+                                          style={{
+                                            display: "flex", alignItems: "center", gap: 3,
+                                            padding: "2px 8px", borderRadius: 12,
+                                            background: mine ? "var(--accent-bg)" : "var(--bg-input)",
+                                            border: `1px solid ${mine ? "var(--accent)" : "var(--border)"}`,
+                                            fontSize: 12, cursor: "pointer",
+                                          }}
+                                        >
+                                          <span>{emoji}</span>
+                                          <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>{count}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                )}
 
                                 <div
                                   style={{
@@ -1711,9 +1913,17 @@ export default function ChatPage() {
                                     marginTop: 4,
                                     paddingLeft: isMine ? 0 : 4,
                                     paddingRight: isMine ? 4 : 0,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 4,
                                   }}
                                 >
                                   {formatMessageTime(msg.createdAt)}
+                                  {isMine && (
+                                    <span style={{ color: isMessageRead(msg) ? "#60a5fa" : "var(--text-hint)", fontSize: 13 }}>
+                                      {isMessageRead(msg) ? "✓✓" : "✓"}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1736,6 +1946,36 @@ export default function ChatPage() {
                   }}
                 >
                   {uploading && <UploadingToast fileName={uploadingFile} />}
+                  {replyingTo && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        marginBottom: 8,
+                        padding: "8px 14px",
+                        borderRadius: 10,
+                        background: "var(--bg-input)",
+                        border: "0.5px solid var(--border)",
+                        borderLeft: "3px solid #22c55e",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#4ade80" }}>
+                          Replying to {replyingTo.sender.name}
+                        </div>
+                        <div style={{ fontSize: 13, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {replyingTo.content || (replyingTo.fileName ? `📎 ${replyingTo.fileName}` : "Attachment")}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setReplyingTo(null)}
+                        style={{ background: "none", border: "none", color: "var(--text-hint)", fontSize: 18, cursor: "pointer", flexShrink: 0 }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
 
                   {/* FIX #2: File caption bar — shows after file is picked */}
                   {fileToSend && (

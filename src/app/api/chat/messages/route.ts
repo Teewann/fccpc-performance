@@ -20,19 +20,42 @@ export async function GET(request: NextRequest) {
   });
   if (!participant) return NextResponse.json({ error: "Not a participant" }, { status: 403 });
 
+  // Heartbeat — being in the chat page and polling counts as "online"
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastSeen: new Date() },
+  }).catch(() => {});
+
   const messages = await prisma.chatMessage.findMany({
     where: { conversationId },
     include: {
       sender: { select: { id: true, name: true, photo: true } },
+      replyTo: {
+        select: {
+          id: true,
+          content: true,
+          fileName: true,
+          sender: { select: { name: true } },
+        },
+      },
+      reactions: {
+        select: { id: true, emoji: true, userId: true, user: { select: { name: true } } },
+      },
     },
     orderBy: { createdAt: "asc" },
     take: 100,
   });
 
-  return NextResponse.json({ messages });
+  // Read status of all participants (for ticks) — everyone but me
+  const participants = await prisma.chatParticipant.findMany({
+    where: { conversationId, userId: { not: user.id } },
+    select: { userId: true, lastReadAt: true, user: { select: { name: true, lastSeen: true } } },
+  });
+
+  return NextResponse.json({ messages, participants });
 }
 
-// POST — send a message
+// POST — send a message (now supports replyToId)
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -41,7 +64,7 @@ export async function POST(request: NextRequest) {
   if (!sender) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await request.json();
-  const { conversationId, content, fileUrl, fileName, fileType } = body;
+  const { conversationId, content, fileUrl, fileName, fileType, replyToId } = body;
 
   if (!conversationId) return NextResponse.json({ error: "conversationId required" }, { status: 400 });
   if (!content && !fileUrl) return NextResponse.json({ error: "Nothing to send" }, { status: 400 });
@@ -51,6 +74,16 @@ export async function POST(request: NextRequest) {
   });
   if (!participant) return NextResponse.json({ error: "Not a participant" }, { status: 403 });
 
+  // Validate replyToId belongs to the same conversation, if provided
+  let validReplyToId: string | null = null;
+  if (replyToId) {
+    const target = await prisma.chatMessage.findFirst({
+      where: { id: replyToId, conversationId },
+      select: { id: true },
+    });
+    if (target) validReplyToId = target.id;
+  }
+
   const message = await prisma.chatMessage.create({
     data: {
       conversationId,
@@ -59,11 +92,27 @@ export async function POST(request: NextRequest) {
       fileUrl: fileUrl || null,
       fileName: fileName || null,
       fileType: fileType || null,
+      replyToId: validReplyToId,
     },
     include: {
       sender: { select: { id: true, name: true, photo: true } },
+      replyTo: {
+        select: {
+          id: true,
+          content: true,
+          fileName: true,
+          sender: { select: { name: true } },
+        },
+      },
+      reactions: true,
     },
   });
+
+  // Sending a message also counts as being "read up to now" for the sender
+  await prisma.chatParticipant.update({
+    where: { id: participant.id },
+    data: { lastReadAt: new Date() },
+  }).catch(() => {});
 
   await prisma.chatConversation.update({
     where: { id: conversationId },
@@ -73,7 +122,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ message });
 }
 
-// PATCH — edit a message (only the sender can edit)
+// PATCH — edit a message (only the sender can edit) — now marks `edited: true`
 export async function PATCH(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -91,8 +140,12 @@ export async function PATCH(request: NextRequest) {
 
   const updated = await prisma.chatMessage.update({
     where: { id: messageId },
-    data: { content },
-    include: { sender: { select: { id: true, name: true, photo: true } } },
+    data: { content, edited: true },
+    include: {
+      sender: { select: { id: true, name: true, photo: true } },
+      replyTo: { select: { id: true, content: true, fileName: true, sender: { select: { name: true } } } },
+      reactions: true,
+    },
   });
 
   return NextResponse.json({ message: updated });

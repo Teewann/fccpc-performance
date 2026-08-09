@@ -17,32 +17,56 @@ export async function GET(request: NextRequest) {
     },
     include: {
       participants: {
-        include: { user: { select: { id: true, name: true, photo: true } } },
+        include: { user: { select: { id: true, name: true, photo: true, lastSeen: true } } },
       },
       messages: {
         take: 1,
         orderBy: { createdAt: "desc" },
-        select: { content: true, fileUrl: true, createdAt: true },
+        select: { content: true, fileUrl: true, createdAt: true, senderId: true },
       },
     },
     orderBy: { updatedAt: "desc" },
   });
 
-  // inject lastMessage and extra info
-  const result = conversations.map((c) => ({
-    id: c.id,
-    name: c.isGroup
-      ? c.name
-      : c.participants.find((p) => p.userId !== user.id)?.user.name || "Unknown",
-    isGroup: c.isGroup,
-    participants: c.participants.map((p) => ({
-      id: p.user.id,
-      name: p.user.name,
-      photo: p.user.photo,
-    })),
-    lastMessage: c.messages[0]?.content || (c.messages[0]?.fileUrl ? "📎 File" : ""),
-    lastTime: c.messages[0]?.createdAt || c.createdAt,
-  }));
+  const myParticipantRows = await prisma.chatParticipant.findMany({
+    where: { userId: user.id },
+    select: { conversationId: true, lastReadAt: true },
+  });
+  const myReadMap = new Map(myParticipantRows.map((p) => [p.conversationId, p.lastReadAt]));
+
+  // Consider someone "online" if seen in the last 2 minutes
+  const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
+  const now = Date.now();
+
+  const result = conversations.map((c) => {
+    const others = c.participants.filter((p) => p.userId !== user.id);
+    const otherUser = others[0]?.user;
+    const isOnline = otherUser?.lastSeen
+      ? now - new Date(otherUser.lastSeen).getTime() < ONLINE_THRESHOLD_MS
+      : false;
+
+    const lastMsg = c.messages[0];
+    const myLastRead = myReadMap.get(c.id);
+    const hasUnread = lastMsg
+      ? lastMsg.senderId !== user.id && (!myLastRead || new Date(lastMsg.createdAt) > new Date(myLastRead))
+      : false;
+
+    return {
+      id: c.id,
+      name: c.isGroup ? c.name : otherUser?.name || "Unknown",
+      isGroup: c.isGroup,
+      participants: c.participants.map((p) => ({
+        id: p.user.id,
+        name: p.user.name,
+        photo: p.user.photo,
+        lastSeen: p.user.lastSeen,
+      })),
+      lastMessage: lastMsg?.content || (lastMsg?.fileUrl ? "📎 File" : ""),
+      lastTime: lastMsg?.createdAt || c.createdAt,
+      isOnline: c.isGroup ? undefined : isOnline,
+      hasUnread,
+    };
+  });
 
   return NextResponse.json({ conversations: result });
 }
@@ -62,7 +86,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "At least one participant required" }, { status: 400 });
   }
 
-  // Ensure we don't create duplicates for direct chats (1-on-1)
   if (!isGroup && participantIds.length === 1) {
     const otherId = participantIds[0];
     const existingConv = await prisma.chatConversation.findFirst({
