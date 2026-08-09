@@ -25,6 +25,11 @@ export async function GET(request: NextRequest) {
     where: { id: user.id },
     data: { lastSeen: new Date() },
   }).catch(() => {});
+  // Mark this conversation as read, right here, instead of a separate call every poll
+  await prisma.chatParticipant.update({
+    where: { id: participant.id },
+    data: { lastReadAt: new Date() },
+  }).catch(() => {});
 
   const messages = await prisma.chatMessage.findMany({
     where: { conversationId },

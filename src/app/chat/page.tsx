@@ -496,7 +496,18 @@ function FileAttachment({
   const [showPreview, setShowPreview] = useState(false);
   const isImage = fileType?.startsWith("image/");
   const isPdf = fileType === "application/pdf";
+  const isAudio = fileType?.startsWith("audio/");
   const name = fileName || "Attachment";
+
+  if (isAudio) {
+    return (
+      <audio
+        controls
+        src={url}
+        style={{ maxWidth: 240, height: 36, marginTop: 4 }}
+      />
+    );
+  }
 
   return (
     <>
@@ -993,6 +1004,12 @@ export default function ChatPage() {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [participants, setParticipants] = useState<ReadParticipant[]>([]);
   const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
+  // Voice notes
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // FIX #1: smart scroll — ref to the messages container
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -1047,13 +1064,11 @@ export default function ChatPage() {
     if (pollRef.current) clearInterval(pollRef.current);
     if (!activeConv) return;
     fetchMessages(activeConv);
-    markAsRead(activeConv);
     pollRef.current = setInterval(() => {
       fetchMessages(activeConv);
-      markAsRead(activeConv);
-    }, 3000);
+    }, 4000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [activeConv, fetchMessages, markAsRead]);
+  }, [activeConv, fetchMessages]);
 
   // ── FIX #1: Smart auto-scroll — only scroll down if already near bottom ──
   const prevMessageCountRef = useRef(0);
@@ -1151,6 +1166,97 @@ export default function ChatPage() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
+  // ── Voice notes ─────────────────────────────────────────────────────
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      audioChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((s) => s + 1);
+      }, 1000);
+    } catch {
+      alert("Microphone access denied or unavailable.");
+    }
+  };
+
+  const cancelRecording = () => {
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    mediaRecorderRef.current?.stop();
+    audioChunksRef.current = [];
+    setIsRecording(false);
+    setRecordingSeconds(0);
+  };
+
+  const stopAndSendRecording = async () => {
+    if (!mediaRecorderRef.current) return;
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+
+    const recorder = mediaRecorderRef.current;
+    const stopped = new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+    });
+    recorder.stop();
+    await stopped;
+
+    const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+    audioChunksRef.current = [];
+    setRecordingSeconds(0);
+
+    if (blob.size === 0) return;
+
+    setUploading(true);
+    setUploadingFile("Voice note");
+    const formData = new FormData();
+    formData.append("file", blob, `voice-note-${Date.now()}.webm`);
+    try {
+      const res = await fetch("/api/chat/upload", { method: "POST", body: formData });
+      const data = await res.json();
+      if (data.url && activeConv) {
+        await fetch("/api/chat/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversationId: activeConv,
+            fileUrl: data.url,
+            fileName: "Voice note",
+            fileType: "audio/webm",
+            replyToId: replyingTo?.id || null,
+          }),
+        });
+        setReplyingTo(null);
+        await fetchMessages(activeConv);
+        fetchConversations();
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+      }
+    } finally {
+      setUploading(false);
+      setUploadingFile("");
+    }
+  };
+
+  const formatRecordingTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  // ── Start conversation ─────────────────────────────────────────────
+
 
   // ── Start conversation ─────────────────────────────────────────────
   const handleStartConversation = async (
@@ -2126,30 +2232,103 @@ export default function ChatPage() {
                         />
                       </label>
 
-                      {/* Send button */}
+                     {/* Mic / Send button — mic shows when input is empty, send when there's text */}
+                      {input.trim() ? (
+                        <button
+                          onClick={sendMessage}
+                          disabled={sending || uploading}
+                          title="Send (Enter)"
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: 10,
+                            border: "1.5px solid #22c55e",
+                            background: "#052e16",
+                            color: "#4ade80",
+                            fontSize: 17,
+                            fontWeight: 700,
+                            cursor: sending || uploading ? "not-allowed" : "pointer",
+                            opacity: sending || uploading ? 0.5 : 1,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            transition: "opacity 0.15s",
+                            flexShrink: 0,
+                          }}
+                        >
+                          ➤
+                        </button>
+                      ) : (
+                        <button
+                          onClick={startRecording}
+                          disabled={uploading}
+                          title="Record voice note"
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: 10,
+                            border: "1.5px solid var(--border)",
+                            background: "var(--bg-input)",
+                            color: "var(--text-muted)",
+                            fontSize: 17,
+                            cursor: uploading ? "not-allowed" : "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          🎤
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Recording overlay — replaces the whole input row while recording */}
+                  {isRecording && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        background: "var(--bg-input)",
+                        border: "0.5px solid var(--border)",
+                        borderRadius: 14,
+                        padding: "10px 16px",
+                      }}
+                    >
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", flexShrink: 0, animation: "typingBounce 1s ease-in-out infinite" }} />
+                      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", flex: 1 }}>
+                        Recording... {formatRecordingTime(recordingSeconds)}
+                      </span>
                       <button
-                        onClick={sendMessage}
-                        disabled={!input.trim() || sending || uploading}
-                        title="Send (Enter)"
+                        onClick={cancelRecording}
                         style={{
-                          width: 38,
-                          height: 38,
-                          borderRadius: 10,
+                          padding: "7px 16px",
+                          borderRadius: 8,
+                          border: "0.5px solid var(--border)",
+                          background: "transparent",
+                          color: "var(--text-muted)",
+                          fontSize: 13,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={stopAndSendRecording}
+                        style={{
+                          padding: "7px 16px",
+                          borderRadius: 8,
                           border: "1.5px solid #22c55e",
                           background: "#052e16",
                           color: "#4ade80",
-                          fontSize: 17,
-                          fontWeight: 700,
-                          cursor: !input.trim() || sending || uploading ? "not-allowed" : "pointer",
-                          opacity: !input.trim() || sending || uploading ? 0.5 : 1,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          transition: "opacity 0.15s",
-                          flexShrink: 0,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: "pointer",
                         }}
                       >
-                        ➤
+                        Send
                       </button>
                     </div>
                   )}
