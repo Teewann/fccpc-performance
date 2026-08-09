@@ -38,6 +38,9 @@ model User {
   announcements Announcement[]
   chatParticipants ChatParticipant[]
   chatMessages     ChatMessage[]
+  lastSeen         DateTime?
+  chatPin          String?
+  chatReactions    ChatReaction[]
   memos          Memo[]
   receivedMemos  MemoRecipient[]
   submittedRevenue  RevenueItem[]  @relation("SubmittedRevenue")
@@ -323,6 +326,7 @@ model ChatParticipant {
   conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   userId         String
   user           User             @relation(fields: [userId], references: [id])
+  lastReadAt     DateTime?
   createdAt      DateTime         @default(now())
 }
 
@@ -336,7 +340,23 @@ model ChatMessage {
   fileUrl        String?
   fileName       String?
   fileType       String?
+  edited         Boolean          @default(false)
+  replyToId      String?
+  replyTo        ChatMessage?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        ChatMessage[]    @relation("MessageReplies")
+  reactions      ChatReaction[]
   createdAt      DateTime         @default(now())
+}
+
+model ChatReaction {
+  id        String      @id @default(cuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  emoji     String
+  createdAt DateTime    @default(now())
+  @@unique([messageId, userId])
 }
 
 model Memo {
