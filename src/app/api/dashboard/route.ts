@@ -21,9 +21,11 @@ function isoDate(d: Date) {
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email)
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-
+const userId = (session?.user as any)?.id;
+if (!userId) {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+// ... use userId directly
     const { searchParams } = new URL(request.url);
     const filter    = searchParams.get("filter") || "week";
     const fromParam = searchParams.get("from");

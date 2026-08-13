@@ -56,6 +56,10 @@ model User {
   targetTransfers    CaseTransfer[] @relation("TargetTransfers")
   forwardedFromTasks Task[] @relation("ForwardedFrom")
   forwardedToTasks   Task[] @relation("ForwardedTo")
+  webAuthnCredentials   WebAuthnCredential[]
+  biometricActivations  BiometricActivationCode[] @relation("UserActivations")
+  biometricCodesCreated BiometricActivationCode[] @relation("CreatedActivations")
+  consentRecords        ConsentRecord[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
@@ -195,22 +199,24 @@ model LeaveRequest {
 }
 
 model CheckIn {
-  id            String        @id @default(cuid())
-  userId        String
-  user          User          @relation(fields: [userId], references: [id])
-  date          DateTime
-  checkInAt     DateTime
-  checkOutAt    DateTime?
-  hoursWorked   Float?
-  status        CheckInStatus @default(PRESENT)
-  note          String?
-  ipAddress     String?
-  isOnPremises  Boolean       @default(false)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  gpsLat         Float?
-  gpsLng         Float?
-  locationMethod String?
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  date            DateTime
+  checkInAt       DateTime
+  checkOutAt      DateTime?
+  hoursWorked     Float?
+  status          String    @default("PRESENT")
+  note            String?
+  ipAddress       String?
+
+  isOnPremises    Boolean   @default(false)
+  gpsLat          Float?
+  gpsLng          Float?
+  locationMethod  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
   @@unique([userId, date])
 }
 
@@ -596,6 +602,41 @@ model CaseTransfer {
   completedAt     DateTime?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+}
+
+model WebAuthnCredential {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  credentialId String   @unique
+  publicKey    String   @db.Text
+  counter      Int      @default(0)
+  deviceLabel  String?
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+}
+
+model BiometricActivationCode {
+  id          String    @id @default(cuid())
+  code        String    @unique
+  userId      String
+  user        User      @relation("UserActivations", fields: [userId], references: [id])
+  createdById String
+  createdBy   User      @relation("CreatedActivations", fields: [createdById], references: [id])
+  used        Boolean   @default(false)
+  usedAt      DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+}
+
+model ConsentRecord {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  version     String    @default("v1")
+  ip          String?
+  userAgent   String?
+  consentedAt DateTime  @default(now())
 }
 
 enum TransferType {

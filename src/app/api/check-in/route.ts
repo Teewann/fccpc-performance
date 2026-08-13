@@ -54,6 +54,15 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// ✅ FIX: Accepts GPS accuracy and gives fair margin
+function evaluateGps(lat: number | null | undefined, lng: number | null | undefined, accuracy: number | null | undefined) {
+  if (lat == null || lng == null) return { onPremises: false, distanceMeters: null as number | null };
+  const hq = AGENCY.hqLocation;
+  const distanceMeters = haversineMeters(lat, lng, hq.lat, hq.lng);
+  const margin = accuracy ? Math.min(accuracy, 150) : 0;
+  return { onPremises: distanceMeters <= hq.radiusMeters + margin, distanceMeters };
+}
+
 function isGpsOnPremises(lat: number | null | undefined, lng: number | null | undefined): boolean {
   if (lat == null || lng == null) return false;
   const hq   = AGENCY.hqLocation;
@@ -61,17 +70,12 @@ function isGpsOnPremises(lat: number | null | undefined, lng: number | null | un
   return dist <= hq.radiusMeters;
 }
 
-// ── Core premises decision ───────────────────────────────────────────
-// In dev: reads SIMULATE_ON_PREMISES env var so you can toggle without
-// changing any code. In production: real IP + GPS logic only.
 function resolveOnPremises(ipResult: boolean, gpsResult: boolean): boolean {
   if (process.env.NODE_ENV === "development") {
     const sim = process.env.SIMULATE_ON_PREMISES;
     if (sim === "true")  return true;
     if (sim === "false") return false;
-    // If env var not set, fall through to real logic
   }
-  // FAIR RULE: either IP or GPS confirming is enough
   return ipResult || gpsResult;
 }
 
@@ -79,16 +83,25 @@ function resolveOnPremises(ipResult: boolean, gpsResult: boolean): boolean {
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email)
+    // ✅ OPTIMIZED: Use session.user.id directly (no redundant DB lookup)
+    const userId = (session?.user as any)?.id;
+    if (!userId) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
     const { searchParams } = new URL(request.url);
     const view   = searchParams.get("view")   || "today";
     const month  = searchParams.get("month");
-    const userId = searchParams.get("userId") || user.id;
+    const targetUserId = searchParams.get("userId") || userId;
+
+    // ✅ OPTIMIZED: Single query for user role (only when needed)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, departmentId: true }
+    });
+    if (!user) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
     const isPrivileged = ["ADMIN", "HR", "DIRECTOR", "EXECUTIVE"].includes(user.role);
 
@@ -97,59 +110,66 @@ export async function GET(request: NextRequest) {
       const ip           = getIp(request);
       const ipOnPremises = isFccpcIp(ip);
       const simVar       = process.env.SIMULATE_ON_PREMISES;
-      const isOnPremises =
-        process.env.NODE_ENV === "development" && simVar !== undefined
-          ? simVar === "true"
-          : ipOnPremises;
 
+      // ✅ FIX: Return HQ data so client uses single source of truth
       return NextResponse.json({
-        isOnPremises,
         ipOnPremises,
-        ip:          ip || "unknown",
-        simulating:  process.env.NODE_ENV === "development" ? simVar || "not set" : "production",
+        ip: ip || "unknown",
+        simulating: process.env.NODE_ENV === "development" ? simVar || "not set" : "production",
+        hq: {
+          lat: AGENCY.hqLocation.lat,
+          lng: AGENCY.hqLocation.lng,
+          radiusMeters: AGENCY.hqLocation.radiusMeters,
+        },
       });
     }
 
     // ── Today's check-in ─────────────────────────────────────────────
     if (view === "today") {
+      // ✅ OPTIMIZED: Single query for today's check-in
       const today = await prisma.checkIn.findUnique({
-        where: { userId_date: { userId: user.id, date: todayDate() } },
+        where: { userId_date: { userId, date: todayDate() } },
       });
 
       let teamToday: any[] = [];
-      let absent:    any[] = [];
+      let absent: any[] = [];
 
       if (isPrivileged) {
+        // ✅ OPTIMIZED: Parallel queries
         const whereClause: any = { date: todayDate() };
         if (user.role === "DIRECTOR" && user.departmentId) {
           whereClause.user = { departmentId: user.departmentId };
         }
-        teamToday = await prisma.checkIn.findMany({
-          where:   whereClause,
-          include: {
-            user: {
-              select: {
-                id: true, name: true, role: true,
-                department: { select: { name: true } },
+
+        const [teamTodayResult, allActiveStaff] = await Promise.all([
+          prisma.checkIn.findMany({
+            where: whereClause,
+            include: {
+              user: {
+                select: {
+                  id: true, name: true, role: true,
+                  department: { select: { name: true } },
+                },
               },
             },
-          },
-          orderBy: { checkInAt: "asc" },
-        });
+            orderBy: { checkInAt: "asc" },
+          }),
+          prisma.user.findMany({
+            where: {
+              isActive: true,
+              ...(user.role === "DIRECTOR" && user.departmentId
+                ? { departmentId: user.departmentId }
+                : {}),
+            },
+            select: {
+              id: true, name: true, role: true,
+              department: { select: { name: true } },
+            },
+          }),
+        ]);
 
-        const checkedInIds   = new Set(teamToday.map((c: any) => c.userId));
-        const allActiveStaff = await prisma.user.findMany({
-          where: {
-            isActive: true,
-            ...(user.role === "DIRECTOR" && user.departmentId
-              ? { departmentId: user.departmentId }
-              : {}),
-          },
-          select: {
-            id: true, name: true, role: true,
-            department: { select: { name: true } },
-          },
-        });
+        teamToday = teamTodayResult;
+        const checkedInIds = new Set(teamToday.map((c: any) => c.userId));
         absent = allActiveStaff.filter((s) => !checkedInIds.has(s.id));
       }
 
@@ -158,7 +178,7 @@ export async function GET(request: NextRequest) {
 
     // ── History ──────────────────────────────────────────────────────
     if (view === "history") {
-      const targetId = isPrivileged ? userId : user.id;
+      const targetId = isPrivileged ? targetUserId : userId;
       let start: Date;
       let end: Date;
 
@@ -172,7 +192,7 @@ export async function GET(request: NextRequest) {
       }
 
       const records = await prisma.checkIn.findMany({
-        where:   { userId: targetId, date: { gte: start, lt: end } },
+        where: { userId: targetId, date: { gte: start, lt: end } },
         orderBy: { date: "desc" },
       });
 
@@ -203,22 +223,31 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email)
+    // ✅ OPTIMIZED: Use session.user.id directly
+    const userId = (session?.user as any)?.id;
+    if (!userId) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
     const body = await request.json();
-    const { note, gpsLat, gpsLng, locationMethod } = body;
+    const { note, gpsLat, gpsLng, gpsAccuracy, locationMethod } = body;
 
     const today = todayDate();
     const now   = new Date();
     const ip    = getIp(request);
 
-    const existing = await prisma.checkIn.findUnique({
-      where: { userId_date: { userId: user.id, date: today } },
-    });
+    // ✅ OPTIMIZED: Single query for user and check-in
+    const [user, existing] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId } }),
+      prisma.checkIn.findUnique({
+        where: { userId_date: { userId, date: today } },
+      }),
+    ]);
+
+    if (!user) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     if (existing) {
       return NextResponse.json({ error: "You have already checked in today" }, { status: 400 });
     }
@@ -228,12 +257,10 @@ export async function POST(request: NextRequest) {
     lateThreshold.setHours(WORK_START_HOUR, WORK_START_MINUTE + LATE_GRACE_MINS, 0, 0);
     const status = now > lateThreshold ? "LATE" : "PRESENT";
 
-    // Individual signals
-    const ipOnPremises  = isFccpcIp(ip);
-    const gpsConfirmed  = isGpsOnPremises(gpsLat, gpsLng);
-
-    // Final decision — respects SIMULATE_ON_PREMISES in dev
-    const onPremises = resolveOnPremises(ipOnPremises, gpsConfirmed);
+    // ✅ FIX: Use accuracy-aware GPS evaluation
+    const ipOnPremises = isFccpcIp(ip);
+    const gps = evaluateGps(gpsLat, gpsLng, gpsAccuracy);
+    const onPremises = ipOnPremises || gps.onPremises;
 
     // Build method string
     const methods: string[] = [];
@@ -241,27 +268,31 @@ export async function POST(request: NextRequest) {
       methods.push(`SIM:${process.env.SIMULATE_ON_PREMISES}`);
     } else {
       if (ipOnPremises) methods.push("IP");
-      if (gpsConfirmed) methods.push("GPS");
+      if (gps.onPremises) methods.push("GPS");
     }
     const detectedMethod = locationMethod || (methods.length > 0 ? methods.join("+") : "UNVERIFIED");
 
+    // ✅ FIX: Store distance and GPS data
     const checkIn = await prisma.checkIn.create({
       data: {
-        userId:       user.id,
-        date:         today,
-        checkInAt:    now,
+        userId,
+        date: today,
+        checkInAt: now,
         status,
-        note:         note || null,
-        ipAddress:    ip,
+        note: note || null,
+        ipAddress: ip,
         isOnPremises: onPremises,
+        gpsLat: gpsLat ?? null,
+        gpsLng: gpsLng ?? null,
+        locationMethod: detectedMethod,
       },
     });
 
     await prisma.auditLog.create({
       data: {
-        userId: user.id,
+        userId,
         action: "CHECK_IN",
-        detail: `Checked in ${now.toLocaleTimeString("en-GB")} — ${status} — IP: ${ip || "unknown"} (${ipOnPremises ? "FCCPC" : "external"}) — GPS: ${gpsConfirmed ? "within HQ" : gpsLat != null ? "outside range" : "not provided"} — Premises: ${onPremises ? "ON" : "OFF"} — Method: ${detectedMethod}`,
+        detail: `Checked in ${now.toLocaleTimeString("en-GB")} — ${status} — IP: ${ip || "unknown"} (${ipOnPremises ? "FCCPC" : "external"}) — GPS: ${gps.onPremises ? "within HQ" : gpsLat != null ? `outside range (${Math.round(gps.distanceMeters || 0)}m)` : "not provided"} — Premises: ${onPremises ? "ON" : "OFF"} — Method: ${detectedMethod}`,
       },
     });
 
@@ -276,11 +307,11 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email)
+    // ✅ OPTIMIZED: Use session.user.id directly
+    const userId = (session?.user as any)?.id;
+    if (!userId) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
     const body = await request.json();
     const { note } = body;
@@ -289,11 +320,16 @@ export async function PATCH(request: NextRequest) {
     const now   = new Date();
 
     const existing = await prisma.checkIn.findUnique({
-      where: { userId_date: { userId: user.id, date: today } },
+      where: { userId_date: { userId, date: today } },
     });
 
-    if (!existing)         return NextResponse.json({ error: "You have not checked in today" },    { status: 400 });
-    if (existing.checkOutAt) return NextResponse.json({ error: "You have already checked out today" }, { status: 400 });
+    if (!existing) {
+      return NextResponse.json({ error: "You have not checked in today" }, { status: 400 });
+    }
+
+    if (existing.checkOutAt) {
+      return NextResponse.json({ error: "You have already checked out today" }, { status: 400 });
+    }
 
     const msWorked    = now.getTime() - existing.checkInAt.getTime();
     const hoursWorked = Math.round((msWorked / 3_600_000) * 100) / 100;
@@ -315,7 +351,7 @@ export async function PATCH(request: NextRequest) {
 
     await prisma.auditLog.create({
       data: {
-        userId: user.id,
+        userId,
         action: "CHECK_OUT",
         detail: `Checked out ${now.toLocaleTimeString("en-GB")} — ${hoursWorked}h worked — ${finalStatus}`,
       },
