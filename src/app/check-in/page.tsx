@@ -174,9 +174,9 @@ type Summary = {
 
 // FCCPC HQ coordinates — 23 Jimmy Carter Street, Asokoro, Abuja
 const FCCPC_HQ = {
-  lat: 9.0423,
-  lng: 7.4985,
-  radiusMeters: 250,
+  lat: 9.048052,    // ✅ Calibrated from 93 readings
+  lng: 7.511101,    // ✅ Calibrated from 93 readings
+  radiusMeters: 60, // ✅ 40m footprint + 20m cushion
 };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; border: string; label: string }> = {
@@ -263,15 +263,35 @@ async function detectGPS(): Promise<{ lat: number; lng: number; distanceMeters: 
       resolve(null);
       return;
     }
+
+    // ✅ FORCE high accuracy
+    const options: PositionOptions = {
+      enableHighAccuracy: true,  // ✅ MUST be true
+      timeout: 30000,            // ✅ 30 seconds max wait
+      maximumAge: 0,             // ✅ Don't use cached position
+    };
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
+        const accuracy = pos.coords.accuracy;
         const distanceMeters = haversineMeters(lat, lng, FCCPC_HQ.lat, FCCPC_HQ.lng);
-        resolve({ lat, lng, distanceMeters, onPremises: distanceMeters <= FCCPC_HQ.radiusMeters });
+
+        console.log(`✅ GPS: ${lat}, ${lng} (±${accuracy}m) - ${Math.round(distanceMeters)}m from HQ`);
+
+        resolve({
+          lat,
+          lng,
+          distanceMeters,
+          onPremises: distanceMeters <= FCCPC_HQ.radiusMeters,
+        });
       },
-      () => resolve(null),
-      { timeout: 8000, maximumAge: 60000, enableHighAccuracy: false }
+      (err) => {
+        console.error(`❌ GPS Error: ${err.message}`);
+        resolve(null);
+      },
+      options  // ✅ High accuracy options
     );
   });
 }
