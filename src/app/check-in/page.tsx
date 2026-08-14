@@ -11,12 +11,10 @@ function ConsentGate({ children }: { children: React.ReactNode }) {
   const [hasConsented, setHasConsented] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Check if user has already consented
     const consent = localStorage.getItem("fccpc-checkin-consent");
     if (consent === "true") {
       setHasConsented(true);
     } else {
-      // Check if consent was already logged in this session
       fetch("/api/check-in/consent")
         .then((res) => res.json())
         .then((data) => {
@@ -33,24 +31,20 @@ function ConsentGate({ children }: { children: React.ReactNode }) {
 
   const handleConsent = async () => {
     try {
-      // Log consent in the database
       await fetch("/api/check-in/consent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consent: true }),
       });
-      // Store in localStorage so they don't see it again
       localStorage.setItem("fccpc-checkin-consent", "true");
       setHasConsented(true);
     } catch (error) {
       console.error("Failed to log consent:", error);
-      // Still allow access even if logging fails
       localStorage.setItem("fccpc-checkin-consent", "true");
       setHasConsented(true);
     }
   };
 
-  // Show loading state
   if (hasConsented === null) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--bg-page)" }}>
@@ -59,7 +53,6 @@ function ConsentGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Show consent prompt
   if (hasConsented === false) {
     return (
       <div className="flex min-h-screen items-center justify-center p-6" style={{ background: "var(--bg-page)" }}>
@@ -172,11 +165,11 @@ type Summary = {
   avgHrs: number;
 };
 
-// FCCPC HQ coordinates — 23 Jimmy Carter Street, Asokoro, Abuja
+// FCCPC HQ coordinates
 const FCCPC_HQ = {
-  lat: 9.048052,    // ✅ Calibrated from 93 readings
-  lng: 7.511101,    // ✅ Calibrated from 93 readings
-  radiusMeters: 60, // ✅ 40m footprint + 20m cushion
+  lat: 9.048052,
+  lng: 7.511101,
+  radiusMeters: 60,
 };
 
 const STATUS_STYLE: Record<string, { bg: string; color: string; border: string; label: string }> = {
@@ -231,8 +224,29 @@ function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number)
 }
 
 function QRCodeSVG({ value, size = 160 }: { value: string; size?: number }) {
+  const [error, setError] = useState(false);
   const encoded = encodeURIComponent(value);
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}&bgcolor=052e16&color=4ade80&margin=10`;
+
+  if (error) {
+    return (
+      <div
+        style={{
+          padding: 16,
+          background: "#0a0c12",
+          borderRadius: 12,
+          border: "1px solid #14532d",
+          maxWidth: size,
+          wordBreak: "break-all",
+          fontSize: 10,
+          color: "#4ade80",
+          fontFamily: "monospace",
+        }}
+      >
+        {value}
+      </div>
+    );
+  }
 
   return (
     <img
@@ -241,9 +255,7 @@ function QRCodeSVG({ value, size = 160 }: { value: string; size?: number }) {
       width={size}
       height={size}
       style={{ borderRadius: 12, display: "block" }}
-      onError={(e) => {
-        (e.target as HTMLImageElement).style.display = "none";
-      }}
+      onError={() => setError(true)}
     />
   );
 }
@@ -277,12 +289,11 @@ async function detectGPS(): Promise<{ lat: number; lng: number; distanceMeters: 
         const accuracy = pos.coords.accuracy;
         const distanceMeters = haversineMeters(lat, lng, FCCPC_HQ.lat, FCCPC_HQ.lng);
 
-        // ✅ Dynamic radius based on accuracy
         let effectiveRadius;
-        if (accuracy < 30) effectiveRadius = 60;       // Phone GPS
-        else if (accuracy < 100) effectiveRadius = 100; // Good WiFi
-        else if (accuracy < 300) effectiveRadius = 200; // PC WiFi
-        else effectiveRadius = 300;                     // Very poor
+        if (accuracy < 30) effectiveRadius = 60;
+        else if (accuracy < 100) effectiveRadius = 100;
+        else if (accuracy < 300) effectiveRadius = 200;
+        else effectiveRadius = 300;
 
         console.log(`📍 Accuracy: ±${Math.round(accuracy)}m → Radius: ${effectiveRadius}m → Distance: ${Math.round(distanceMeters)}m`);
 
@@ -322,47 +333,19 @@ function CheckInContent() {
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [gpsError, setGpsError] = useState("");
 
+  // ── QR Token and URL ──────────────────────────────────────────────
   const [qrToken] = useState(() =>
     `FCCPC-CHECKIN-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
   );
-  const qrUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/check-in?qr=${qrToken}`
-      : `/check-in?qr=${qrToken}`;
+  const qrUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/check-in?qr=${qrToken}`
+    : `/check-in?qr=${qrToken}`;
 
+  // ── Derived values ────────────────────────────────────────────────
+  const checkedIn = !!today?.checkInAt;
+  const checkedOut = !!today?.checkOutAt;
 
-
-      useEffect(() => {
-  // Check for QR token in URL
-  const params = new URLSearchParams(window.location.search);
-  const qrToken = params.get("qr");
-  if (qrToken && !checkedIn) {
-    // Auto-check-in via QR
-    handleQRCheckIn(qrToken);
-  }
-}, []);
-
-// ── QR Check-in Handler ──────────────────────────────────────────────
-async function handleQRCheckIn(token: string) {
-  try {
-    const res = await fetch("/api/check-in/qr", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setMsg({ text: "✅ QR check-in successful!", ok: true });
-      fetchToday();
-    } else {
-      setMsg({ text: data.error || "QR check-in failed. Please try manually.", ok: false });
-    }
-  } catch (error) {
-    console.error("QR check-in error:", error);
-    setMsg({ text: "QR check-in failed. Please try manually.", ok: false });
-  }
-}
-
+  // ── useEffect Hooks ────────────────────────────────────────────────
   useEffect(() => {
     setClock(new Date());
     const t = setInterval(() => setClock(new Date()), 1000);
@@ -378,7 +361,42 @@ async function handleQRCheckIn(token: string) {
       .catch(() => {});
   }, []);
 
+  // ── QR Check-in useEffect ──────────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("qr");
+    if (token && !checkedIn) {
+      handleQRCheckIn(token);
+    }
+  }, [checkedIn]);
+
   const isPrivileged = ["ADMIN", "HR", "DIRECTOR", "EXECUTIVE"].includes(userRole);
+
+  // ── QR Check-in Handler ──────────────────────────────────────────────
+  async function handleQRCheckIn(token: string) {
+    setActing(true);
+    try {
+      const res = await fetch("/api/check-in/qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        setMsg({ text: "✅ QR check-in successful! Have a productive day!", ok: true });
+        fetchToday();
+        window.history.replaceState({}, "", "/check-in");
+      } else {
+        setMsg({ text: data.error || "QR check-in failed. Please try manually.", ok: false });
+      }
+    } catch (error) {
+      console.error("QR check-in error:", error);
+      setMsg({ text: "QR check-in failed. Please try manually.", ok: false });
+    } finally {
+      setActing(false);
+    }
+  }
 
   const runLocationDetection = useCallback(async () => {
     setDetectingLocation(true);
@@ -457,43 +475,41 @@ async function handleQRCheckIn(token: string) {
     }
   }, [tab]);
 
-async function handleCheckIn() {
-  setActing(true);
-  setMsg({ text: "", ok: true });
-  try {
-    // ✅ Biometric verification before check-in
-    const verified = await verifyBiometric();
-    if (!verified) {
-      setMsg({ text: "Fingerprint/Face verification failed. Please try again.", ok: false });
+  async function handleCheckIn() {
+    setActing(true);
+    setMsg({ text: "", ok: true });
+    try {
+      const verified = await verifyBiometric();
+      if (!verified) {
+        setMsg({ text: "Fingerprint/Face verification failed. Please try again.", ok: false });
+        setActing(false);
+        return;
+      }
+
+      const loc = await runLocationDetection();
+      const res = await fetch("/api/check-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note,
+          gpsLat: loc?.gpsCoords?.lat,
+          gpsLng: loc?.gpsCoords?.lng,
+          isOnPremises: loc?.isOnPremises,
+          locationMethod: loc?.method,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMsg({ text: "Successfully checked in. Have a productive day!", ok: true });
+        setNote("");
+        fetchToday();
+      } else {
+        setMsg({ text: data.error || "Failed to check in.", ok: false });
+      }
+    } finally {
       setActing(false);
-      return;
     }
-
-    const loc = await runLocationDetection();
-    const res = await fetch("/api/check-in", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        note,
-        gpsLat: loc?.gpsCoords?.lat,
-        gpsLng: loc?.gpsCoords?.lng,
-        isOnPremises: loc?.isOnPremises,
-        locationMethod: loc?.method,
-      }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setMsg({ text: "Successfully checked in. Have a productive day!", ok: true });
-      setNote("");
-      fetchToday();
-    } else {
-      setMsg({ text: data.error || "Failed to check in.", ok: false });
-    }
-  } finally {
-    setActing(false);
   }
-}
-
 
   async function handleCheckOut() {
     setActing(true);
@@ -526,9 +542,6 @@ async function handleCheckIn() {
     month: "long",
     day: "numeric",
   });
-
-  const checkedIn = !!today?.checkInAt;
-  const checkedOut = !!today?.checkOutAt;
 
   const filteredHistory =
     historyFilter === "ALL"
@@ -1012,6 +1025,25 @@ async function handleCheckIn() {
                   >
                     {qrUrl}
                   </div>
+
+                  {/* Refresh QR button */}
+                  <button
+                    onClick={() => {
+                      window.location.reload();
+                    }}
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-hint)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      marginTop: 8,
+                      marginBottom: 12,
+                    }}
+                  >
+                    🔄 Refresh QR code
+                  </button>
 
                   {/* Location summary in QR panel */}
                   <div
