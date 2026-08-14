@@ -264,11 +264,10 @@ async function detectGPS(): Promise<{ lat: number; lng: number; distanceMeters: 
       return;
     }
 
-    // ✅ FORCE high accuracy
     const options: PositionOptions = {
-      enableHighAccuracy: true,  // ✅ MUST be true
-      timeout: 30000,            // ✅ 30 seconds max wait
-      maximumAge: 0,             // ✅ Don't use cached position
+      enableHighAccuracy: true,
+      timeout: 30000,
+      maximumAge: 0,
     };
 
     navigator.geolocation.getCurrentPosition(
@@ -278,20 +277,27 @@ async function detectGPS(): Promise<{ lat: number; lng: number; distanceMeters: 
         const accuracy = pos.coords.accuracy;
         const distanceMeters = haversineMeters(lat, lng, FCCPC_HQ.lat, FCCPC_HQ.lng);
 
-        console.log(`✅ GPS: ${lat}, ${lng} (±${accuracy}m) - ${Math.round(distanceMeters)}m from HQ`);
+        // ✅ Dynamic radius based on accuracy
+        let effectiveRadius;
+        if (accuracy < 30) effectiveRadius = 60;       // Phone GPS
+        else if (accuracy < 100) effectiveRadius = 100; // Good WiFi
+        else if (accuracy < 300) effectiveRadius = 200; // PC WiFi
+        else effectiveRadius = 300;                     // Very poor
+
+        console.log(`📍 Accuracy: ±${Math.round(accuracy)}m → Radius: ${effectiveRadius}m → Distance: ${Math.round(distanceMeters)}m`);
 
         resolve({
           lat,
           lng,
           distanceMeters,
-          onPremises: distanceMeters <= FCCPC_HQ.radiusMeters,
+          onPremises: distanceMeters <= effectiveRadius,
         });
       },
       (err) => {
         console.error(`❌ GPS Error: ${err.message}`);
         resolve(null);
       },
-      options  // ✅ High accuracy options
+      options
     );
   });
 }
@@ -323,6 +329,39 @@ function CheckInContent() {
     typeof window !== "undefined"
       ? `${window.location.origin}/check-in?qr=${qrToken}`
       : `/check-in?qr=${qrToken}`;
+
+
+
+      useEffect(() => {
+  // Check for QR token in URL
+  const params = new URLSearchParams(window.location.search);
+  const qrToken = params.get("qr");
+  if (qrToken && !checkedIn) {
+    // Auto-check-in via QR
+    handleQRCheckIn(qrToken);
+  }
+}, []);
+
+// ── QR Check-in Handler ──────────────────────────────────────────────
+async function handleQRCheckIn(token: string) {
+  try {
+    const res = await fetch("/api/check-in/qr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setMsg({ text: "✅ QR check-in successful!", ok: true });
+      fetchToday();
+    } else {
+      setMsg({ text: data.error || "QR check-in failed. Please try manually.", ok: false });
+    }
+  } catch (error) {
+    console.error("QR check-in error:", error);
+    setMsg({ text: "QR check-in failed. Please try manually.", ok: false });
+  }
+}
 
   useEffect(() => {
     setClock(new Date());
@@ -454,6 +493,8 @@ async function handleCheckIn() {
     setActing(false);
   }
 }
+
+
   async function handleCheckOut() {
     setActing(true);
     setMsg({ text: "", ok: true });
