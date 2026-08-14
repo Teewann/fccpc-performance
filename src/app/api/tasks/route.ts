@@ -53,30 +53,33 @@ async function getFinanceDirector() {
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email)
+    if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
 
+    // ✅ Get user directly from database
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
       include: { department: true },
     });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
 
     const { searchParams } = new URL(request.url);
-    const view         = searchParams.get("view") || "assigned";
-    const search       = searchParams.get("search") || "";
+    const view = searchParams.get("view") || "assigned";
+    const search = searchParams.get("search") || "";
     const targetUserId = searchParams.get("userId");
 
     // Special endpoint: return Finance staff list for payment routing UI
-    // Available to ALL authenticated users — not just Finance/privileged
     if (searchParams.get("financeStaff") === "1") {
       const staff = await getFinanceStaff();
       return NextResponse.json({ financeStaff: staff });
     }
 
     const isPrivileged = ["DIRECTOR", "SUPERVISOR", "HR", "ADMIN", "EXECUTIVE"].includes(user.role);
-    const isAdminOrEVC = ["ADMIN", "EXECUTIVE"].includes(user.role);
 
+    // ── Build view conditions ──────────────────────────────────────
     let viewCondition: any = {};
 
     if (targetUserId && isPrivileged) {
@@ -84,70 +87,78 @@ export async function GET(request: NextRequest) {
     } else if (view === "assigned") {
       viewCondition = {
         OR: [
-          { assignedToId:  user.id },
+          { assignedToId: user.id },
           { forwardedToId: user.id },
         ],
       };
     } else if (view === "created") {
       viewCondition = { createdById: user.id };
     } else if (view === "department") {
-      // ── FIXED: ALL users can view their department tasks, not just privileged ──
-      if (!user.departmentId)
+      if (!user.departmentId) {
         return NextResponse.json({ tasks: [], counts: buildZeroCounts(), loadWarning: "" });
+      }
       viewCondition = { departmentId: user.departmentId };
     } else if (view === "all") {
-      // "All" = assigned to me + forwarded to me + created by me + my department
-      // Same union for every user — no org-wide leakage
       const deptCondition = user.departmentId ? { departmentId: user.departmentId } : null;
       viewCondition = {
         OR: [
-          { assignedToId:  user.id },
+          { assignedToId: user.id },
           { forwardedToId: user.id },
-          { createdById:   user.id },
+          { createdById: user.id },
           ...(deptCondition ? [deptCondition] : []),
         ],
       };
     } else {
       viewCondition = {
         OR: [
-          { assignedToId:  user.id },
-          { createdById:   user.id },
+          { assignedToId: user.id },
+          { createdById: user.id },
           { forwardedToId: user.id },
         ],
       };
     }
 
+    // ── Add search filter ──────────────────────────────────────────
     const andConditions: any[] = [viewCondition];
     if (search) {
       andConditions.push({
         OR: [
-          { taskRef:       { contains: search, mode: "insensitive" } },
-          { title:         { contains: search, mode: "insensitive" } },
-          { description:   { contains: search, mode: "insensitive" } },
+          { taskRef: { contains: search, mode: "insensitive" } },
+          { title: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
           { caseReference: { contains: search, mode: "insensitive" } },
-          { assignedTo:    { name: { contains: search, mode: "insensitive" } } },
-          { createdBy:     { name: { contains: search, mode: "insensitive" } } },
+          { assignedTo: { name: { contains: search, mode: "insensitive" } } },
+          { createdBy: { name: { contains: search, mode: "insensitive" } } },
         ],
       });
     }
 
     const whereClause = andConditions.length === 1 ? andConditions[0] : { AND: andConditions };
 
+    // ── Execute query with proper includes ──────────────────────────
     const tasks = await prisma.task.findMany({
       where: whereClause,
-      include: taskIncludes,
-      orderBy: [
-        { createdAt: "desc" },
-      ],
+      include: {
+        department: { select: { name: true } },
+        assignedTo: { 
+          select: { id: true, name: true, role: true, department: { select: { name: true } } } 
+        },
+        createdBy: { select: { id: true, name: true, role: true } },
+        forwardedTo: { 
+          select: { id: true, name: true, role: true, department: { select: { name: true } } } 
+        },
+        forwardedFrom: { select: { id: true, name: true, role: true } },
+      },
+      orderBy: { createdAt: "desc" },
     });
 
-    // Sort EVC tasks to top after fetch (Prisma doesn't support conditional orderBy easily)
+    // ── Sort EVC tasks to top ──────────────────────────────────────
     const sortedTasks = [
       ...tasks.filter(t => (t as any).taskSource === "EVC"),
       ...tasks.filter(t => (t as any).taskSource !== "EVC"),
     ];
 
-    // ── Passive overdue escalation ────────────────────────────────────
+    // ── Overdue escalation logic ──────────────────────────────────
     const now = new Date();
     const overdueTasks = sortedTasks.filter(t =>
       t.dueDate && new Date(t.dueDate) < now &&
@@ -164,18 +175,18 @@ export async function GET(request: NextRequest) {
           const alreadyNotified = await prisma.notification.findFirst({
             where: {
               userId: director.id,
-              title:  { contains: ot.taskRef || ot.id },
+              title: { contains: ot.taskRef || ot.id },
               createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
             },
           });
           if (!alreadyNotified) {
             await prisma.notification.create({
               data: {
-                userId:  director.id,
-                title:   `⚠ Overdue task: ${ot.taskRef || ""}`,
+                userId: director.id,
+                title: `⚠ Overdue task: ${ot.taskRef || ""}`,
                 message: `Task "${ot.title}" assigned to ${ot.assignedTo?.name || "staff"} is overdue. Due: ${new Date(ot.dueDate!).toLocaleDateString("en-GB")}.`,
-                type:    "ALERT",
-                link:    "/tasks",
+                type: "ALERT",
+                link: "/tasks",
               },
             });
           }
@@ -183,6 +194,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ── Calculate counts ───────────────────────────────────────────
     const myLoad = await prisma.task.count({
       where: {
         OR: [{ assignedToId: user.id }, { forwardedToId: user.id }],
@@ -191,20 +203,20 @@ export async function GET(request: NextRequest) {
     });
 
     let loadWarning = "";
-    if (myLoad >= 15)      loadWarning = `Critical load: ${myLoad} active tasks. Consider delegating.`;
+    if (myLoad >= 15) loadWarning = `Critical load: ${myLoad} active tasks. Consider delegating.`;
     else if (myLoad >= 10) loadWarning = `You have ${myLoad} active tasks. Prioritise carefully.`;
 
     const counts = {
-      total:            sortedTasks.length,
-      pending:          sortedTasks.filter(t => t.status === "PENDING").length,
-      inProgress:       sortedTasks.filter(t => t.status === "IN_PROGRESS").length,
-      underTreatment:   sortedTasks.filter(t => (t as any).treatmentStatus === "UNDER_TREATMENT").length,
+      total: sortedTasks.length,
+      pending: sortedTasks.filter(t => t.status === "PENDING").length,
+      inProgress: sortedTasks.filter(t => t.status === "IN_PROGRESS").length,
+      underTreatment: sortedTasks.filter(t => (t as any).treatmentStatus === "UNDER_TREATMENT").length,
       awaitingResponse: sortedTasks.filter(t => (t as any).treatmentStatus === "AWAITING_RESPONSE").length,
-      treated:          sortedTasks.filter(t => (t as any).treatmentStatus === "TREATED").length,
-      completed:        sortedTasks.filter(t => t.status === "COMPLETED").length,
-      escalated:        sortedTasks.filter(t => (t as any).treatmentStatus === "ESCALATED").length,
-      forwarded:        sortedTasks.filter(t => (t as any).treatmentStatus === "FORWARDED" || !!(t as any).forwardedToId).length,
-      overdue:          sortedTasks.filter(t =>
+      treated: sortedTasks.filter(t => (t as any).treatmentStatus === "TREATED").length,
+      completed: sortedTasks.filter(t => t.status === "COMPLETED").length,
+      escalated: sortedTasks.filter(t => (t as any).treatmentStatus === "ESCALATED").length,
+      forwarded: sortedTasks.filter(t => (t as any).treatmentStatus === "FORWARDED" || !!(t as any).forwardedToId).length,
+      overdue: sortedTasks.filter(t =>
         t.dueDate && new Date(t.dueDate) < now && !["COMPLETED", "CANCELLED"].includes(t.status)
       ).length,
       myLoad,
@@ -213,7 +225,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ tasks: sortedTasks, counts, loadWarning });
   } catch (error) {
     console.error("GET /api/tasks error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    return NextResponse.json({ error: "Server error: " + (error as Error).message }, { status: 500 });
   }
 }
 

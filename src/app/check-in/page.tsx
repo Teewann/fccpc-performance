@@ -362,41 +362,54 @@ function CheckInContent() {
   }, []);
 
   // ── QR Check-in useEffect ──────────────────────────────────────────
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("qr");
-    if (token && !checkedIn) {
-      handleQRCheckIn(token);
-    }
-  }, [checkedIn]);
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("qr");
+  console.log("🔍 QR param detected:", token);
+  console.log("🔍 checkedIn status:", checkedIn);
+  if (token && !checkedIn) {
+    console.log("🔍 Calling handleQRCheckIn with:", token);
+    handleQRCheckIn(token);
+  }
+}, [checkedIn]);
 
   const isPrivileged = ["ADMIN", "HR", "DIRECTOR", "EXECUTIVE"].includes(userRole);
 
   // ── QR Check-in Handler ──────────────────────────────────────────────
-  async function handleQRCheckIn(token: string) {
-    setActing(true);
-    try {
-      const res = await fetch("/api/check-in/qr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      const data = await res.json();
+async function handleQRCheckIn(token: string) {
+  console.log("🔵 QR token received:", token);
+  setActing(true);
+  try {
+    console.log("📡 Sending to API:", "/api/check-in/qr");
+    console.log("📦 Payload:", { token });
+    
+    const res = await fetch("/api/check-in/qr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    
+    console.log("📡 Response status:", res.status);
+    console.log("📡 Response OK?", res.ok);
+    
+    const data = await res.json();
+    console.log("📡 Response data:", data);
 
-      if (res.ok) {
-        setMsg({ text: "✅ QR check-in successful! Have a productive day!", ok: true });
-        fetchToday();
-        window.history.replaceState({}, "", "/check-in");
-      } else {
-        setMsg({ text: data.error || "QR check-in failed. Please try manually.", ok: false });
-      }
-    } catch (error) {
-      console.error("QR check-in error:", error);
-      setMsg({ text: "QR check-in failed. Please try manually.", ok: false });
-    } finally {
-      setActing(false);
+    if (res.ok) {
+      setMsg({ text: "✅ QR check-in successful! Have a productive day!", ok: true });
+      fetchToday();
+      // Clear the QR param from URL
+      window.history.replaceState({}, "", "/check-in");
+    } else {
+      setMsg({ text: data.error || "QR check-in failed. Please try manually.", ok: false });
     }
+  } catch (error) {
+    console.error("❌ QR check-in error:", error);
+    setMsg({ text: "QR check-in failed. Please try manually.", ok: false });
+  } finally {
+    setActing(false);
   }
+}
 
   const runLocationDetection = useCallback(async () => {
     setDetectingLocation(true);
