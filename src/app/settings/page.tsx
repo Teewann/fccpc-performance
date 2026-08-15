@@ -1,5 +1,6 @@
 "use client";
 export const dynamic = "force-dynamic";
+
 import { useState, useEffect, useRef } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
@@ -7,6 +8,7 @@ import { AGENCY } from "@/config/agency.config";
 import ReactCrop, { Crop, PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import SessionTimeoutSetting from "@/components/settings/SessionTimeoutSetting";
+import { BiometricEnrollment } from "@/components/settings/BiometricEnrollment";
 
 type Tab = "account" | "photo" | "appearance" | "agency" | "security";
 
@@ -152,7 +154,6 @@ export default function SettingsPage() {
       const file = new File([blob], "profile.jpg", { type: "image/jpeg" });
       const formData = new FormData();
       formData.append("photo", file);
-      // Use the correct API endpoint – your photo route at /api/settings/photo
       const res = await fetch("/api/settings/photo", {
         method: "POST",
         body: formData,
@@ -161,7 +162,7 @@ export default function SettingsPage() {
       if (res.ok) {
         setPhoto(data.photo);
         setPhotoMsg({ text: "Profile photo updated successfully.", ok: true });
-        fetchProfile(); // refresh profile (updates the mini avatar in sidebar too)
+        fetchProfile();
       } else {
         setPhotoMsg({ text: data.error || "Upload failed", ok: false });
       }
@@ -272,7 +273,6 @@ export default function SettingsPage() {
 
           {/* Content panel */}
           <div className="card-bg" style={{ borderRadius: 14, padding: 32 }}>
-
             {/* ════ ACCOUNT TAB ════ */}
             {tab === "account" && (
               <div>
@@ -490,6 +490,7 @@ export default function SettingsPage() {
                 <p style={{ fontSize: 15, color: "var(--text-muted)", marginBottom: 28 }}>
                   Your account security and session information.
                 </p>
+
                 {[
                   { label: "Account status", value: "Active", color: "#4ade80" },
                   { label: "Authentication", value: "Email and password", color: "var(--text-primary)" },
@@ -506,18 +507,35 @@ export default function SettingsPage() {
                     <div style={{ fontSize: 15, fontWeight: 600, color }}>{value}</div>
                   </div>
                 ))}
-                {/* Session timeout setting added here */}
+
+                {/* ── BIOMETRIC ENROLLMENT ── */}
+                <div style={{ marginTop: 24, padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "0.5px solid var(--border)" }}>
+                  <BiometricEnrollment />
+                </div>
+
+                {/* Session timeout setting */}
                 <div style={{ marginBottom: 24 }}>
                   <SessionTimeoutSetting />
                 </div>
+
+                {/* Sign out button */}
                 <div style={{ marginTop: 28 }}>
-                  <button onClick={async () => {
-                    const { signOut } = await import("next-auth/react");
-                    signOut({ callbackUrl: "/login" });
-                  }} style={{
-                    padding: "12px 28px", borderRadius: 10, border: "0.5px solid #7f1d1d",
-                    background: "#1f0707", color: "#f87171", fontSize: 15, fontWeight: 600, cursor: "pointer",
-                  }}>
+                  <button
+                    onClick={async () => {
+                      const { signOut } = await import("next-auth/react");
+                      signOut({ callbackUrl: "/auth/login" });
+                    }}
+                    style={{
+                      padding: "12px 28px",
+                      borderRadius: 10,
+                      border: "0.5px solid #7f1d1d",
+                      background: "#1f0707",
+                      color: "#f87171",
+                      fontSize: 15,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
                     Sign out of this session
                   </button>
                 </div>
@@ -526,7 +544,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Crop modal (fixed size) */}
+        {/* Crop modal */}
         {showCropModal && cropSrc && (
           <div style={{
             position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh",

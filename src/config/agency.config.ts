@@ -15,7 +15,7 @@ export const AGENCY = {
   hqLocation: {
     lat: 9.048052,      // ✅ Calibrated
     lng: 7.511101,      // ✅ Calibrated
-    radiusMeters: 150,  // ✅ Works for both PC (WiFi) and Phone (GPS)
+    radiusMeters: 60,  // ✅ Works for both PC (WiFi) and Phone (GPS)
     address: "23 Jimmy Carter Street, Asokoro, Abuja",
   },
 

@@ -1,9 +1,24 @@
-// ── WebAuthn client helpers ──────────────────────────────────────────
+import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 
-/**
- * Enroll a new biometric device (fingerprint/face)
- * Call this once from Settings page
- */
+// ─── Check Activation Code ──────────────────────────────────────────
+export async function checkActivationCode(code: string): Promise<{ valid: boolean; error?: string }> {
+  try {
+    const res = await fetch("/api/webauthn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "check-activation", code }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { valid: false, error: data.error || "Invalid code" };
+    }
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: "Network error. Please try again." };
+  }
+}
+
+// ─── Enroll a new biometric device ──────────────────────────────────
 export async function enrollDevice(
   deviceLabel: string,
   activationCode: string
@@ -74,7 +89,7 @@ export async function enrollDevice(
         action: "enroll-verify",
         response,
         expectedChallenge: options.challenge,
-        deviceLabel,
+        deviceLabel: deviceLabel || navigator.userAgent || "Unnamed device",
         code: activationCode,
       }),
     });
@@ -91,19 +106,18 @@ export async function enrollDevice(
   }
 }
 
-/**
- * Verify biometric (fingerprint/face) before check-in
- * Call this every time a user tries to check in
- */
-export async function verifyBiometric(): Promise<boolean> {
+// ─── Verify biometric (fingerprint/face) before check-in ────────────
+export async function verifyBiometric(): Promise<{ success: boolean; error?: string }> {
   try {
     // Step 1: Get authentication options from server
     const optionsRes = await fetch("/api/webauthn?action=auth-options");
+    if (!optionsRes.ok) {
+      return { success: false, error: "Failed to get authentication options" };
+    }
     const options = await optionsRes.json();
 
     if (!options.allowCredentials || options.allowCredentials.length === 0) {
-      // No device enrolled
-      return true; // Skip verification if no device is enrolled
+      return { success: false, error: "No enrolled device found. Set up fingerprint/face check-in in Settings first." };
     }
 
     // Step 2: Convert challenge from base64url to ArrayBuffer
@@ -128,7 +142,7 @@ export async function verifyBiometric(): Promise<boolean> {
     });
 
     if (!assertion) {
-      return false;
+      return { success: false, error: "Biometric verification was cancelled or failed" };
     }
 
     // Step 4: Send the assertion to the server for verification
@@ -163,21 +177,54 @@ export async function verifyBiometric(): Promise<boolean> {
     });
     const verifyData = await verifyRes.json();
 
-    return verifyRes.ok && verifyData.success === true;
+    if (!verifyRes.ok) {
+      return { success: false, error: verifyData.error || "Verification failed" };
+    }
+
+    return { success: true };
   } catch (error) {
     console.error("Verification error:", error);
+    return { success: false, error: "Verification was cancelled or failed" };
+  }
+}
+
+// ─── Check if user has any enrolled biometric devices ──────────────
+export async function hasEnrolledDevice(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/webauthn?action=check-enrolled");
+    if (!res.ok) {
+      return false;
+    }
+    const data = await res.json();
+    return data.hasCredential === true;
+  } catch {
     return false;
   }
 }
 
-/**
- * Check if the user has any enrolled biometric devices
- */
-export async function hasEnrolledDevice(): Promise<boolean> {
+// ─── List all enrolled devices for the user ─────────────────────────
+export async function listMyDevices(): Promise<{ id: string; deviceLabel: string; createdAt: string }[]> {
   try {
-    const res = await fetch("/api/webauthn?action=check-enrolled");
+    const res = await fetch("/api/webauthn?action=list-devices");
+    if (!res.ok) {
+      return [];
+    }
     const data = await res.json();
-    return data.hasCredential === true;
+    return data.devices || [];
+  } catch {
+    return [];
+  }
+}
+
+// ─── Remove a device by ID ──────────────────────────────────────────
+export async function removeDevice(id: string): Promise<boolean> {
+  try {
+    const res = await fetch("/api/webauthn", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    return res.ok;
   } catch {
     return false;
   }

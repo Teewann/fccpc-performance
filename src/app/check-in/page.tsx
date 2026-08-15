@@ -489,40 +489,41 @@ async function handleQRCheckIn(token: string) {
   }, [tab]);
 
   async function handleCheckIn() {
-    setActing(true);
-    setMsg({ text: "", ok: true });
-    try {
-      const verified = await verifyBiometric();
-      if (!verified) {
-        setMsg({ text: "Fingerprint/Face verification failed. Please try again.", ok: false });
-        setActing(false);
-        return;
-      }
-
-      const loc = await runLocationDetection();
-      const res = await fetch("/api/check-in", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          note,
-          gpsLat: loc?.gpsCoords?.lat,
-          gpsLng: loc?.gpsCoords?.lng,
-          isOnPremises: loc?.isOnPremises,
-          locationMethod: loc?.method,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMsg({ text: "Successfully checked in. Have a productive day!", ok: true });
-        setNote("");
-        fetchToday();
-      } else {
-        setMsg({ text: data.error || "Failed to check in.", ok: false });
-      }
-    } finally {
+  setActing(true);
+  setMsg({ text: "", ok: true });
+  try {
+    // ✅ Biometric verification before check-in
+    const verified = await verifyBiometric();
+    if (!verified.success) {
+      setMsg({ text: verified.error || "Fingerprint/Face verification failed. Please try again.", ok: false });
       setActing(false);
+      return;
     }
+
+    const loc = await runLocationDetection();
+    const res = await fetch("/api/check-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        note,
+        gpsLat: loc?.gpsCoords?.lat,
+        gpsLng: loc?.gpsCoords?.lng,
+        isOnPremises: loc?.isOnPremises,
+        locationMethod: loc?.method,
+      }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setMsg({ text: "Successfully checked in. Have a productive day!", ok: true });
+      setNote("");
+      fetchToday();
+    } else {
+      setMsg({ text: data.error || "Failed to check in.", ok: false });
+    }
+  } finally {
+    setActing(false);
   }
+}
 
   async function handleCheckOut() {
     setActing(true);
