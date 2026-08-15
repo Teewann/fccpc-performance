@@ -9,6 +9,7 @@ import ReactCrop, { Crop, PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import SessionTimeoutSetting from "@/components/settings/SessionTimeoutSetting";
 import { BiometricEnrollment } from "@/components/settings/BiometricEnrollment";
+import { captureFaceFromCamera } from "@/lib/face-capture";
 
 type Tab = "account" | "photo" | "appearance" | "agency" | "security";
 
@@ -592,4 +593,38 @@ export default function SettingsPage() {
       </main>
     </div>
   );
+}
+
+// Add state
+const [enrollingFace, setEnrollingFace] = useState(false);
+const [faceEnrolled, setFaceEnrolled] = useState(false);
+
+// Add function
+async function handleFaceEnroll() {
+  setEnrollingFace(true);
+  try {
+    const faceImage = await captureFaceFromCamera();
+    if (!faceImage) {
+      alert("Face capture failed. Please allow camera access.");
+      return;
+    }
+    
+    const res = await fetch("/api/face/enroll", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ faceImage }),
+    });
+    
+    if (res.ok) {
+      setFaceEnrolled(true);
+      alert("✅ Face enrolled successfully!");
+    } else {
+      alert("Face enrollment failed. Please try again.");
+    }
+  } catch (error) {
+    console.error("Face enrollment error:", error);
+    alert("Face enrollment failed. Please try again.");
+  } finally {
+    setEnrollingFace(false);
+  }
 }

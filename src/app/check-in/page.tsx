@@ -5,6 +5,7 @@ import { verifyBiometric } from "@/lib/webauthn-client";
 import { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
+ import { captureFaceFromCamera, detectFaceInImage } from "@/lib/face-capture";
 
 // ── Consent Gate Component ──────────────────────────────────────────
 function ConsentGate({ children }: { children: React.ReactNode }) {
@@ -488,19 +489,59 @@ async function handleQRCheckIn(token: string) {
     }
   }, [tab]);
 
-  async function handleCheckIn() {
+async function handleCheckIn() {
   setActing(true);
   setMsg({ text: "", ok: true });
   try {
-    // ✅ Biometric verification before check-in
-    const verified = await verifyBiometric();
-    if (!verified.success) {
-      setMsg({ text: verified.error || "Fingerprint/Face verification failed. Please try again.", ok: false });
+    // ── Step 1: Capture Face ──────────────────────────────────────
+    setMsg({ text: "📸 Capturing your face...", ok: true });
+    const faceImage = await captureFaceFromCamera();
+    
+    if (!faceImage) {
+      setMsg({ 
+        text: "Face capture failed. Please allow camera access and try again.", 
+        ok: false 
+      });
       setActing(false);
       return;
     }
 
+    // ── Step 2: Detect if there's a face in the image ──────────────
+    const hasFace = await detectFaceInImage(faceImage);
+    if (!hasFace) {
+      setMsg({ 
+        text: "No face detected in the captured image. Please try again.", 
+        ok: false 
+      });
+      setActing(false);
+      return;
+    }
+
+    // ── Step 3: Verify face against stored face ────────────────────
+    setMsg({ text: "🔍 Verifying your face...", ok: true });
+    const verifyRes = await fetch("/api/face/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ faceImage }),
+    });
+    
+    const verifyData = await verifyRes.json();
+    
+    if (!verifyRes.ok || !verifyData.success) {
+      setMsg({ 
+        text: verifyData.error || "Face verification failed. Please try again.", 
+        ok: false 
+      });
+      setActing(false);
+      return;
+    }
+
+    // ── Step 4: Location check ──────────────────────────────────────
+    setMsg({ text: "📍 Verifying your location...", ok: true });
     const loc = await runLocationDetection();
+
+    // ── Step 5: Complete check-in ────────────────────────────────────
+    setMsg({ text: "📝 Submitting check-in...", ok: true });
     const res = await fetch("/api/check-in", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -510,16 +551,21 @@ async function handleQRCheckIn(token: string) {
         gpsLng: loc?.gpsCoords?.lng,
         isOnPremises: loc?.isOnPremises,
         locationMethod: loc?.method,
+        faceVerified: true,
       }),
     });
+    
     const data = await res.json();
     if (res.ok) {
-      setMsg({ text: "Successfully checked in. Have a productive day!", ok: true });
+      setMsg({ text: "✅ Successfully checked in! Have a productive day!", ok: true });
       setNote("");
       fetchToday();
     } else {
       setMsg({ text: data.error || "Failed to check in.", ok: false });
     }
+  } catch (error) {
+    console.error("Check-in error:", error);
+    setMsg({ text: "An error occurred during check-in. Please try again.", ok: false });
   } finally {
     setActing(false);
   }

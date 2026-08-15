@@ -25,6 +25,7 @@
     "cloudinary": "^2.10.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "face-api.js": "^0.22.2",
     "html-to-image": "^1.11.13",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.7",

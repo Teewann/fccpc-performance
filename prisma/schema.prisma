@@ -60,6 +60,7 @@ model User {
   biometricActivations  BiometricActivationCode[] @relation("UserActivations")
   biometricCodesCreated BiometricActivationCode[] @relation("CreatedActivations")
   consentRecords        ConsentRecord[]
+  faceData    FaceData?  
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
@@ -637,6 +638,15 @@ model ConsentRecord {
   ip          String?
   userAgent   String?
   consentedAt DateTime  @default(now())
+}
+
+model FaceData {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  faceImage   String   @db.Text
+  enrolledAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 enum TransferType {
