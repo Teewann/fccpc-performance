@@ -21,13 +21,14 @@ export const authOptions: NextAuthOptions = {
             console.log("❌ Missing credentials");
             return null;
           }
+          const email = credentials.email.toLowerCase();
 
           const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
+            where: { email: email },
           });
 
           if (!user) {
-            console.log("❌ User not found:", credentials.email);
+            console.log("❌ User not found:", email);
             return null;
           }
 
