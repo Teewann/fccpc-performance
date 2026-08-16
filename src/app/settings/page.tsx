@@ -9,7 +9,6 @@ import ReactCrop, { Crop, PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import SessionTimeoutSetting from "@/components/settings/SessionTimeoutSetting";
 import { BiometricEnrollment } from "@/components/settings/BiometricEnrollment";
-import { captureFaceFromCamera } from "@/lib/face-capture";
 
 type Tab = "account" | "photo" | "appearance" | "agency" | "security";
 
@@ -509,6 +508,31 @@ export default function SettingsPage() {
                   </div>
                 ))}
 
+                {/* ── FACE ENROLLMENT ── */}
+<div style={{ marginTop: 16, padding: "16px 20px", background: "var(--bg-input)", borderRadius: 12, border: "0.5px solid var(--border)" }}>
+  <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>
+    📸 Face Enrollment
+  </h3>
+  <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+    Capture your face for biometric check-in verification.
+  </p>
+  <button
+    onClick={() => window.location.href = "/face/enroll"}
+    style={{
+      padding: "10px 20px",
+      borderRadius: 8,
+      border: "1.5px solid #22c55e",
+      background: "#052e16",
+      color: "#4ade80",
+      fontSize: 14,
+      fontWeight: 600,
+      cursor: "pointer",
+    }}
+  >
+    📸 Enroll Face
+  </button>
+</div>
+
                 {/* ── BIOMETRIC ENROLLMENT ── */}
                 <div style={{ marginTop: 24, padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "0.5px solid var(--border)" }}>
                   <BiometricEnrollment />
@@ -595,36 +619,3 @@ export default function SettingsPage() {
   );
 }
 
-// Add state
-const [enrollingFace, setEnrollingFace] = useState(false);
-const [faceEnrolled, setFaceEnrolled] = useState(false);
-
-// Add function
-async function handleFaceEnroll() {
-  setEnrollingFace(true);
-  try {
-    const faceImage = await captureFaceFromCamera();
-    if (!faceImage) {
-      alert("Face capture failed. Please allow camera access.");
-      return;
-    }
-    
-    const res = await fetch("/api/face/enroll", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ faceImage }),
-    });
-    
-    if (res.ok) {
-      setFaceEnrolled(true);
-      alert("✅ Face enrolled successfully!");
-    } else {
-      alert("Face enrollment failed. Please try again.");
-    }
-  } catch (error) {
-    console.error("Face enrollment error:", error);
-    alert("Face enrollment failed. Please try again.");
-  } finally {
-    setEnrollingFace(false);
-  }
-}
