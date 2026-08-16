@@ -32,23 +32,23 @@ export default function LoginPage() {
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+  e.preventDefault();
+  setLoading(true);
+  setError("");
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+  const result = await signIn("credentials", {
+    email: email.toLowerCase(), // ✅ Convert to lowercase
+    password,
+    redirect: false,
+  });
 
-    if (result?.error) {
-      setError("Invalid email or password. Please try again.");
-      setLoading(false);
-    } else {
-      router.push("/dashboard");
-    }
+  if (result?.error) {
+    setError("Invalid email or password. Please try again.");
+    setLoading(false);
+  } else {
+    router.push("/dashboard");
   }
+}
 
   const bg = dark ? "#0a0c12" : "#f4f5f7";
   const cardBg = dark ? "#13151e" : "#ffffff";
