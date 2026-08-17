@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { checkActivationCode, enrollDevice, listMyDevices, removeDevice } from "@/lib/webauthn-client";
-import { captureFaceEmbedding, hasFaceEnrolled, removeFaceEnrollment } from "@/lib/biometric/face-client";
+import { hasFaceEnrolled, removeFaceEnrollment } from "@/lib/biometric/face-client";
 import FaceCaptureModal from "@/components/biometric/FaceCaptureModal";
 
 type Device = { id: string; deviceLabel: string; createdAt: string };
@@ -93,7 +93,6 @@ export function BiometricEnrollment() {
     setMsg({ text: "", ok: true });
 
     try {
-      // Send to server
       const res = await fetch("/api/face", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -113,21 +112,26 @@ export function BiometricEnrollment() {
       } else {
         setMsg({ text: data.error || "Face enrollment failed.", ok: false });
       }
-    } catch {
+    } catch (err) {
+      console.error("Face enrollment error:", err);
       setMsg({ text: "Face enrollment failed. Please try again.", ok: false });
     }
     setBusy(false);
     setPendingFaceCode(undefined);
   }
 
+  // ─── Handle remove device ────────────────────────────────────────────
   async function handleRemoveDevice(id: string) {
     if (!confirm("Remove this device? A new IT code will be needed only if this was your last enrolled method.")) return;
-    if (await removeDevice(id)) refresh();
+    const ok = await removeDevice(id);
+    if (ok) refresh();
   }
 
+  // ─── Handle remove face ──────────────────────────────────────────────
   async function handleRemoveFace() {
     if (!confirm("Remove your enrolled face data?")) return;
-    if (await removeFaceEnrollment()) refresh();
+    const ok = await removeFaceEnrollment();
+    if (ok) refresh();
   }
 
   if (loading) return <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Loading...</div>;

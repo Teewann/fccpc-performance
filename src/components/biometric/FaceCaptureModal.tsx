@@ -11,16 +11,15 @@ interface FaceCaptureModalProps {
 export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCaptureModalProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!isOpen) {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
+      cleanupCamera();
       return;
     }
 
@@ -30,6 +29,15 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
       try {
         console.log("📷 Starting camera...");
         
+        // Set timeout - 5 seconds
+        timeoutRef.current = setTimeout(() => {
+          if (mounted && isLoading) {
+            console.log("❌ Camera loading timed out");
+            setIsLoading(false);
+            setError("Camera is taking too long to respond. Please check your camera and try again.");
+          }
+        }, 5000);
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { 
             facingMode: "user",
@@ -42,46 +50,70 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
         
         streamRef.current = stream;
         console.log("📷 Camera stream obtained");
+
+        // ✅ Create video element programmatically
+        const video = document.createElement("video");
+        video.autoplay = true;
+        video.playsInline = true;
+        video.muted = true;
+        video.style.width = "100%";
+        video.style.height = "100%";
+        video.style.objectFit = "cover";
         
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          
-          // ✅ Use 'loadeddata' event instead of 'onloadedmetadata'
-          videoRef.current.onloadeddata = () => {
-            console.log("📷 Video data loaded");
-            if (videoRef.current && mounted) {
-              videoRef.current.play()
-                .then(() => {
-                  console.log("📷 Video playing");
-                  if (mounted) {
-                    setIsLoading(false);
-                  }
-                })
-                .catch((err) => {
-                  console.error("📷 Video play error:", err);
-                  if (mounted) {
-                    setError("Failed to start video stream.");
-                    setIsLoading(false);
-                  }
-                });
+        video.srcObject = stream;
+        
+        // ✅ Wait for video to be ready
+        video.onloadedmetadata = () => {
+          console.log("📷 Video metadata loaded");
+          video.play()
+            .then(() => {
+              console.log("📷 Video playing");
+              if (mounted) {
+                videoRef.current = video;
+                if (timeoutRef.current) {
+                  clearTimeout(timeoutRef.current);
+                  timeoutRef.current = null;
+                }
+                setIsLoading(false);
+              }
+            })
+            .catch((err) => {
+              console.error("📷 Video play error:", err);
+              if (mounted) {
+                setError("Failed to start video: " + err.message);
+                setIsLoading(false);
+              }
+            });
+        };
+
+        // ✅ Also try immediate play
+        try {
+          await video.play();
+          console.log("📷 Video playing (direct)");
+          if (mounted) {
+            videoRef.current = video;
+            if (timeoutRef.current) {
+              clearTimeout(timeoutRef.current);
+              timeoutRef.current = null;
             }
-          };
-          
-          // ✅ Also try to play immediately
-          try {
-            await videoRef.current.play();
-            console.log("📷 Video playing (direct)");
-            if (mounted) {
-              setIsLoading(false);
-            }
-          } catch (playErr) {
-            console.log("📷 Waiting for loadeddata event...");
-            // If play fails, wait for the event
+            setIsLoading(false);
           }
+        } catch (playErr) {
+          console.log("📷 Waiting for loadedmetadata...");
         }
+
+        // ✅ Append video to container
+        if (containerRef.current) {
+          containerRef.current.appendChild(video);
+        }
+
       } catch (err: any) {
         console.error("📷 Camera error:", err);
         if (mounted) {
+          if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+          }
           if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
             setError("Camera access denied. Please allow camera access in your browser settings.");
           } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
@@ -100,12 +132,25 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
 
     return () => {
       mounted = false;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-        streamRef.current = null;
-      }
+      cleanupCamera();
     };
   }, [isOpen]);
+
+  function cleanupCamera() {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+      videoRef.current.remove();
+      videoRef.current = null;
+    }
+  }
 
   const captureFace = () => {
     if (!videoRef.current || !canvasRef.current) {
@@ -140,11 +185,7 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
     
     const imageData = canvas.toDataURL("image/jpeg", 0.9);
     
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    
+    cleanupCamera();
     onCapture(imageData);
   };
 
@@ -201,36 +242,26 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
           background: "#0a0c12",
           border: "2px solid #22c55e",
         }}>
-          {isLoading ? (
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              color: "var(--text-muted)",
-              gap: 12,
-            }}>
-              <div style={{ 
-                animation: "spin 1s linear infinite",
-                display: "inline-block",
-                fontSize: 28,
-              }}>⟳</div>
-              <span style={{ fontSize: 14 }}>Loading camera...</span>
-            </div>
-          ) : (
-            <video
-              ref={videoRef}
-              style={{
-                width: "100%",
+          <div ref={containerRef} style={{ width: "100%", height: "100%" }}>
+            {isLoading && (
+              <div style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
                 height: "100%",
-                objectFit: "cover",
-              }}
-              autoPlay
-              playsInline
-              muted
-            />
-          )}
+                color: "var(--text-muted)",
+                gap: 12,
+              }}>
+                <div style={{ 
+                  animation: "spin 1s linear infinite",
+                  display: "inline-block",
+                  fontSize: 28,
+                }}>⟳</div>
+                <span style={{ fontSize: 14 }}>Loading camera...</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <canvas ref={canvasRef} style={{ display: "none" }} />
@@ -272,14 +303,11 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
         {error && (
           <button
             onClick={() => {
+              cleanupCamera();
               setError("");
               setIsLoading(true);
-              if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-                streamRef.current = null;
-              }
               setTimeout(() => {
-                // Force reload by toggling isOpen
+                // Trigger re-render
                 window.location.reload();
               }, 500);
             }}

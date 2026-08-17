@@ -22,7 +22,7 @@ export async function checkActivationCode(code: string): Promise<{ valid: boolea
 export async function enrollDevice(
   deviceLabel: string, 
   activationCode: string,
-  alreadyVerified: boolean = false // ✅ NEW: skip code check if already verified
+  alreadyVerified: boolean = false
 ): Promise<{ success: boolean; error?: string }> {
   try {
     console.log("🔵 Step 1: Checking activation code...");
@@ -62,11 +62,19 @@ export async function enrollDevice(
       credential = await startRegistration(options);
     } catch (err: any) {
       console.error("WebAuthn registration error:", err);
+      
+      // ✅ Improved error messages
       if (err.name === "InvalidStateError") {
         return { success: false, error: "This device is already enrolled. Please use a different device or remove the existing one." };
       }
       if (err.name === "NotAllowedError") {
-        return { success: false, error: "Registration was cancelled or timed out. Please try again." };
+        return { success: false, error: "Fingerprint/face verification was cancelled or your device doesn't support this. Try using Face Verification instead." };
+      }
+      if (err.name === "NotSupportedError") {
+        return { success: false, error: "Your browser doesn't support WebAuthn. Please use a modern browser or try Face Verification." };
+      }
+      if (err.name === "SecurityError") {
+        return { success: false, error: "WebAuthn is not available in this context. Please use HTTPS or localhost." };
       }
       return { success: false, error: err?.message || "Enrollment was cancelled or the device doesn't support this." };
     }

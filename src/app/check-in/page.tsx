@@ -1,11 +1,11 @@
 "use client";
 
 export const dynamic = "force-dynamic";
-import { verifyBiometric } from "@/lib/webauthn-client";
 import { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
-import { captureFaceFromCamera, detectFaceInImage } from "@/lib/face-capture";
+import { verifyFaceAtCheckin, hasFaceEnrolled, hasEnrolledDevice } from "@/lib/biometric/face-verify";
+import { verifyBiometric } from "@/lib/webauthn-client";
 
 // ── Consent Gate Component ──────────────────────────────────────────
 function ConsentGate({ children }: { children: React.ReactNode }) {
@@ -335,6 +335,10 @@ function CheckInContent() {
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [gpsError, setGpsError] = useState("");
 
+  // ── Verification method selector ──────────────────────────────────
+  const [verificationMethod, setVerificationMethod] = useState<"fingerprint" | "face" | null>(null);
+  const [showMethodSelector, setShowMethodSelector] = useState(false);
+
   // ── QR Token and URL ──────────────────────────────────────────────
   const [qrToken] = useState(() =>
     `FCCPC-CHECKIN-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
@@ -489,58 +493,54 @@ function CheckInContent() {
     }
   }, [tab]);
 
-  async function handleCheckIn() {
+  // ─── Perform Face Verification ──────────────────────────────────────
+  async function performFaceVerification() {
     setActing(true);
-    setMsg({ text: "", ok: true });
     try {
-      // ── Step 1: Capture Face ──────────────────────────────────────
-      setMsg({ text: "📸 Capturing your face...", ok: true });
-      const faceImage = await captureFaceFromCamera();
+      setMsg({ text: "📸 Please look at the camera for verification...", ok: true });
+      const faceResult = await verifyFaceAtCheckin();
       
-      if (!faceImage) {
-        setMsg({ 
-          text: "Face capture failed. Please allow camera access and try again.", 
-          ok: false 
-        });
+      if (!faceResult.success) {
+        setMsg({ text: faceResult.error || "Face verification failed. Please try again.", ok: false });
         setActing(false);
         return;
       }
+      setMsg({ text: "✅ Face verified!", ok: true });
+      await completeCheckIn("FACE");
+    } catch (error) {
+      console.error("Face verification error:", error);
+      setMsg({ text: "Face verification failed. Please try again.", ok: false });
+      setActing(false);
+    }
+  }
 
-      // ── Step 2: Detect if there's a face in the image ──────────────
-      const hasFace = await detectFaceInImage(faceImage);
-      if (!hasFace) {
-        setMsg({ 
-          text: "No face detected in the captured image. Please try again.", 
-          ok: false 
-        });
+  // ─── Perform Fingerprint Verification ──────────────────────────────
+  async function performFingerprintVerification() {
+    setActing(true);
+    try {
+      setMsg({ text: "🖐️ Please use your fingerprint sensor...", ok: true });
+      const result = await verifyBiometric();
+      
+      if (!result.success) {
+        setMsg({ text: result.error || "Fingerprint verification failed. Please try again.", ok: false });
         setActing(false);
         return;
       }
+      setMsg({ text: "✅ Fingerprint verified!", ok: true });
+      await completeCheckIn("FINGERPRINT");
+    } catch (error) {
+      console.error("Fingerprint verification error:", error);
+      setMsg({ text: "Fingerprint verification failed. Please try again.", ok: false });
+      setActing(false);
+    }
+  }
 
-      // ── Step 3: Verify face against stored face ────────────────────
-      setMsg({ text: "🔍 Verifying your face...", ok: true });
-      const verifyRes = await fetch("/api/face/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ faceImage }),
-      });
-      
-      const verifyData = await verifyRes.json();
-      
-      if (!verifyRes.ok || !verifyData.success) {
-        setMsg({ 
-          text: verifyData.error || "Face verification failed. Please try again.", 
-          ok: false 
-        });
-        setActing(false);
-        return;
-      }
-
-      // ── Step 4: Location check ──────────────────────────────────────
+  // ─── Complete Check-in ──────────────────────────────────────────────
+  async function completeCheckIn(method: string) {
+    try {
       setMsg({ text: "📍 Verifying your location...", ok: true });
       const loc = await runLocationDetection();
 
-      // ── Step 5: Complete check-in ────────────────────────────────────
       setMsg({ text: "📝 Submitting check-in...", ok: true });
       const res = await fetch("/api/check-in", {
         method: "POST",
@@ -551,7 +551,7 @@ function CheckInContent() {
           gpsLng: loc?.gpsCoords?.lng,
           isOnPremises: loc?.isOnPremises,
           locationMethod: loc?.method,
-          faceVerified: true,
+          verificationMethod: method,
         }),
       });
       
@@ -564,9 +564,52 @@ function CheckInContent() {
         setMsg({ text: data.error || "Failed to check in.", ok: false });
       }
     } catch (error) {
-      console.error("Check-in error:", error);
+      console.error("Check-in completion error:", error);
       setMsg({ text: "An error occurred during check-in. Please try again.", ok: false });
     } finally {
+      setActing(false);
+      setVerificationMethod(null);
+    }
+  }
+
+  // ─── Handle Check-in ─────────────────────────────────────────────────
+  async function handleCheckIn() {
+    setActing(true);
+    setMsg({ text: "", ok: true });
+    try {
+      // ── Step 1: Check what methods are enrolled ──────────────────
+      const [faceEnrolled, deviceEnrolled] = await Promise.all([
+        hasFaceEnrolled(),
+        hasEnrolledDevice()
+      ]);
+      
+      console.log("🔍 Face enrolled:", faceEnrolled);
+      console.log("🔍 Device enrolled:", deviceEnrolled);
+
+      // ── Step 2: If no methods enrolled, skip verification ──────
+      if (!faceEnrolled && !deviceEnrolled) {
+        console.log("ℹ️ No biometric methods enrolled, skipping verification");
+        await completeCheckIn("UNVERIFIED");
+        return;
+      }
+
+      // ── Step 3: If only one method is available, use it directly ──
+      if (faceEnrolled && !deviceEnrolled) {
+        await performFaceVerification();
+        return;
+      }
+      
+      if (!faceEnrolled && deviceEnrolled) {
+        await performFingerprintVerification();
+        return;
+      }
+
+      // ── Step 4: If both are available, show the selector ──────
+      setShowMethodSelector(true);
+      
+    } catch (error) {
+      console.error("Check-in error:", error);
+      setMsg({ text: "An error occurred during check-in. Please try again.", ok: false });
       setActing(false);
     }
   }
@@ -1556,6 +1599,101 @@ function CheckInContent() {
           </div>
         )}
       </main>
+
+      {/* ── Verification Method Selector Modal ── */}
+      {showMethodSelector && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.85)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+        }}>
+          <div style={{
+            background: "var(--bg-card)",
+            borderRadius: 20,
+            padding: "32px 28px",
+            maxWidth: 440,
+            width: "100%",
+            textAlign: "center",
+            border: "0.5px solid var(--border)",
+          }}>
+            <h2 style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>
+              🔐 Verify Your Identity
+            </h2>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 20 }}>
+              Choose how you want to verify your identity
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {/* Face Option */}
+              <button
+                onClick={() => {
+                  setShowMethodSelector(false);
+                  setActing(true);
+                  performFaceVerification();
+                }}
+                style={{
+                  padding: "24px 16px",
+                  borderRadius: 12,
+                  border: "1.5px solid #22c55e",
+                  background: "#052e16",
+                  color: "#4ade80",
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: 40, marginBottom: 8 }}>📸</div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>Face Verification</div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>Camera-based</div>
+              </button>
+
+              {/* Fingerprint Option */}
+              <button
+                onClick={() => {
+                  setShowMethodSelector(false);
+                  setActing(true);
+                  performFingerprintVerification();
+                }}
+                style={{
+                  padding: "24px 16px",
+                  borderRadius: 12,
+                  border: "1.5px solid #60a5fa",
+                  background: "#0c1a2e",
+                  color: "#60a5fa",
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: 40, marginBottom: 8 }}>🖐️</div>
+                <div style={{ fontSize: 16, fontWeight: 600 }}>Fingerprint</div>
+                <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>Device sensor</div>
+              </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowMethodSelector(false);
+                setActing(false);
+              }}
+              style={{
+                marginTop: 16,
+                padding: "8px 20px",
+                borderRadius: 8,
+                border: "0.5px solid var(--border)",
+                background: "var(--bg-input)",
+                color: "var(--text-muted)",
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
