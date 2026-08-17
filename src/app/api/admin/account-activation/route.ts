@@ -9,50 +9,39 @@ function generateCode(): string {
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("Account activation: Starting...");
-    
     const session = await getServerSession(authOptions);
-    console.log("Session:", session?.user?.email);
-    
     if (!session?.user?.email) {
-      console.log("Not authenticated");
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
     const admin = await prisma.user.findUnique({ 
       where: { email: session.user.email } 
     });
-    console.log("Admin found:", admin?.email, "Role:", admin?.role);
     
     if (!admin || !["ADMIN", "HR"].includes(admin.role)) {
-      console.log("Unauthorized - role:", admin?.role);
       return NextResponse.json({ error: "Only Admin or HR can generate activation codes." }, { status: 403 });
     }
 
     const { email } = await request.json();
-    console.log("Looking for staff:", email);
     
     if (!email) {
-      console.log("No email provided");
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
     const staff = await prisma.user.findUnique({ 
       where: { email: email.toLowerCase() } 
     });
-    console.log("Staff found:", staff?.email);
     
     if (!staff) {
-      console.log("Staff not found:", email);
       return NextResponse.json({ 
-        error: "No staff account found with that email. Create the account first." 
+        error: "No staff account found with that email." 
       }, { status: 404 });
     }
 
     const code = generateCode();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    console.log("Code generated:", code);
 
+    // ✅ Use biometricActivationCode model (which uses userId)
     await prisma.biometricActivationCode.create({
       data: { 
         code, 
@@ -61,7 +50,6 @@ export async function POST(request: NextRequest) {
         expiresAt 
       },
     });
-    console.log("Code saved to database");
 
     return NextResponse.json({ code, expiresAt });
   } catch (error) {

@@ -586,26 +586,35 @@ function CheckInContent() {
       console.log("🔍 Face enrolled:", faceEnrolled);
       console.log("🔍 Device enrolled:", deviceEnrolled);
 
-      // ── Step 2: If no methods enrolled, skip verification ──────
+      // ── Step 2: If no methods enrolled, show enrollment prompt ──
       if (!faceEnrolled && !deviceEnrolled) {
-        console.log("ℹ️ No biometric methods enrolled, skipping verification");
-        await completeCheckIn("UNVERIFIED");
+        console.log("ℹ️ No biometric methods enrolled");
+        setMsg({ 
+          text: "⚠️ Please set up biometric verification first. Go to Settings → Security to enroll your face or fingerprint.", 
+          ok: false 
+        });
+        setActing(false);
         return;
       }
 
-      // ── Step 3: If only one method is available, use it directly ──
+      // ── Step 3: If only face is enrolled ──────────────────────────
       if (faceEnrolled && !deviceEnrolled) {
+        console.log("📸 Only face enrolled, using face verification");
         await performFaceVerification();
         return;
       }
       
+      // ── Step 4: If only fingerprint is enrolled ────────────────────
       if (!faceEnrolled && deviceEnrolled) {
+        console.log("🖐️ Only fingerprint enrolled, using fingerprint verification");
         await performFingerprintVerification();
         return;
       }
 
-      // ── Step 4: If both are available, show the selector ──────
+      // ── Step 5: If BOTH are enrolled, show the selector ──────────
+      console.log("🔐 Both methods enrolled, showing selector");
       setShowMethodSelector(true);
+      setActing(false);
       
     } catch (error) {
       console.error("Check-in error:", error);
