@@ -10,56 +10,121 @@ interface FaceCaptureModalProps {
 
 export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCaptureModalProps) {
   const [isLoading, setIsLoading] = useState(true);
-  const [faceDetected, setFaceDetected] = useState(false);
   const [error, setError] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      return;
+    }
+
+    let mounted = true;
 
     async function startCamera() {
       try {
+        console.log("📷 Starting camera...");
+        
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: 400, height: 400 }
+          video: { 
+            facingMode: "user",
+            width: { ideal: 400 },
+            height: { ideal: 400 }
+          }
         });
+        
+        if (!mounted) return;
+        
         streamRef.current = stream;
+        console.log("📷 Camera stream obtained");
         
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          
+          // ✅ Use 'loadeddata' event instead of 'onloadedmetadata'
+          videoRef.current.onloadeddata = () => {
+            console.log("📷 Video data loaded");
+            if (videoRef.current && mounted) {
+              videoRef.current.play()
+                .then(() => {
+                  console.log("📷 Video playing");
+                  if (mounted) {
+                    setIsLoading(false);
+                  }
+                })
+                .catch((err) => {
+                  console.error("📷 Video play error:", err);
+                  if (mounted) {
+                    setError("Failed to start video stream.");
+                    setIsLoading(false);
+                  }
+                });
+            }
+          };
+          
+          // ✅ Also try to play immediately
+          try {
+            await videoRef.current.play();
+            console.log("📷 Video playing (direct)");
+            if (mounted) {
+              setIsLoading(false);
+            }
+          } catch (playErr) {
+            console.log("📷 Waiting for loadeddata event...");
+            // If play fails, wait for the event
+          }
+        }
+      } catch (err: any) {
+        console.error("📷 Camera error:", err);
+        if (mounted) {
+          if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+            setError("Camera access denied. Please allow camera access in your browser settings.");
+          } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+            setError("No camera found. Please connect a camera and try again.");
+          } else {
+            setError("Failed to access camera: " + (err.message || "Unknown error"));
+          }
           setIsLoading(false);
         }
-      } catch (err) {
-        setError("Camera access denied. Please allow camera access and try again.");
-        setIsLoading(false);
       }
     }
 
+    setIsLoading(true);
+    setError("");
     startCamera();
 
     return () => {
+      mounted = false;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
     };
   }, [isOpen]);
 
   const captureFace = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current) {
+      setError("Camera not ready. Please wait.");
+      return;
+    }
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
     
-    if (!ctx) return;
+    if (!ctx) {
+      setError("Failed to capture image.");
+      return;
+    }
     
-    // Set canvas size
     canvas.width = 300;
     canvas.height = 300;
     
-    // Draw the video frame centered with circular crop
     ctx.save();
     ctx.beginPath();
     ctx.arc(150, 150, 140, 0, Math.PI * 2);
@@ -67,19 +132,17 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
     ctx.drawImage(video, 0, 0, 300, 300);
     ctx.restore();
     
-    // Draw a circle border
     ctx.beginPath();
     ctx.arc(150, 150, 140, 0, Math.PI * 2);
     ctx.strokeStyle = "#22c55e";
     ctx.lineWidth = 4;
     ctx.stroke();
     
-    // Get image data
     const imageData = canvas.toDataURL("image/jpeg", 0.9);
     
-    // Stop camera
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
     }
     
     onCapture(imageData);
@@ -105,6 +168,7 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
         width: "100%",
         textAlign: "center",
         border: "0.5px solid var(--border)",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
       }}>
         <h2 style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>
           📸 Face Capture
@@ -121,8 +185,9 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
             borderRadius: 8,
             fontSize: 14,
             marginBottom: 12,
+            border: "0.5px solid #7f1d1d",
           }}>
-            {error}
+            ❌ {error}
           </div>
         )}
 
@@ -139,17 +204,19 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
           {isLoading ? (
             <div style={{
               display: "flex",
+              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               height: "100%",
               color: "var(--text-muted)",
+              gap: 12,
             }}>
               <div style={{ 
                 animation: "spin 1s linear infinite",
                 display: "inline-block",
-                fontSize: 24,
+                fontSize: 28,
               }}>⟳</div>
-              <span style={{ marginLeft: 8 }}>Loading camera...</span>
+              <span style={{ fontSize: 14 }}>Loading camera...</span>
             </div>
           ) : (
             <video
@@ -161,25 +228,8 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
               }}
               autoPlay
               playsInline
+              muted
             />
-          )}
-          
-          {/* Face detection indicator */}
-          {!isLoading && (
-            <div style={{
-              position: "absolute",
-              bottom: 12,
-              left: "50%",
-              transform: "translateX(-50%)",
-              padding: "4px 12px",
-              borderRadius: 6,
-              background: faceDetected ? "#052e16" : "#1f0707",
-              border: `0.5px solid ${faceDetected ? "#14532d" : "#7f1d1d"}`,
-              color: faceDetected ? "#4ade80" : "#f87171",
-              fontSize: 12,
-            }}>
-              {faceDetected ? "✅ Face detected" : "⚠️ No face detected"}
-            </div>
           )}
         </div>
 
@@ -202,22 +252,51 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
           </button>
           <button
             onClick={captureFace}
-            disabled={isLoading}
+            disabled={isLoading || !!error}
             style={{
               padding: "10px 28px",
               borderRadius: 10,
               border: "1.5px solid #22c55e",
-              background: "#052e16",
+              background: isLoading || error ? "#14532d" : "#052e16",
               color: "#4ade80",
               fontSize: 15,
               fontWeight: 600,
-              cursor: isLoading ? "not-allowed" : "pointer",
-              opacity: isLoading ? 0.6 : 1,
+              cursor: isLoading || error ? "not-allowed" : "pointer",
+              opacity: isLoading || error ? 0.6 : 1,
             }}
           >
             📸 Capture
           </button>
         </div>
+
+        {error && (
+          <button
+            onClick={() => {
+              setError("");
+              setIsLoading(true);
+              if (streamRef.current) {
+                streamRef.current.getTracks().forEach(track => track.stop());
+                streamRef.current = null;
+              }
+              setTimeout(() => {
+                // Force reload by toggling isOpen
+                window.location.reload();
+              }, 500);
+            }}
+            style={{
+              marginTop: 12,
+              padding: "8px 20px",
+              borderRadius: 8,
+              border: "0.5px solid var(--border)",
+              background: "var(--bg-input)",
+              color: "var(--text-muted)",
+              fontSize: 14,
+              cursor: "pointer",
+            }}
+          >
+            🔄 Retry
+          </button>
+        )}
       </div>
     </div>
   );
