@@ -56,27 +56,28 @@ export async function POST(request: NextRequest) {
     console.log("🔵 Embedding received:", embedding ? "YES (length: " + embedding.length + ")" : "NO");
     console.log("🔵 Image received:", image ? "YES" : "NO");
 
+    // ─── ENROLL ACTION ──────────────────────────────────────────────
     if (action === "enroll") {
-      // ✅ Use either embedding or image
-      let faceEmbedding: number[];
+      // ── Get the embedding ──────────────────────────────────────────
+      let faceEmbedding: number[] = [];
 
-      if (embedding) {
+      if (embedding && embedding.length > 0) {
         faceEmbedding = embedding;
+        console.log("✅ Using embedding from request");
       } else if (image) {
-        // If image is sent, we need to extract embedding from it
-        // For now, we'll store the image directly (not ideal, but works for testing)
-        // TODO: Use face-api.js to extract embedding from image on server
-        faceEmbedding = []; // Placeholder - will be populated from image
+        // For now, we'll store a placeholder
+        console.warn("⚠️ Image received but server-side face extraction not implemented. Storing placeholder.");
+        faceEmbedding = [];
       } else {
         return NextResponse.json({ error: "No face data provided" }, { status: 400 });
       }
 
-      // ✅ Check if user already has face enrolled
+      // ── Check if user already has face enrolled ──────────────────
       const existingFace = await prisma.faceData.findUnique({
         where: { userId: user.id },
       });
 
-      // ✅ Check activation code if not already proven
+      // ── Check activation code if not already proven ──────────────
       const existingCred = await prisma.webAuthnCredential.count({
         where: { userId: user.id },
       });
@@ -97,57 +98,122 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // ✅ Encrypt and store the face data
-      const encrypted = encrypt(JSON.stringify(faceEmbedding));
-
-      if (existingFace) {
-        await prisma.faceData.update({
-          where: { id: existingFace.id },
-          data: { 
-            embedding: encrypted,
-            updatedAt: new Date(),
-          },
-        });
-      } else {
-        await prisma.faceData.create({
-          data: {
-            userId: user.id,
-            embedding: encrypted,
-            algorithm: "face-api-128d",
-          },
-        });
+      // ── Handle empty embedding (placeholder) ──────────────────────
+      if (faceEmbedding.length === 0) {
+        console.log("📝 Storing placeholder face data");
+        
+        if (existingFace) {
+          await prisma.faceData.update({
+            where: { id: existingFace.id },
+            data: { 
+              embedding: "PLACEHOLDER",
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          await prisma.faceData.create({
+            data: {
+              userId: user.id,
+              embedding: "PLACEHOLDER",
+              algorithm: "face-api-128d",
+            },
+          });
+        }
+        return NextResponse.json({ success: true, warning: "Placeholder stored - please re-enroll with proper embedding" });
       }
 
-      return NextResponse.json({ success: true });
+      // ── Encrypt and store real embedding ──────────────────────────
+      try {
+        console.log("🔐 Encrypting face embedding...");
+        const encrypted = encrypt(JSON.stringify(faceEmbedding));
+
+        if (existingFace) {
+          await prisma.faceData.update({
+            where: { id: existingFace.id },
+            data: { 
+              embedding: encrypted,
+              updatedAt: new Date(),
+            },
+          });
+        } else {
+          await prisma.faceData.create({
+            data: {
+              userId: user.id,
+              embedding: encrypted,
+              algorithm: "face-api-128d",
+            },
+          });
+        }
+
+        console.log("✅ Face enrolled successfully!");
+        return NextResponse.json({ success: true });
+      } catch (encryptError) {
+        console.error("❌ Encryption error:", encryptError);
+        return NextResponse.json({ 
+          error: "Encryption failed. Please make sure FACE_ENCRYPTION_KEY is set in Vercel environment variables." 
+        }, { status: 500 });
+      }
     }
 
+    // ─── VERIFY ACTION ──────────────────────────────────────────────
     if (action === "verify") {
+      // ── Get the embedding from request ────────────────────────────
+      if (!embedding || embedding.length === 0) {
+        return NextResponse.json({ error: "No face embedding provided" }, { status: 400 });
+      }
+
+      // ── Get stored face data ──────────────────────────────────────
       const stored = await prisma.faceData.findUnique({
         where: { userId: user.id },
       });
       
       if (!stored) {
-        return NextResponse.json({ error: "No face enrolled." }, { status: 400 });
+        return NextResponse.json({ error: "No face enrolled. Please set up face verification in Settings first." }, { status: 400 });
       }
 
-      const storedEmbedding: number[] = JSON.parse(decrypt(stored.embedding));
-      const distance = euclideanDistance(embedding, storedEmbedding);
-      const match = distance <= MATCH_THRESHOLD;
-
-      await prisma.biometricAttempt.create({
-        data: {
-          userId: user.id,
-          method: "FACE",
-          success: match,
-          similarityScore: 1 - distance,
-        },
-      });
-
-      if (!match) {
-        return NextResponse.json({ error: "Face did not match enrolled record." }, { status: 401 });
+      // ── Check if it's a placeholder ───────────────────────────────
+      if (stored.embedding === "PLACEHOLDER") {
+        return NextResponse.json({ 
+          error: "Face data is incomplete. Please re-enroll your face in Settings." 
+        }, { status: 400 });
       }
-      
-      return NextResponse.json({ success: true });
+
+      // ── Decrypt and compare ──────────────────────────────────────
+      try {
+        const storedEmbedding: number[] = JSON.parse(decrypt(stored.embedding));
+        
+        if (!storedEmbedding || storedEmbedding.length === 0) {
+          return NextResponse.json({ error: "Stored face data is invalid. Please re-enroll." }, { status: 400 });
+        }
+
+        const distance = euclideanDistance(embedding, storedEmbedding);
+        const match = distance <= MATCH_THRESHOLD;
+
+        // ── Log the attempt ──────────────────────────────────────────
+        await prisma.biometricAttempt.create({
+          data: {
+            userId: user.id,
+            method: "FACE",
+            success: match,
+            similarityScore: 1 - distance,
+          },
+        });
+
+        if (!match) {
+          return NextResponse.json({ 
+            error: "Face did not match enrolled record. Please try again.", 
+            distance: distance,
+            threshold: MATCH_THRESHOLD
+          }, { status: 401 });
+        }
+        
+        return NextResponse.json({ success: true, distance: distance });
+      } catch (decryptError) {
+        console.error("Decryption error:", decryptError);
+        return NextResponse.json({ 
+          error: "Failed to decrypt face data. Please re-enroll your face." 
+        }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
