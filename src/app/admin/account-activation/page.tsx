@@ -23,7 +23,7 @@ export default function AccountActivationPage() {
     setCopied(false);
 
     try {
-      const res = await fetch("/api/admin/activation-codes/account-activation", {
+      const res = await fetch("/api/admin/account-activation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim() }),

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { checkActivationCode, enrollDevice, listMyDevices, removeDevice } from "@/lib/webauthn-client";
 import { captureFaceEmbedding, hasFaceEnrolled, removeFaceEnrollment } from "@/lib/biometric/face-client";
+import FaceCaptureModal from "@/components/biometric/FaceCaptureModal";
 
 type Device = { id: string; deviceLabel: string; createdAt: string };
 
@@ -16,6 +17,10 @@ export function BiometricEnrollment() {
   const [unlockedForAction, setUnlockedForAction] = useState<"device" | "face" | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({ text: "", ok: true });
+
+  // Face capture modal state
+  const [showFaceCapture, setShowFaceCapture] = useState(false);
+  const [pendingFaceCode, setPendingFaceCode] = useState<string | undefined>();
 
   async function refresh() {
     setLoading(true);
@@ -59,11 +64,10 @@ export function BiometricEnrollment() {
     setMsg({ text: "", ok: true });
 
     if (action === "device") {
-      // ✅ FIX: Provide all 3 required arguments
       const result = await enrollDevice(
-        "Fingerprint Sensor",  // deviceLabel
-        usedCode || "",        // activationCode
-        alreadyProven          // alreadyVerified
+        "Fingerprint Sensor",
+        usedCode || "",
+        alreadyProven
       );
       
       if (result.success) {
@@ -73,17 +77,47 @@ export function BiometricEnrollment() {
       } else {
         setMsg({ text: result.error || "Enrollment failed.", ok: false });
       }
+      setBusy(false);
     } else {
-      const result = await captureFaceEmbedding(usedCode);
-      if (result.success) {
-        setMsg({ text: "Face verification enrolled.", ok: true });
+      // Face enrollment - open the face capture modal
+      setPendingFaceCode(usedCode);
+      setShowFaceCapture(true);
+      setBusy(false);
+    }
+  }
+
+  // ─── Handle face capture from modal ──────────────────────────────────
+  async function handleFaceCapture(imageData: string) {
+    setShowFaceCapture(false);
+    setBusy(true);
+    setMsg({ text: "", ok: true });
+
+    try {
+      // Send to server
+      const res = await fetch("/api/face", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "enroll",
+          image: imageData,
+          code: pendingFaceCode || code,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setMsg({ text: "✅ Face enrolled successfully!", ok: true });
         setCode("");
         refresh();
       } else {
-        setMsg({ text: result.error || "Face capture failed.", ok: false });
+        setMsg({ text: data.error || "Face enrollment failed.", ok: false });
       }
+    } catch {
+      setMsg({ text: "Face enrollment failed. Please try again.", ok: false });
     }
     setBusy(false);
+    setPendingFaceCode(undefined);
   }
 
   async function handleRemoveDevice(id: string) {
@@ -181,7 +215,7 @@ export function BiometricEnrollment() {
         )}
       </div>
 
-      {/* ── CODE GATE (only for the very first method, ever) ── */}
+      {/* ── CODE GATE ── */}
       {showCodeGate && (
         <div style={{ 
           position: "fixed", 
@@ -253,6 +287,17 @@ export function BiometricEnrollment() {
           </div>
         </div>
       )}
+
+      {/* ── FACE CAPTURE MODAL ── */}
+      <FaceCaptureModal
+        isOpen={showFaceCapture}
+        onCapture={handleFaceCapture}
+        onCancel={() => {
+          setShowFaceCapture(false);
+          setPendingFaceCode(undefined);
+          setBusy(false);
+        }}
+      />
     </div>
   );
 }

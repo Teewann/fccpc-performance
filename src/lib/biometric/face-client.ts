@@ -4,40 +4,64 @@ let modelsLoaded = false;
 
 async function loadModels() {
   if (modelsLoaded) return;
-  await faceapi.nets.tinyFaceDetector.loadFromUri("/models");
-  await faceapi.nets.faceLandmark68Net.loadFromUri("/models");
-  await faceapi.nets.faceRecognitionNet.loadFromUri("/models");
+  
+  const MODEL_URL = "/models";
+  
+  await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+  await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+  
   modelsLoaded = true;
 }
 
-async function captureFrameAndDescriptor(): Promise<Float32Array> {
+// ─── Get face descriptor from video ──────────────────────────────────
+async function getFaceDescriptor(video: HTMLVideoElement): Promise<Float32Array> {
   await loadModels();
-
-  const video = document.createElement("video");
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-  video.srcObject = stream;
-  await video.play();
-  await new Promise((r) => setTimeout(r, 800)); // let the camera settle/focus
-
+  
   const detection = await faceapi
     .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
     .withFaceLandmarks()
     .withFaceDescriptor();
 
-  stream.getTracks().forEach((t) => t.stop());
-
-  if (!detection) throw new Error("No face detected. Make sure your face is clearly visible and well-lit, then try again.");
+  if (!detection) {
+    throw new Error("No face detected. Make sure your face is clearly visible and well-lit.");
+  }
+  
   return detection.descriptor;
 }
 
+// ─── Capture face embedding ──────────────────────────────────────────
 export async function captureFaceEmbedding(code?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const descriptor = await captureFrameAndDescriptor();
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: "user", width: 400, height: 400 } 
+    });
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    await video.play();
+    
+    // Wait for camera to settle
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    
+    // Get face descriptor
+    const descriptor = await getFaceDescriptor(video);
+    
+    // Stop camera
+    stream.getTracks().forEach(track => track.stop());
+    video.remove();
+
+    // Send to server
     const res = await fetch("/api/face", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "enroll", embedding: Array.from(descriptor), code }),
+      body: JSON.stringify({ 
+        action: "enroll", 
+        embedding: Array.from(descriptor), 
+        code 
+      }),
     });
+    
     const data = await res.json();
     if (!res.ok) return { success: false, error: data.error };
     return { success: true };
@@ -46,14 +70,33 @@ export async function captureFaceEmbedding(code?: string): Promise<{ success: bo
   }
 }
 
+// ─── Verify face for check-in ────────────────────────────────────────
 export async function verifyFaceLive(): Promise<{ success: boolean; error?: string }> {
   try {
-    const descriptor = await captureFrameAndDescriptor();
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: "user", width: 400, height: 400 } 
+    });
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    await video.play();
+    
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    
+    const descriptor = await getFaceDescriptor(video);
+    
+    stream.getTracks().forEach(track => track.stop());
+    video.remove();
+
     const res = await fetch("/api/face", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "verify", embedding: Array.from(descriptor) }),
+      body: JSON.stringify({ 
+        action: "verify", 
+        embedding: Array.from(descriptor) 
+      }),
     });
+    
     const data = await res.json();
     if (!res.ok) return { success: false, error: data.error };
     return { success: true };
