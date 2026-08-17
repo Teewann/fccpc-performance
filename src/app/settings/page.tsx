@@ -470,16 +470,6 @@ export default function SettingsPage() {
                     <div style={{ fontSize: 15, color: "var(--text-primary)", fontWeight: 600 }}>{value}</div>
                   </div>
                 ))}
-                <div style={{ marginTop: 24, padding: "18px 20px", background: "#0c1a2e", border: "0.5px solid #1e3a5f", borderRadius: 12 }}>
-                  <div style={{ fontSize: 15, fontWeight: 600, color: "#60a5fa", marginBottom: 10 }}>How to adapt this system for another agency</div>
-                  <div style={{ fontSize: 14, color: "#4b6fa5", lineHeight: 1.9 }}>
-                    1. Open <code style={{ background: "#0a0c12", padding: "2px 6px", borderRadius: 4 }}>src/config/agency.config.ts</code><br />
-                    2. Change name, shortName, terms, and colors<br />
-                    3. Update <code style={{ background: "#0a0c12", padding: "2px 6px", borderRadius: 4 }}>prisma/seed.ts</code> with the new departments<br />
-                    4. Run <code style={{ background: "#0a0c12", padding: "2px 6px", borderRadius: 4 }}>npx prisma db seed</code><br />
-                    5. The entire system reflects the new agency — no other files need changing
-                  </div>
-                </div>
               </div>
             )}
 
@@ -507,31 +497,6 @@ export default function SettingsPage() {
                     <div style={{ fontSize: 15, fontWeight: 600, color }}>{value}</div>
                   </div>
                 ))}
-
-                {/* ── FACE ENROLLMENT ── */}
-<div style={{ marginTop: 16, padding: "16px 20px", background: "var(--bg-input)", borderRadius: 12, border: "0.5px solid var(--border)" }}>
-  <h3 style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>
-    📸 Face Enrollment
-  </h3>
-  <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
-    Capture your face for biometric check-in verification.
-  </p>
-  <button
-    onClick={() => window.location.href = "/face/enroll"}
-    style={{
-      padding: "10px 20px",
-      borderRadius: 8,
-      border: "1.5px solid #22c55e",
-      background: "#052e16",
-      color: "#4ade80",
-      fontSize: 14,
-      fontWeight: 600,
-      cursor: "pointer",
-    }}
-  >
-    📸 Enroll Face
-  </button>
-</div>
 
                 {/* ── BIOMETRIC ENROLLMENT ── */}
                 <div style={{ marginTop: 24, padding: "20px 24px", background: "var(--bg-input)", borderRadius: 12, border: "0.5px solid var(--border)" }}>

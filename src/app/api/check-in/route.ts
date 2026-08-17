@@ -307,29 +307,25 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    // ✅ OPTIMIZED: Use session.user.id directly
-    const userId = (session?.user as any)?.id;
-    if (!userId) {
+    if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+
+    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+    if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
-    const { note } = body;
+    const { note, gpsLat, gpsLng, gpsAccuracy, locationMethod } = body;
 
     const today = todayDate();
     const now   = new Date();
+    const ip    = getIp(request);
 
     const existing = await prisma.checkIn.findUnique({
-      where: { userId_date: { userId, date: today } },
+      where: { userId_date: { userId: user.id, date: today } },
     });
 
-    if (!existing) {
-      return NextResponse.json({ error: "You have not checked in today" }, { status: 400 });
-    }
-
-    if (existing.checkOutAt) {
-      return NextResponse.json({ error: "You have already checked out today" }, { status: 400 });
-    }
+    if (!existing)           return NextResponse.json({ error: "You have not checked in today" }, { status: 400 });
+    if (existing.checkOutAt) return NextResponse.json({ error: "You have already checked out today" }, { status: 400 });
 
     const msWorked    = now.getTime() - existing.checkInAt.getTime();
     const hoursWorked = Math.round((msWorked / 3_600_000) * 100) / 100;
@@ -339,21 +335,34 @@ export async function PATCH(request: NextRequest) {
         ? hoursWorked < 4 ? "HALF_DAY" : "LATE"
         : hoursWorked < 4 ? "HALF_DAY" : existing.status;
 
+    // Same location check as check-in, run again right now at check-out
+    const ipOnPremises = isFccpcIp(ip);
+    const gps = evaluateGps(gpsLat, gpsLng, gpsAccuracy);
+    const checkOutOnPremises = ipOnPremises || gps.onPremises;
+    const methods: string[] = [];
+    if (ipOnPremises) methods.push("IP");
+    if (gps.onPremises) methods.push("GPS");
+    const detectedMethod = locationMethod || (methods.length > 0 ? methods.join("+") : "UNVERIFIED");
+
     const checkIn = await prisma.checkIn.update({
       where: { id: existing.id },
       data: {
-        checkOutAt:  now,
+        checkOutAt: now,
         hoursWorked,
-        status:      finalStatus,
+        status: finalStatus,
+        checkOutIsOnPremises: checkOutOnPremises,
+        checkOutGpsLat: gpsLat ?? null,
+        checkOutGpsLng: gpsLng ?? null,
+        checkOutLocationMethod: detectedMethod,
         ...(note ? { note } : {}),
       },
     });
 
     await prisma.auditLog.create({
       data: {
-        userId,
+        userId: user.id,
         action: "CHECK_OUT",
-        detail: `Checked out ${now.toLocaleTimeString("en-GB")} — ${hoursWorked}h worked — ${finalStatus}`,
+        detail: `Checked out ${now.toLocaleTimeString("en-GB")} — ${hoursWorked}h — ${finalStatus} — Location: ${checkOutOnPremises ? "on-premises" : "outside"} (${detectedMethod})`,
       },
     });
 

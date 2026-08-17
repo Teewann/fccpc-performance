@@ -5,7 +5,7 @@ import { verifyBiometric } from "@/lib/webauthn-client";
 import { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
- import { captureFaceFromCamera, detectFaceInImage } from "@/lib/face-capture";
+import { captureFaceFromCamera, detectFaceInImage } from "@/lib/face-capture";
 
 // ── Consent Gate Component ──────────────────────────────────────────
 function ConsentGate({ children }: { children: React.ReactNode }) {
@@ -139,6 +139,7 @@ type CheckInRecord = {
   ipAddress?: string | null;
   isOnPremises?: boolean;
   locationMethod?: string | null;
+  checkOutIsOnPremises?: boolean | null;
 };
 
 type TeamMember = {
@@ -363,54 +364,53 @@ function CheckInContent() {
   }, []);
 
   // ── QR Check-in useEffect ──────────────────────────────────────────
-useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get("qr");
-  console.log("🔍 QR param detected:", token);
-  console.log("🔍 checkedIn status:", checkedIn);
-  if (token && !checkedIn) {
-    console.log("🔍 Calling handleQRCheckIn with:", token);
-    handleQRCheckIn(token);
-  }
-}, [checkedIn]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("qr");
+    console.log("🔍 QR param detected:", token);
+    console.log("🔍 checkedIn status:", checkedIn);
+    if (token && !checkedIn) {
+      console.log("🔍 Calling handleQRCheckIn with:", token);
+      handleQRCheckIn(token);
+    }
+  }, [checkedIn]);
 
   const isPrivileged = ["ADMIN", "HR", "DIRECTOR", "EXECUTIVE"].includes(userRole);
 
   // ── QR Check-in Handler ──────────────────────────────────────────────
-async function handleQRCheckIn(token: string) {
-  console.log("🔵 QR token received:", token);
-  setActing(true);
-  try {
-    console.log("📡 Sending to API:", "/api/check-in/qr");
-    console.log("📦 Payload:", { token });
-    
-    const res = await fetch("/api/check-in/qr", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    
-    console.log("📡 Response status:", res.status);
-    console.log("📡 Response OK?", res.ok);
-    
-    const data = await res.json();
-    console.log("📡 Response data:", data);
+  async function handleQRCheckIn(token: string) {
+    console.log("🔵 QR token received:", token);
+    setActing(true);
+    try {
+      console.log("📡 Sending to API:", "/api/check-in/qr");
+      console.log("📦 Payload:", { token });
+      
+      const res = await fetch("/api/check-in/qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      
+      console.log("📡 Response status:", res.status);
+      console.log("📡 Response OK?", res.ok);
+      
+      const data = await res.json();
+      console.log("📡 Response data:", data);
 
-    if (res.ok) {
-      setMsg({ text: "✅ QR check-in successful! Have a productive day!", ok: true });
-      fetchToday();
-      // Clear the QR param from URL
-      window.history.replaceState({}, "", "/check-in");
-    } else {
-      setMsg({ text: data.error || "QR check-in failed. Please try manually.", ok: false });
+      if (res.ok) {
+        setMsg({ text: "✅ QR check-in successful! Have a productive day!", ok: true });
+        fetchToday();
+        window.history.replaceState({}, "", "/check-in");
+      } else {
+        setMsg({ text: data.error || "QR check-in failed. Please try manually.", ok: false });
+      }
+    } catch (error) {
+      console.error("❌ QR check-in error:", error);
+      setMsg({ text: "QR check-in failed. Please try manually.", ok: false });
+    } finally {
+      setActing(false);
     }
-  } catch (error) {
-    console.error("❌ QR check-in error:", error);
-    setMsg({ text: "QR check-in failed. Please try manually.", ok: false });
-  } finally {
-    setActing(false);
   }
-}
 
   const runLocationDetection = useCallback(async () => {
     setDetectingLocation(true);
@@ -489,103 +489,106 @@ async function handleQRCheckIn(token: string) {
     }
   }, [tab]);
 
-async function handleCheckIn() {
-  setActing(true);
-  setMsg({ text: "", ok: true });
-  try {
-    // ── Step 1: Capture Face ──────────────────────────────────────
-    setMsg({ text: "📸 Capturing your face...", ok: true });
-    const faceImage = await captureFaceFromCamera();
-    
-    if (!faceImage) {
-      setMsg({ 
-        text: "Face capture failed. Please allow camera access and try again.", 
-        ok: false 
+  async function handleCheckIn() {
+    setActing(true);
+    setMsg({ text: "", ok: true });
+    try {
+      // ── Step 1: Capture Face ──────────────────────────────────────
+      setMsg({ text: "📸 Capturing your face...", ok: true });
+      const faceImage = await captureFaceFromCamera();
+      
+      if (!faceImage) {
+        setMsg({ 
+          text: "Face capture failed. Please allow camera access and try again.", 
+          ok: false 
+        });
+        setActing(false);
+        return;
+      }
+
+      // ── Step 2: Detect if there's a face in the image ──────────────
+      const hasFace = await detectFaceInImage(faceImage);
+      if (!hasFace) {
+        setMsg({ 
+          text: "No face detected in the captured image. Please try again.", 
+          ok: false 
+        });
+        setActing(false);
+        return;
+      }
+
+      // ── Step 3: Verify face against stored face ────────────────────
+      setMsg({ text: "🔍 Verifying your face...", ok: true });
+      const verifyRes = await fetch("/api/face/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ faceImage }),
       });
-      setActing(false);
-      return;
-    }
+      
+      const verifyData = await verifyRes.json();
+      
+      if (!verifyRes.ok || !verifyData.success) {
+        setMsg({ 
+          text: verifyData.error || "Face verification failed. Please try again.", 
+          ok: false 
+        });
+        setActing(false);
+        return;
+      }
 
-    // ── Step 2: Detect if there's a face in the image ──────────────
-    const hasFace = await detectFaceInImage(faceImage);
-    if (!hasFace) {
-      setMsg({ 
-        text: "No face detected in the captured image. Please try again.", 
-        ok: false 
+      // ── Step 4: Location check ──────────────────────────────────────
+      setMsg({ text: "📍 Verifying your location...", ok: true });
+      const loc = await runLocationDetection();
+
+      // ── Step 5: Complete check-in ────────────────────────────────────
+      setMsg({ text: "📝 Submitting check-in...", ok: true });
+      const res = await fetch("/api/check-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note,
+          gpsLat: loc?.gpsCoords?.lat,
+          gpsLng: loc?.gpsCoords?.lng,
+          isOnPremises: loc?.isOnPremises,
+          locationMethod: loc?.method,
+          faceVerified: true,
+        }),
       });
+      
+      const data = await res.json();
+      if (res.ok) {
+        setMsg({ text: "✅ Successfully checked in! Have a productive day!", ok: true });
+        setNote("");
+        fetchToday();
+      } else {
+        setMsg({ text: data.error || "Failed to check in.", ok: false });
+      }
+    } catch (error) {
+      console.error("Check-in error:", error);
+      setMsg({ text: "An error occurred during check-in. Please try again.", ok: false });
+    } finally {
       setActing(false);
-      return;
     }
-
-    // ── Step 3: Verify face against stored face ────────────────────
-    setMsg({ text: "🔍 Verifying your face...", ok: true });
-    const verifyRes = await fetch("/api/face/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ faceImage }),
-    });
-    
-    const verifyData = await verifyRes.json();
-    
-    if (!verifyRes.ok || !verifyData.success) {
-      setMsg({ 
-        text: verifyData.error || "Face verification failed. Please try again.", 
-        ok: false 
-      });
-      setActing(false);
-      return;
-    }
-
-    // ── Step 4: Location check ──────────────────────────────────────
-    setMsg({ text: "📍 Verifying your location...", ok: true });
-    const loc = await runLocationDetection();
-
-    // ── Step 5: Complete check-in ────────────────────────────────────
-    setMsg({ text: "📝 Submitting check-in...", ok: true });
-    const res = await fetch("/api/check-in", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        note,
-        gpsLat: loc?.gpsCoords?.lat,
-        gpsLng: loc?.gpsCoords?.lng,
-        isOnPremises: loc?.isOnPremises,
-        locationMethod: loc?.method,
-        faceVerified: true,
-      }),
-    });
-    
-    const data = await res.json();
-    if (res.ok) {
-      setMsg({ text: "✅ Successfully checked in! Have a productive day!", ok: true });
-      setNote("");
-      fetchToday();
-    } else {
-      setMsg({ text: data.error || "Failed to check in.", ok: false });
-    }
-  } catch (error) {
-    console.error("Check-in error:", error);
-    setMsg({ text: "An error occurred during check-in. Please try again.", ok: false });
-  } finally {
-    setActing(false);
   }
-}
 
   async function handleCheckOut() {
     setActing(true);
     setMsg({ text: "", ok: true });
     try {
+      const loc = await runLocationDetection();
       const res = await fetch("/api/check-in", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note }),
+        body: JSON.stringify({
+          note,
+          gpsLat: loc?.gpsCoords?.lat,
+          gpsLng: loc?.gpsCoords?.lng,
+          locationMethod: loc?.method,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        setMsg({
-          text: `Checked out successfully. Total: ${data.checkIn.hoursWorked}h worked today.`,
-          ok: true,
-        });
+        setMsg({ text: `Checked out successfully. Total: ${data.checkIn.hoursWorked}h worked today.`, ok: true });
         setNote("");
         fetchToday();
       } else {
@@ -952,6 +955,17 @@ async function handleCheckIn() {
                   </div>
                 )}
               </div>
+
+              {checkedOut && (
+                <span style={{
+                  fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 6,
+        background: (today as any).checkOutIsOnPremises ? "#052e16" : "#1f0707",
+        border: `0.5px solid ${(today as any).checkOutIsOnPremises ? "#14532d" : "#7f1d1d"}`,
+        color: (today as any).checkOutIsOnPremises ? "#4ade80" : "#f87171",
+      }}>
+        {(today as any).checkOutIsOnPremises ? "📍 Checked out on-premises" : "⚠️ Checked out outside FCCPC"}
+      </span>
+    )}
 
               {/* Message */}
               {msg.text && (
@@ -1445,13 +1459,13 @@ async function handleCheckIn() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1.2fr 1fr 1fr 0.8fr 0.8fr 1fr",
+                  gridTemplateColumns: "1.1fr 0.9fr 0.9fr 0.7fr 0.8fr 0.9fr 1fr",
                   padding: "12px 20px",
                   borderBottom: "0.5px solid var(--border-soft)",
                   background: "var(--bg-input)",
                 }}
               >
-                {["Date", "Check in", "Check out", "Hours", "Status", "Note"].map((h) => (
+                {["Date", "Check in", "Check out", "Hours", "Status", "Location", "Note"].map((h) => (
                   <div
                     key={h}
                     style={{
@@ -1481,7 +1495,7 @@ async function handleCheckIn() {
                       key={r.id}
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1.2fr 1fr 1fr 0.8fr 0.8fr 1fr",
+                        gridTemplateColumns: "1.1fr 0.9fr 0.9fr 0.7fr 0.8fr 0.9fr 1fr",
                         padding: "13px 20px",
                         borderBottom: "0.5px solid var(--border-soft)",
                         background: i % 2 === 0 ? "transparent" : "var(--bg-input)",
@@ -1512,6 +1526,16 @@ async function handleCheckIn() {
                         >
                           {ss.label}
                         </span>
+                      </div>
+                      <div style={{ fontSize: 12, whiteSpace: "nowrap" }}>
+                        <span style={{ color: r.isOnPremises ? "#4ade80" : "#f87171" }}>
+                          {r.isOnPremises ? "📍 In" : "⚠️ In"}
+                        </span>
+                        {r.checkOutAt && (
+                          <span style={{ color: r.checkOutIsOnPremises ? "#4ade80" : "#f87171", marginLeft: 6 }}>
+                            · {r.checkOutIsOnPremises ? "📍 Out" : "⚠️ Out"}
+                          </span>
+                        )}
                       </div>
                       <div
                         style={{
