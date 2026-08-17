@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action, code, response, expectedChallenge, deviceLabel } = body;
+    const { action, code, response, expectedChallenge, deviceLabel, alreadyVerified } = body;
 
     // ── Check activation code validity ─────────────────────────────────
     if (action === "check-activation") {
@@ -139,21 +139,31 @@ export async function POST(request: NextRequest) {
 
     // ── Enroll verify ──────────────────────────────────────────────────
     if (action === "enroll-verify") {
-      // Re-check the code server-side too
-      const activation = await prisma.biometricActivationCode.findUnique({
-        where: { code },
+      // ✅ Check if user already has any biometric (so they don't need a code again)
+      const existingCred = await prisma.webAuthnCredential.count({ 
+        where: { userId: user.id } 
       });
+      const existingFace = await prisma.faceData.count({ 
+        where: { userId: user.id } 
+      });
+      const alreadyProven = existingCred > 0 || existingFace > 0;
 
-      if (!activation || activation.userId !== user.id) {
-        return NextResponse.json({
-          error: "Invalid or expired activation code.",
-        }, { status: 400 });
-      }
+      // Only check activation code if NOT already verified
+      if (!alreadyProven && !alreadyVerified) {
+        const activation = await prisma.biometricActivationCode.findUnique({ 
+          where: { code } 
+        });
+        
+        if (!activation || activation.userId !== user.id || activation.used || activation.expiresAt < new Date()) {
+          return NextResponse.json({ 
+            error: "Invalid or expired activation code." 
+          }, { status: 400 });
+        }
 
-      if (activation.used || activation.expiresAt < new Date()) {
-        return NextResponse.json({
-          error: "Activation code has already been used or expired.",
-        }, { status: 400 });
+        await prisma.biometricActivationCode.update({
+          where: { id: activation.id },
+          data: { used: true, usedAt: new Date() },
+        });
       }
 
       // Verify the biometric enrollment
@@ -188,12 +198,6 @@ export async function POST(request: NextRequest) {
           counter,
           deviceLabel: deviceLabel || "Unnamed device",
         },
-      });
-
-      // Mark the activation code as used
-      await prisma.biometricActivationCode.update({
-        where: { id: activation.id },
-        data: { used: true, usedAt: new Date() },
       });
 
       challengeStore.delete(user.id);

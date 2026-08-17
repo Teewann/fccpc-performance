@@ -19,25 +19,32 @@ export async function checkActivationCode(code: string): Promise<{ valid: boolea
 }
 
 // ─── Enroll Device ──────────────────────────────────────────────────
-export async function enrollDevice(deviceLabel: string, activationCode: string): Promise<{ success: boolean; error?: string }> {
+export async function enrollDevice(
+  deviceLabel: string, 
+  activationCode: string,
+  alreadyVerified: boolean = false // ✅ NEW: skip code check if already verified
+): Promise<{ success: boolean; error?: string }> {
   try {
     console.log("🔵 Step 1: Checking activation code...");
     
-    // Step 1: Validate the activation code first
-    const codeCheck = await fetch("/api/webauthn", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "check-activation",
-        code: activationCode,
-      }),
-    });
-    const codeData = await codeCheck.json();
-    if (!codeCheck.ok) {
-      return { success: false, error: codeData.error || "Invalid activation code" };
+    // Step 1: Validate the activation code (skip if already verified)
+    if (!alreadyVerified) {
+      const codeCheck = await fetch("/api/webauthn", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "check-activation",
+          code: activationCode,
+        }),
+      });
+      const codeData = await codeCheck.json();
+      if (!codeCheck.ok) {
+        return { success: false, error: codeData.error || "Invalid activation code" };
+      }
+      console.log("✅ Activation code valid");
+    } else {
+      console.log("✅ Already verified, skipping code check");
     }
-
-    console.log("✅ Activation code valid");
 
     // Step 2: Get enrollment options from server
     console.log("🔵 Step 2: Getting enrollment options...");
@@ -49,7 +56,6 @@ export async function enrollDevice(deviceLabel: string, activationCode: string):
     console.log("✅ Enrollment options received");
 
     // Step 3: Use startRegistration from @simplewebauthn/browser
-    // This handles all the base64url conversion automatically
     console.log("🔵 Step 3: Starting registration...");
     let credential;
     try {
@@ -81,7 +87,8 @@ export async function enrollDevice(deviceLabel: string, activationCode: string):
         response: credential,
         expectedChallenge: options.challenge,
         deviceLabel: deviceLabel || "Unnamed device",
-        code: activationCode,
+        code: alreadyVerified ? "ALREADY_VERIFIED" : activationCode,
+        alreadyVerified: alreadyVerified,
       }),
     });
     const verifyData = await verifyRes.json();
@@ -113,8 +120,6 @@ export async function verifyBiometric(): Promise<{ success: boolean; error?: str
       return { success: false, error: "No enrolled device found. Set up fingerprint/face check-in in Settings first." };
     }
 
-    // Step 2: Use startAuthentication from @simplewebauthn/browser
-    // This handles all the base64url conversion automatically
     console.log("🔵 Step 2: Starting authentication...");
     let assertion;
     try {
@@ -133,7 +138,6 @@ export async function verifyBiometric(): Promise<{ success: boolean; error?: str
 
     console.log("✅ Assertion received");
 
-    // Step 3: Send the assertion to the server for verification
     console.log("🔵 Step 3: Sending to server for verification...");
     const verifyRes = await fetch("/api/webauthn", {
       method: "POST",
@@ -197,5 +201,33 @@ export async function removeDevice(id: string): Promise<boolean> {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+// ─── Check if user has face enrolled ──────────────────────────────
+export async function hasFaceEnrolled(): Promise<boolean> {
+  try {
+    const res = await fetch("/api/face/check-enrolled");
+    if (!res.ok) {
+      return false;
+    }
+    const data = await res.json();
+    return data.hasFace === true;
+  } catch {
+    return false;
+  }
+}
+
+// ─── List all face devices ──────────────────────────────────────────
+export async function listMyFaceDevices(): Promise<{ id: string; name: string; enrolledAt: string }[]> {
+  try {
+    const res = await fetch("/api/face/list-devices");
+    if (!res.ok) {
+      return [];
+    }
+    const data = await res.json();
+    return data.devices || [];
+  } catch {
+    return [];
   }
 }

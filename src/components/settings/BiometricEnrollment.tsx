@@ -1,236 +1,256 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { enrollDevice, hasEnrolledDevice, listMyDevices, removeDevice } from "@/lib/webauthn-client";
+import { checkActivationCode, enrollDevice, listMyDevices, removeDevice } from "@/lib/webauthn-client";
+import { captureFaceEmbedding, hasFaceEnrolled, removeFaceEnrollment } from "@/lib/biometric/face-client";
+
+type Device = { id: string; deviceLabel: string; createdAt: string };
 
 export function BiometricEnrollment() {
-  const [devices, setDevices] = useState<{ id: string; deviceLabel: string; createdAt: string }[]>([]);
-  const [enrolled, setEnrolled] = useState(false);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [faceEnrolled, setFaceEnrolled] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [showCodeInput, setShowCodeInput] = useState(false);
-  const [activationCode, setActivationCode] = useState("");
-  const [deviceLabel, setDeviceLabel] = useState("");
-  const [message, setMessage] = useState({ text: "", ok: true });
-  const [enrolling, setEnrolling] = useState(false);
 
-  async function refreshDevices() {
-    setDevices(await listMyDevices());
+  const [showCodeGate, setShowCodeGate] = useState(false);
+  const [code, setCode] = useState("");
+  const [unlockedForAction, setUnlockedForAction] = useState<"device" | "face" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState({ text: "", ok: true });
+
+  async function refresh() {
+    setLoading(true);
+    const [d, f] = await Promise.all([listMyDevices(), hasFaceEnrolled()]);
+    setDevices(d);
+    setFaceEnrolled(f);
+    setLoading(false);
   }
 
-  useEffect(() => {
-    hasEnrolledDevice()
-      .then((result) => setEnrolled(result))
-      .finally(() => setLoading(false));
-    refreshDevices();
-  }, []);
+  useEffect(() => { refresh(); }, []);
 
-  const handleEnroll = async () => {
-    if (!activationCode.trim()) {
-      setMessage({ text: "Please enter your activation code from IT.", ok: false });
-      return;
-    }
-    if (!deviceLabel.trim()) {
-      setMessage({ text: "Please enter a name for this device (e.g., 'My Laptop').", ok: false });
-      return;
-    }
+  // True once the person has set up AT LEAST ONE method, ever.
+  const alreadyProven = devices.length > 0 || faceEnrolled;
 
-    setEnrolling(true);
-    setMessage({ text: "", ok: true });
-
-    const result = await enrollDevice(deviceLabel, activationCode);
-    if (result.success) {
-      setMessage({ text: "✅ Device enrolled successfully!", ok: true });
-      setEnrolled(true);
-      setShowCodeInput(false);
-      setActivationCode("");
-      refreshDevices();
+  function startAction(action: "device" | "face") {
+    setMsg({ text: "", ok: true });
+    if (alreadyProven) {
+      // Already vetted once — no code needed for the other method.
+      runAction(action);
     } else {
-      setMessage({ text: result.error || "Enrollment failed. Please try again.", ok: false });
+      setUnlockedForAction(action);
+      setShowCodeGate(true);
     }
-    setEnrolling(false);
-  };
-
-  if (loading) {
-    return <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Checking enrollment status...</div>;
   }
+
+  async function confirmCodeAndRun() {
+    setBusy(true);
+    const check = await checkActivationCode(code);
+    if (!check.valid) {
+      setMsg({ text: check.error || "Invalid code.", ok: false });
+      setBusy(false);
+      return;
+    }
+    setShowCodeGate(false);
+    await runAction(unlockedForAction!, code);
+    setBusy(false);
+  }
+
+  async function runAction(action: "device" | "face", usedCode?: string) {
+    setBusy(true);
+    setMsg({ text: "", ok: true });
+
+    if (action === "device") {
+      // ✅ FIX: Provide all 3 required arguments
+      const result = await enrollDevice(
+        "Fingerprint Sensor",  // deviceLabel
+        usedCode || "",        // activationCode
+        alreadyProven          // alreadyVerified
+      );
+      
+      if (result.success) {
+        setMsg({ text: "Fingerprint/Face unlock enrolled on this device.", ok: true });
+        setCode("");
+        refresh();
+      } else {
+        setMsg({ text: result.error || "Enrollment failed.", ok: false });
+      }
+    } else {
+      const result = await captureFaceEmbedding(usedCode);
+      if (result.success) {
+        setMsg({ text: "Face verification enrolled.", ok: true });
+        setCode("");
+        refresh();
+      } else {
+        setMsg({ text: result.error || "Face capture failed.", ok: false });
+      }
+    }
+    setBusy(false);
+  }
+
+  async function handleRemoveDevice(id: string) {
+    if (!confirm("Remove this device? A new IT code will be needed only if this was your last enrolled method.")) return;
+    if (await removeDevice(id)) refresh();
+  }
+
+  async function handleRemoveFace() {
+    if (!confirm("Remove your enrolled face data?")) return;
+    if (await removeFaceEnrollment()) refresh();
+  }
+
+  if (loading) return <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Loading...</div>;
 
   return (
-    <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
+    <div>
       <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6, color: "var(--text-primary)" }}>
-        Fingerprint / Face check-in
+        🔐 Check-in verification
       </h2>
-      <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-        This confirms it's really you checking in — using your device's own fingerprint or face unlock.
-        Nothing biometric is ever sent to or stored on our servers.
+      <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>
+        Choose one or both methods below. Nothing biometric ever leaves your device unencrypted.
       </p>
 
-      {/* ── DEVICE LIST ── */}
-      {devices.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
-            Enrolled Devices ({devices.length})
-          </div>
-          {devices.map((d) => (
-            <div
-              key={d.id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "10px 0",
-                borderBottom: "0.5px solid var(--border-soft)",
-              }}
-            >
+      {msg.text && (
+        <div style={{ 
+          fontSize: 13, 
+          color: msg.ok ? "#4ade80" : "#f87171", 
+          marginBottom: 16,
+          padding: "10px 14px",
+          borderRadius: 8,
+          background: msg.ok ? "#052e16" : "#1f0707",
+          border: `0.5px solid ${msg.ok ? "#14532d" : "#7f1d1d"}`,
+        }}>
+          {msg.text}
+        </div>
+      )}
+
+      {/* ── DEVICE FINGERPRINT / FACE UNLOCK ── */}
+      <div style={{ background: "var(--bg-input)", border: "0.5px solid var(--border)", borderRadius: 10, padding: 16, marginBottom: 14 }}>
+        <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--text-primary)" }}>
+          🔐 Fingerprint / Face unlock (device)
+        </div>
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+          Uses your phone or laptop's own fingerprint/face sensor. Nothing biometric is sent to our servers.
+        </div>
+
+        {devices.length > 0 ? (
+          devices.map((d) => (
+            <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: "0.5px solid var(--border-soft)" }}>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text-primary)" }}>
-                  {d.deviceLabel}
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-hint)" }}>
-                  Enrolled {new Date(d.createdAt).toLocaleDateString("en-GB")}
-                </div>
+                <div style={{ fontSize: 14, color: "var(--text-primary)" }}>{d.deviceLabel}</div>
+                <div style={{ fontSize: 12, color: "var(--text-hint)" }}>Enrolled {new Date(d.createdAt).toLocaleDateString("en-GB")}</div>
               </div>
-              <button
-                onClick={() => {
-                  if (confirm("Remove this device? You'll need a new code from IT to re-enroll.")) {
-                    removeDevice(d.id).then(() => refreshDevices());
-                  }
-                }}
-                style={{
-                  fontSize: 12,
-                  color: "#f87171",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: "4px 8px",
-                }}
-              >
+              <button onClick={() => handleRemoveDevice(d.id)} style={{ fontSize: 12, color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>
                 Remove
               </button>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── MESSAGE ── */}
-      {message.text && (
-        <div
-          style={{
-            fontSize: 13,
-            color: message.ok ? "#4ade80" : "#f87171",
-            marginBottom: 12,
-            padding: "10px 14px",
-            borderRadius: 8,
-            background: message.ok ? "#052e16" : "#1f0707",
-            border: `0.5px solid ${message.ok ? "#14532d" : "#7f1d1d"}`,
-          }}
-        >
-          {message.text}
-        </div>
-      )}
-
-      {/* ── CODE INPUT SECTION ── */}
-      {!showCodeInput ? (
-        <div
-          style={{
-            background: "var(--bg-input)",
-            border: "0.5px solid var(--border)",
-            borderRadius: 10,
-            padding: 16,
-          }}
-        >
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
-            {devices.length === 0
-              ? "Not set up yet. For security, this has to be activated by IT — contact the IT department to get your setup code."
-              : "Adding another device also requires a fresh code from IT."}
-          </div>
+          ))
+        ) : (
           <button
-            onClick={() => setShowCodeInput(true)}
-            style={{
-              padding: "9px 18px",
-              borderRadius: 8,
-              border: "1.5px solid #22c55e",
-              background: "#052e16",
-              color: "#4ade80",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
+            onClick={() => startAction("device")}
+            disabled={busy}
+            style={{ padding: "9px 18px", borderRadius: 8, border: "1.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontWeight: 600, cursor: "pointer" }}
           >
-            I have my code
+            Set up fingerprint/face unlock
           </button>
+        )}
+      </div>
+
+      {/* ── FACE VERIFICATION (CAMERA) ── */}
+      <div style={{ background: "var(--bg-input)", border: "0.5px solid var(--border)", borderRadius: 10, padding: 16 }}>
+        <div style={{ fontWeight: 600, marginBottom: 4, color: "var(--text-primary)" }}>
+          📷 Face verification (camera)
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              value={activationCode}
-              onChange={(e) => setActivationCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="6-digit code"
-              style={{
-                flex: 1,
-                padding: "10px 12px",
-                borderRadius: 8,
-                border: "0.5px solid var(--border)",
-                background: "var(--bg-input)",
-                color: "var(--text-primary)",
-                fontSize: 16,
-                fontFamily: "monospace",
-                letterSpacing: "4px",
-                outline: "none",
-              }}
-              maxLength={6}
-            />
-            <button
-              onClick={handleEnroll}
-              disabled={enrolling || !activationCode}
-              style={{
-                padding: "9px 18px",
-                borderRadius: 8,
-                border: "1.5px solid #22c55e",
-                background: "#052e16",
-                color: "#4ade80",
-                fontWeight: 600,
-                cursor: enrolling || !activationCode ? "not-allowed" : "pointer",
-                opacity: enrolling || !activationCode ? 0.6 : 1,
-              }}
-            >
-              {enrolling ? "Enrolling..." : "Enroll"}
+        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+          A quick photo confirms your identity at check-in. Only a mathematical description of your
+          face shape is stored, encrypted — never a viewable photo.
+        </div>
+
+        {faceEnrolled ? (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontSize: 14, color: "#4ade80" }}>✓ Face verification is active</div>
+            <button onClick={handleRemoveFace} style={{ fontSize: 12, color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>
+              Remove
             </button>
           </div>
-
-          <input
-            value={deviceLabel}
-            onChange={(e) => setDeviceLabel(e.target.value)}
-            placeholder="Device name (e.g., My Laptop)"
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: 8,
-              border: "0.5px solid var(--border)",
-              background: "var(--bg-input)",
-              color: "var(--text-primary)",
-              fontSize: 14,
-              outline: "none",
-            }}
-          />
-
+        ) : (
           <button
-            onClick={() => {
-              setShowCodeInput(false);
-              setActivationCode("");
-              setDeviceLabel("");
-            }}
-            style={{
-              padding: "8px 16px",
-              borderRadius: 8,
-              border: "0.5px solid var(--border)",
-              background: "var(--bg-input)",
-              color: "var(--text-muted)",
-              fontSize: 13,
-              cursor: "pointer",
-            }}
+            onClick={() => startAction("face")}
+            disabled={busy}
+            style={{ padding: "9px 18px", borderRadius: 8, border: "1.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontWeight: 600, cursor: "pointer" }}
           >
-            Cancel
+            Set up face verification
           </button>
+        )}
+      </div>
+
+      {/* ── CODE GATE (only for the very first method, ever) ── */}
+      {showCodeGate && (
+        <div style={{ 
+          position: "fixed", 
+          inset: 0, 
+          background: "rgba(0,0,0,0.7)", 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center", 
+          zIndex: 1000 
+        }}>
+          <div className="card-bg" style={{ borderRadius: 14, padding: 24, maxWidth: 360, width: "90%", background: "var(--bg-card)" }}>
+            <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--text-primary)", fontSize: 16 }}>
+              Enter your setup code
+            </div>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
+              This is your first time setting up check-in verification, so it needs one code from IT.
+              After this, adding the other method won't need a code again.
+            </div>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              placeholder="Enter 8-digit code"
+              maxLength={8}
+              style={{ 
+                width: "100%", 
+                padding: "10px 12px", 
+                borderRadius: 8, 
+                border: "0.5px solid var(--border)", 
+                background: "var(--bg-input)", 
+                marginBottom: 12, 
+                boxSizing: "border-box",
+                fontSize: 18,
+                fontFamily: "monospace",
+                letterSpacing: 4,
+                color: "var(--text-primary)",
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button 
+                onClick={() => setShowCodeGate(false)} 
+                style={{ 
+                  padding: "9px 16px", 
+                  borderRadius: 8, 
+                  background: "none", 
+                  border: "0.5px solid var(--border)", 
+                  color: "var(--text-muted)", 
+                  cursor: "pointer" 
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={confirmCodeAndRun} 
+                disabled={busy || !code} 
+                style={{ 
+                  padding: "9px 16px", 
+                  borderRadius: 8, 
+                  border: "1.5px solid #22c55e", 
+                  background: "#052e16", 
+                  color: "#4ade80", 
+                  fontWeight: 600, 
+                  cursor: busy || !code ? "not-allowed" : "pointer",
+                  opacity: busy || !code ? 0.6 : 1,
+                }}
+              >
+                {busy ? "Verifying..." : "Continue"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

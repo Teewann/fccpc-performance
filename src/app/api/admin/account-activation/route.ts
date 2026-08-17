@@ -54,27 +54,16 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
     console.log("🔵 Code generated:", code);
 
-    // Check if AccountActivationCode model exists
-    try {
-      await prisma.accountActivationCode.create({
-        data: { 
-          code, 
-          email: email.toLowerCase(), 
-          role: staff.role, 
-          createdById: admin.id, 
-          expiresAt 
-        },
-      });
-      console.log("✅ Code saved to database");
-    } catch (dbError) {
-      console.error("❌ Database error:", dbError);
-      // If model doesn't exist, return a simpler response for testing
-      return NextResponse.json({ 
+    // ✅ FIX: Use the CORRECT model - biometricActivationCode
+    await prisma.biometricActivationCode.create({
+      data: { 
         code, 
-        expiresAt: expiresAt.toISOString(),
-        warning: "Code generated but not saved (model may not exist yet)" 
-      });
-    }
+        userId: staff.id,           // ✅ Use userId, not email
+        createdById: admin.id, 
+        expiresAt 
+      },
+    });
+    console.log("✅ Code saved to database");
 
     return NextResponse.json({ code, expiresAt });
   } catch (error) {
