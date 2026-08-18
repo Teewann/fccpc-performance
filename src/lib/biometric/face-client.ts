@@ -70,39 +70,15 @@ export async function captureFaceEmbedding(code?: string): Promise<{ success: bo
   }
 }
 
-// ─── Verify face for check-in ────────────────────────────────────────
-export async function verifyFaceLive(): Promise<{ success: boolean; error?: string }> {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ 
-      video: { facingMode: "user", width: 400, height: 400 } 
-    });
-
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    await video.play();
-    
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    
-    const descriptor = await getFaceDescriptor(video);
-    
-    stream.getTracks().forEach(track => track.stop());
-    video.remove();
-
-    const res = await fetch("/api/face", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        action: "verify", 
-        embedding: Array.from(descriptor) 
-      }),
-    });
-    
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error };
-    return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "Camera access was denied or unavailable." };
-  }
+export async function verifyEmbedding(embedding: number[]): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch("/api/face", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "verify", embedding }),
+  });
+  const data = await res.json();
+  if (!res.ok) return { success: false, error: data.error };
+  return { success: true };
 }
 
 export async function hasFaceEnrolled(): Promise<boolean> {
@@ -114,4 +90,23 @@ export async function hasFaceEnrolled(): Promise<boolean> {
 export async function removeFaceEnrollment(): Promise<boolean> {
   const res = await fetch("/api/face", { method: "DELETE" });
   return res.ok;
+}
+
+export async function embeddingFromImageData(imageData: string): Promise<Float32Array> {
+  await loadModels();
+
+  const img = document.createElement("img");
+  img.src = imageData;
+  await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+  });
+
+  const detection = await faceapi
+    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks()
+    .withFaceDescriptor();
+
+  if (!detection) throw new Error("No face detected in that photo. Try again with better lighting, facing the camera directly.");
+  return detection.descriptor;
 }

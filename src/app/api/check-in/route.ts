@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { note, gpsLat, gpsLng, gpsAccuracy, locationMethod } = body;
+    const { note, gpsLat, gpsLng, gpsAccuracy, locationMethod, verificationMethod } = body;
 
     const today = todayDate();
     const now   = new Date();
@@ -285,6 +285,7 @@ export async function POST(request: NextRequest) {
         gpsLat: gpsLat ?? null,
         gpsLng: gpsLng ?? null,
         locationMethod: detectedMethod,
+        verificationMethod: verificationMethod || "UNVERIFIED",
       },
     });
 
@@ -314,8 +315,7 @@ export async function PATCH(request: NextRequest) {
     if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const body = await request.json();
-    const { note, gpsLat, gpsLng, gpsAccuracy, locationMethod } = body;
-
+    const { note, gpsLat, gpsLng, gpsAccuracy, locationMethod, verificationMethod } = body;
     const today = todayDate();
     const now   = new Date();
     const ip    = getIp(request);

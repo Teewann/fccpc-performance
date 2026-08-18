@@ -1,131 +1,13 @@
 "use client";
 
 export const dynamic = "force-dynamic";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
-import { verifyFaceAtCheckin, hasFaceEnrolled, hasEnrolledDevice } from "@/lib/biometric/face-verify";
-import { verifyBiometric } from "@/lib/webauthn-client";
-
-// ── Consent Gate Component ──────────────────────────────────────────
-function ConsentGate({ children }: { children: React.ReactNode }) {
-  const [hasConsented, setHasConsented] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    const consent = localStorage.getItem("fccpc-checkin-consent");
-    if (consent === "true") {
-      setHasConsented(true);
-    } else {
-      fetch("/api/check-in/consent")
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.hasConsented) {
-            localStorage.setItem("fccpc-checkin-consent", "true");
-            setHasConsented(true);
-          } else {
-            setHasConsented(false);
-          }
-        })
-        .catch(() => setHasConsented(false));
-    }
-  }, []);
-
-  const handleConsent = async () => {
-    try {
-      await fetch("/api/check-in/consent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ consent: true }),
-      });
-      localStorage.setItem("fccpc-checkin-consent", "true");
-      setHasConsented(true);
-    } catch (error) {
-      console.error("Failed to log consent:", error);
-      localStorage.setItem("fccpc-checkin-consent", "true");
-      setHasConsented(true);
-    }
-  };
-
-  if (hasConsented === null) {
-    return (
-      <div className="flex min-h-screen items-center justify-center" style={{ background: "var(--bg-page)" }}>
-        <div style={{ color: "var(--text-muted)" }}>Loading...</div>
-      </div>
-    );
-  }
-
-  if (hasConsented === false) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-6" style={{ background: "var(--bg-page)" }}>
-        <div
-          style={{
-            maxWidth: 560,
-            width: "100%",
-            background: "var(--bg-card)",
-            border: "0.5px solid var(--border)",
-            borderRadius: 20,
-            padding: "40px 36px",
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📍</div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, color: "var(--text-primary)", marginBottom: 12 }}>
-            Location Consent Required
-          </h1>
-          <p style={{ fontSize: 15, color: "var(--text-muted)", lineHeight: 1.7, marginBottom: 12 }}>
-            To check in, we need your consent to collect your <strong style={{ color: "var(--text-primary)" }}>IP address</strong> and <strong style={{ color: "var(--text-primary)" }}>GPS location</strong>.
-          </p>
-          <p style={{ fontSize: 14, color: "var(--text-hint)", lineHeight: 1.6, marginBottom: 24 }}>
-            This data is used solely to verify you are on FCCPC premises. It is logged for HR and security records and will not be shared with third parties.
-          </p>
-
-          <div
-            style={{
-              background: "var(--bg-input)",
-              border: "0.5px solid var(--border)",
-              borderRadius: 12,
-              padding: "16px 20px",
-              marginBottom: 24,
-              textAlign: "left",
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
-              What we collect:
-            </div>
-            <ul style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 2, margin: 0, paddingLeft: 20 }}>
-              <li>🌐 IP address (to confirm FCCPC network)</li>
-              <li>📡 GPS coordinates (to confirm you are at FCCPC HQ)</li>
-              <li>🕐 Timestamp of check-in</li>
-            </ul>
-          </div>
-
-          <button
-            onClick={handleConsent}
-            style={{
-              width: "100%",
-              padding: "14px",
-              borderRadius: 12,
-              border: "1.5px solid #22c55e",
-              background: "#052e16",
-              color: "#4ade80",
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            I Understand — Proceed to Check-In
-          </button>
-
-          <p style={{ fontSize: 12, color: "var(--text-hint)", marginTop: 16 }}>
-            By clicking, you agree to the collection of your IP and GPS data for attendance verification.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
-}
+import { hasFaceEnrolled, embeddingFromImageData, verifyEmbedding } from "@/lib/biometric/face-client";
+import { verifyBiometric, hasEnrolledDevice } from "@/lib/webauthn-client";
+import FaceCaptureModal from "@/components/biometric/FaceCaptureModal";
+import ConsentGate from "@/components/ConsentGate";
 
 // ── Type definitions ──────────────────────────────────────────────────
 type CheckInRecord = {
@@ -339,6 +221,10 @@ function CheckInContent() {
   const [verificationMethod, setVerificationMethod] = useState<"fingerprint" | "face" | null>(null);
   const [showMethodSelector, setShowMethodSelector] = useState(false);
 
+  // ── Face verification modal state ──────────────────────────────────
+  const [showFaceVerify, setShowFaceVerify] = useState(false);
+  const faceResolveRef = useRef<((result: { success: boolean; error?: string }) => void) | null>(null);
+
   // ── QR Token and URL ──────────────────────────────────────────────
   const [qrToken] = useState(() =>
     `FCCPC-CHECKIN-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
@@ -494,23 +380,36 @@ function CheckInContent() {
   }, [tab]);
 
   // ─── Perform Face Verification ──────────────────────────────────────
-  async function performFaceVerification() {
-    setActing(true);
+  function performFaceVerification(): Promise<{ success: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      faceResolveRef.current = resolve;
+      setShowFaceVerify(true);
+    });
+  }
+
+  // ─── Handle Face Capture from Modal ──────────────────────────────
+  async function handleVerifyCapture(imageData: string) {
+    setShowFaceVerify(false);
     try {
-      setMsg({ text: "📸 Please look at the camera for verification...", ok: true });
-      const faceResult = await verifyFaceAtCheckin();
-      
-      if (!faceResult.success) {
-        setMsg({ text: faceResult.error || "Face verification failed. Please try again.", ok: false });
-        setActing(false);
-        return;
+      const descriptor = await embeddingFromImageData(imageData);
+      const result = await verifyEmbedding(Array.from(descriptor));
+      if (faceResolveRef.current) {
+        faceResolveRef.current(result);
+        faceResolveRef.current = null;
       }
-      setMsg({ text: "✅ Face verified!", ok: true });
-      await completeCheckIn("FACE");
-    } catch (error) {
-      console.error("Face verification error:", error);
-      setMsg({ text: "Face verification failed. Please try again.", ok: false });
-      setActing(false);
+    } catch (err: any) {
+      if (faceResolveRef.current) {
+        faceResolveRef.current({ success: false, error: err?.message || "Face capture failed." });
+        faceResolveRef.current = null;
+      }
+    }
+  }
+
+  function handleVerifyCancel() {
+    setShowFaceVerify(false);
+    if (faceResolveRef.current) {
+      faceResolveRef.current({ success: false, error: "Verification cancelled." });
+      faceResolveRef.current = null;
     }
   }
 
@@ -597,16 +496,25 @@ function CheckInContent() {
         return;
       }
 
-      // ── Step 3: If only face is enrolled ──────────────────────────
-      if (faceEnrolled && !deviceEnrolled) {
-        console.log("📸 Only face enrolled, using face verification");
-        await performFaceVerification();
+      // ── Step 3: Always prefer face verification if available ──
+      if (faceEnrolled) {
+        console.log("📸 Face enrolled, using face verification");
+        const faceResult = await performFaceVerification();
+        
+        if (!faceResult.success) {
+          setMsg({ text: faceResult.error || "Face verification failed. Please try again.", ok: false });
+          setActing(false);
+          return;
+        }
+        
+        setMsg({ text: "✅ Face verified!", ok: true });
+        await completeCheckIn("FACE");
         return;
       }
       
-      // ── Step 4: If only fingerprint is enrolled ────────────────────
+      // ── Step 4: Only use fingerprint if face is NOT enrolled ──
       if (!faceEnrolled && deviceEnrolled) {
-        console.log("🖐️ Only fingerprint enrolled, using fingerprint verification");
+        console.log("🖐️ Face not enrolled, using fingerprint verification");
         await performFingerprintVerification();
         return;
       }
@@ -1007,17 +915,6 @@ function CheckInContent() {
                   </div>
                 )}
               </div>
-
-              {checkedOut && (
-                <span style={{
-                  fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 6,
-        background: (today as any).checkOutIsOnPremises ? "#052e16" : "#1f0707",
-        border: `0.5px solid ${(today as any).checkOutIsOnPremises ? "#14532d" : "#7f1d1d"}`,
-        color: (today as any).checkOutIsOnPremises ? "#4ade80" : "#f87171",
-      }}>
-        {(today as any).checkOutIsOnPremises ? "📍 Checked out on-premises" : "⚠️ Checked out outside FCCPC"}
-      </span>
-    )}
 
               {/* Message */}
               {msg.text && (
@@ -1609,6 +1506,13 @@ function CheckInContent() {
         )}
       </main>
 
+      {/* ── Face Verification Modal ── */}
+      <FaceCaptureModal
+        isOpen={showFaceVerify}
+        onCapture={handleVerifyCapture}
+        onCancel={handleVerifyCancel}
+      />
+
       {/* ── Verification Method Selector Modal ── */}
       {showMethodSelector && (
         <div style={{
@@ -1642,7 +1546,16 @@ function CheckInContent() {
                 onClick={() => {
                   setShowMethodSelector(false);
                   setActing(true);
-                  performFaceVerification();
+                  // The face verification will use the modal flow
+                  performFaceVerification().then((result) => {
+                    if (result.success) {
+                      setMsg({ text: "✅ Face verified!", ok: true });
+                      completeCheckIn("FACE");
+                    } else {
+                      setMsg({ text: result.error || "Face verification failed.", ok: false });
+                      setActing(false);
+                    }
+                  });
                 }}
                 style={{
                   padding: "24px 16px",
@@ -1652,8 +1565,12 @@ function CheckInContent() {
                   color: "#4ade80",
                   cursor: "pointer",
                   textAlign: "center",
+                  position: "relative",
                 }}
               >
+                <div style={{ position: "absolute", top: -10, right: -10, background: "#22c55e", color: "#000", fontSize: 10, fontWeight: 700, padding: "2px 10px", borderRadius: 10 }}>
+                  RECOMMENDED
+                </div>
                 <div style={{ fontSize: 40, marginBottom: 8 }}>📸</div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>Face Verification</div>
                 <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>Camera-based</div>
@@ -1669,16 +1586,18 @@ function CheckInContent() {
                 style={{
                   padding: "24px 16px",
                   borderRadius: 12,
-                  border: "1.5px solid #60a5fa",
-                  background: "#0c1a2e",
-                  color: "#60a5fa",
+                  border: "1.5px solid #6b7280",
+                  background: "var(--bg-input)",
+                  color: "var(--text-muted)",
                   cursor: "pointer",
                   textAlign: "center",
+                  opacity: 0.7,
                 }}
               >
                 <div style={{ fontSize: 40, marginBottom: 8 }}>🖐️</div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>Fingerprint</div>
                 <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>Device sensor</div>
+                <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>⚠️ May not work on all devices</div>
               </button>
             </div>
 

@@ -170,34 +170,6 @@ export async function verifyBiometric(): Promise<{ success: boolean; error?: str
   }
 }
 
-// ─── Check if user has any enrolled devices ──────────────────────
-export async function hasEnrolledDevice(): Promise<boolean> {
-  try {
-    const res = await fetch("/api/webauthn?action=check-enrolled");
-    if (!res.ok) {
-      return false;
-    }
-    const data = await res.json();
-    return data.hasCredential === true;
-  } catch {
-    return false;
-  }
-}
-
-// ─── List all enrolled devices ─────────────────────────────────────
-export async function listMyDevices(): Promise<{ id: string; deviceLabel: string; createdAt: string }[]> {
-  try {
-    const res = await fetch("/api/webauthn?action=list-devices");
-    if (!res.ok) {
-      return [];
-    }
-    const data = await res.json();
-    return data.devices || [];
-  } catch {
-    return [];
-  }
-}
-
 // ─── Remove a device ──────────────────────────────────────────────
 export async function removeDevice(id: string): Promise<boolean> {
   try {
@@ -212,30 +184,10 @@ export async function removeDevice(id: string): Promise<boolean> {
   }
 }
 
-// ─── Check if user has face enrolled ──────────────────────────────
-export async function hasFaceEnrolled(): Promise<boolean> {
-  try {
-    const res = await fetch("/api/face/check-enrolled");
-    if (!res.ok) {
-      return false;
-    }
-    const data = await res.json();
-    return data.hasFace === true;
-  } catch {
-    return false;
-  }
-}
+export async function listMyDevices(): Promise<{ id: string; deviceLabel: string; createdAt: string }[]> { 
+  try { const res = await fetch("/api/webauthn?action=list-devices"); if (!res.ok) { return []; } const data = await res.json(); return data.devices || []; } catch { return []; } }
 
-// ─── List all face devices ──────────────────────────────────────────
-export async function listMyFaceDevices(): Promise<{ id: string; name: string; enrolledAt: string }[]> {
-  try {
-    const res = await fetch("/api/face/list-devices");
-    if (!res.ok) {
-      return [];
-    }
-    const data = await res.json();
-    return data.devices || [];
-  } catch {
-    return [];
-  }
+export async function hasEnrolledDevice(): Promise<boolean> {
+  const devices = await listMyDevices();
+  return devices.length > 0;
 }

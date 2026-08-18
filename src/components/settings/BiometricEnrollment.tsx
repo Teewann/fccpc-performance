@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { checkActivationCode, enrollDevice, listMyDevices, removeDevice } from "@/lib/webauthn-client";
-import { hasFaceEnrolled, removeFaceEnrollment } from "@/lib/biometric/face-client";
+import { hasFaceEnrolled, removeFaceEnrollment, embeddingFromImageData } from "@/lib/biometric/face-client";
 import FaceCaptureModal from "@/components/biometric/FaceCaptureModal";
 
 type Device = { id: string; deviceLabel: string; createdAt: string };
@@ -88,37 +88,40 @@ export function BiometricEnrollment() {
 
   // ─── Handle face capture from modal ──────────────────────────────────
   async function handleFaceCapture(imageData: string) {
-    setShowFaceCapture(false);
-    setBusy(true);
-    setMsg({ text: "", ok: true });
+  setShowFaceCapture(false);
+  setBusy(true);
+  setMsg({ text: "", ok: true });
 
-    try {
-      const res = await fetch("/api/face", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "enroll",
-          image: imageData,
-          code: pendingFaceCode || code,
-        }),
-      });
+  try {
+    const descriptor = await embeddingFromImageData(imageData);
 
-      const data = await res.json();
+    const res = await fetch("/api/face", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "enroll",
+        embedding: Array.from(descriptor),
+        code: pendingFaceCode || code,
+      }),
+    });
 
-      if (res.ok) {
-        setMsg({ text: "✅ Face enrolled successfully!", ok: true });
-        setCode("");
-        refresh();
-      } else {
-        setMsg({ text: data.error || "Face enrollment failed.", ok: false });
-      }
-    } catch (err) {
-      console.error("Face enrollment error:", err);
-      setMsg({ text: "Face enrollment failed. Please try again.", ok: false });
+    const data = await res.json();
+
+    if (res.ok) {
+      setMsg({ text: "Face enrolled successfully!", ok: true });
+      setCode("");
+      refresh();
+    } else {
+      setMsg({ text: data.error || "Face enrollment failed.", ok: false });
     }
-    setBusy(false);
-    setPendingFaceCode(undefined);
+  } catch (err: any) {
+    console.error("Face enrollment error:", err);
+    setMsg({ text: err?.message || "Face enrollment failed. Please try again.", ok: false });
   }
+
+  setBusy(false);
+  setPendingFaceCode(undefined);
+}
 
   // ─── Handle remove device ────────────────────────────────────────────
   async function handleRemoveDevice(id: string) {
