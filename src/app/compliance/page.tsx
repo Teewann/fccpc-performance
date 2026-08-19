@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +84,7 @@ export default function CompliancePortalPage() {
     } catch { setBusinesses([]); }
   }, []);
 
-  // Load businesses immediately on mount — critical for the dropdown
+  // Load businesses immediately on mount - critical for the dropdown
   useEffect(() => { loadBusinesses(); }, [loadBusinesses]);
 
   useEffect(() => {
@@ -368,7 +368,7 @@ export default function CompliancePortalPage() {
                     <h3 style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>{detail.businessName}</h3>
                     <button onClick={() => { setSelected(null); setDetail(null); }} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 18, cursor: "pointer" }}>✕</button>
                   </div>
-                  {[["RC Number",detail.rcNumber],["Sector",detail.sector?.replace(/_/g," ")],["Email",detail.email],["Phone",detail.phone],["Address",`${detail.address}, ${detail.state}`],["Contact",`${detail.contactPerson} — ${detail.contactRole}`],["Reg fee",`${fmt(detail.registrationFee)} ${detail.feePaid?"✓ Paid":"✗ Unpaid"}`],["Registered",fmtD(detail.createdAt)],["Verified",detail.verifiedAt?fmtD(detail.verifiedAt):"Not verified"]].map(([label,value]) => (
+                  {[["RC Number",detail.rcNumber],["Sector",detail.sector?.replace(/_/g," ")],["Email",detail.email],["Phone",detail.phone],["Address",`${detail.address}, ${detail.state}`],["Contact",`${detail.contactPerson} - ${detail.contactRole}`],["Reg fee",`${fmt(detail.registrationFee)} ${detail.feePaid?"✓ Paid":"✗ Unpaid"}`],["Registered",fmtD(detail.createdAt)],["Verified",detail.verifiedAt?fmtD(detail.verifiedAt):"Not verified"]].map(([label,value]) => (
                     <div key={label} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: "0.5px solid var(--border-soft)" }}>
                       <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", width: 80, flexShrink: 0 }}>{label}</div>
                       <div style={{ fontSize: 13, color: "var(--text-primary)", wordBreak: "break-word" }}>{value}</div>
@@ -489,7 +489,7 @@ export default function CompliancePortalPage() {
               <form onSubmit={handleIssueFine} autoComplete="off">
                 <label style={lbl}>Select business *</label>
                 <select style={inp} value={fineForm.businessId} onChange={(e)=>setFineForm({...fineForm,businessId:e.target.value})} required>
-                  <option value="">— Choose a registered business —</option>
+                  <option value="">- Choose a registered business -</option>
                   {businesses.map((b)=><option key={b.id} value={b.id}>{b.businessName} ({b.rcNumber})</option>)}
                 </select>
                 {businesses.length === 0 && <div style={{ fontSize:12,color:"#f59e0b",marginTop:-8,marginBottom:12 }}>No businesses registered yet.</div>}

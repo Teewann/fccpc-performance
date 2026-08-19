@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -139,7 +139,7 @@ export default function AuditTrailPage() {
         <div style={{ background: "#0c1a2e", border: "0.5px solid #1e3a5f", borderRadius: 12, padding: "14px 20px", marginBottom: 22, display: "flex", gap: 12, alignItems: "center" }}>
           <span style={{ fontSize: 20, flexShrink: 0 }}>🔒</span>
           <div style={{ fontSize: 14, color: "#60a5fa", lineHeight: 1.6 }}>
-            Every action taken in this system is recorded here — logins, log submissions, approvals, user changes, exam completions, and more.
+            Every action taken in this system is recorded here - logins, log submissions, approvals, user changes, exam completions, and more.
             This page is visible to System Administrators only.
           </div>
         </div>

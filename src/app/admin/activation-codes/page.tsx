@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
@@ -77,7 +77,7 @@ export default function ActivationCodesPage() {
                 color: "var(--text-primary)",
               }}
             >
-              <option value="">— Select a user —</option>
+              <option value="">- Select a user -</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name} ({u.email})

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef, Suspense } from "react";
@@ -286,7 +286,7 @@ function AnnouncementsTab({
               <div>
                 <label style={lbl}>Target audience</label>
                 <select style={inp} value={form.targetDeptId} onChange={(e) => setForm({ ...form, targetDeptId: e.target.value })}>
-                  <option value="">All staff — entire organisation</option>
+                  <option value="">All staff - entire organisation</option>
                   {departments.map((d) => <option key={d.id} value={d.id}>{d.name} only</option>)}
                 </select>
               </div>
@@ -527,7 +527,7 @@ function MemosTab({
                     {isSender && memo.recipients && memo.recipients.length > 0 && (
                       <div style={{ marginTop: 8 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
-                          Recipients ({memo.recipients.length}) — {memo.recipients.filter((r) => r.read).length} read
+                          Recipients ({memo.recipients.length}) - {memo.recipients.filter((r) => r.read).length} read
                         </div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           {memo.recipients.slice(0, 20).map((r) => (
@@ -743,7 +743,7 @@ function ComposeModal({
 
         <label style={lbl}>Send to <span style={{ color: "#f87171" }}>*</span></label>
         <select style={inp} value={targetType} onChange={(e) => setTargetType(e.target.value as any)}>
-          <option value="all">All staff — entire organisation</option>
+          <option value="all">All staff - entire organisation</option>
           <option value="department">Specific department</option>
           <option value="roles">Specific roles</option>
           <option value="specific">Specific individuals</option>
@@ -753,7 +753,7 @@ function ComposeModal({
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>Select department</label>
             <select style={inp} value={targetDeptId} onChange={(e) => setTargetDeptId(e.target.value)}>
-              <option value="">— Choose department —</option>
+              <option value="">- Choose department -</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
@@ -972,7 +972,7 @@ function ForwardModal({
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>Department</label>
             <select style={inp} value={targetDeptId} onChange={(e) => setTargetDeptId(e.target.value)}>
-              <option value="">— Choose —</option>
+              <option value="">- Choose -</option>
               {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>

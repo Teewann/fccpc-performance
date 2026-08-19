@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import { v2 as cloudinary } from "cloudinary";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   const file = formData.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "No file" }, { status: 400 });
 
-  // Limit file size (20 MB) — same limit as before
+  // Limit file size (20 MB) - same limit as before
   const maxSize = 100 * 1024 * 1024;
   if (file.size > maxSize) return NextResponse.json({ error: "File too large (max 100MB)" }, { status: 400 });
   

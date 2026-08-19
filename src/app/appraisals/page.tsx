@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -114,7 +114,7 @@ export default function AppraisalsPage() {
       doc.rect(0, 0, pageW, 24, "F");
       doc.setTextColor(74, 222, 128);
       doc.setFontSize(15); doc.setFont("helvetica", "bold");
-      doc.text("FCCPC — HR Appraisal Report", m, 11);
+      doc.text("FCCPC - HR Appraisal Report", m, 11);
       doc.setFontSize(10); doc.setFont("helvetica", "normal");
       doc.setTextColor(156, 163, 175);
       doc.text(

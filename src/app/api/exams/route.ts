@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// ─── GET — fetch exams (Admin/HR sees all, Staff sees available ones) ─
+// ─── GET - fetch exams (Admin/HR sees all, Staff sees available ones) ─
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ─── POST — create a new exam (Admin/HR only) ─────────────────────────
+// ─── POST - create a new exam (Admin/HR only) ─────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── PATCH — toggle exam active/inactive ─────────────────────────────
+// ─── PATCH - toggle exam active/inactive ─────────────────────────────
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

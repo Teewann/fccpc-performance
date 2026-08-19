@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -17,19 +17,31 @@ function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-// ─── GET /api/dashboard?filter=today|week|month|year|custom&from=&to= ─
+// ─── GET /api/dashboard ─────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-const userId = (session?.user as any)?.id;
-if (!userId) {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-// ... use userId directly
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    // ✅ Get user from database
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true, role: true, departmentId: true },
+    });
+    
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // ✅ Check if user is privileged (can see system-wide stats)
+    const isPrivileged = ["ADMIN", "DIRECTOR", "HR", "EXECUTIVE"].includes(user.role);
+
     const { searchParams } = new URL(request.url);
-    const filter    = searchParams.get("filter") || "week";
+    const filter = searchParams.get("filter") || "week";
     const fromParam = searchParams.get("from");
-    const toParam   = searchParams.get("to");
+    const toParam = searchParams.get("to");
 
     const now = new Date();
 
@@ -39,59 +51,58 @@ if (!userId) {
 
     if (filter === "today") {
       rangeStart = startOfDay(now);
-      rangeEnd   = endOfDay(now);
+      rangeEnd = endOfDay(now);
     } else if (filter === "week") {
-      const dow  = now.getDay(); // 0=Sun
+      const dow = now.getDay();
       const diff = dow === 0 ? 6 : dow - 1;
       rangeStart = startOfDay(addDays(now, -diff));
-      rangeEnd   = endOfDay(now);
+      rangeEnd = endOfDay(now);
     } else if (filter === "month") {
       rangeStart = startOfDay(new Date(now.getFullYear(), now.getMonth(), 1));
-      rangeEnd   = endOfDay(now);
+      rangeEnd = endOfDay(now);
     } else if (filter === "year") {
       rangeStart = startOfDay(new Date(now.getFullYear(), 0, 1));
-      rangeEnd   = endOfDay(now);
+      rangeEnd = endOfDay(now);
     } else if (filter === "custom" && fromParam && toParam) {
       rangeStart = startOfDay(new Date(fromParam));
-      rangeEnd   = endOfDay(new Date(toParam));
+      rangeEnd = endOfDay(new Date(toParam));
     } else {
       rangeStart = startOfDay(addDays(now, -6));
-      rangeEnd   = endOfDay(now);
+      rangeEnd = endOfDay(now);
     }
 
-    const logWhere   = { date:      { gte: rangeStart, lte: rangeEnd } };
-    const taskWhere  = { createdAt: { gte: rangeStart, lte: rangeEnd } };
-    const leaveWhere = { createdAt: { gte: rangeStart, lte: rangeEnd } };
+    // ✅ FILTER BY USER - personal stats
+    const logWhere = { 
+      date: { gte: rangeStart, lte: rangeEnd },
+      userId: user.id
+    };
+    const taskWhere = { 
+      createdAt: { gte: rangeStart, lte: rangeEnd },
+      assignedToId: user.id
+    };
+    const leaveWhere = { 
+      createdAt: { gte: rangeStart, lte: rangeEnd },
+      userId: user.id
+    };
 
-    // ── KPI cards ─────────────────────────────────────────────────────
-    const [
-      totalStaff,
-      activeDepartments,
-      logsInRange,
-      approvedLogs,
-      rejectedLogs,
-      pendingLogs,      // all-time submitted, not range-specific
-      queriedLogs,
-      tasksInRange,
-      tasksPending,
-      tasksCompleted,
-      leaveInRange,
-      leavePending,
-    ] = await Promise.all([
-      prisma.user.count({ where: { isActive: true } }),
-      prisma.department.count(),
-      prisma.dailyLog.count({ where: logWhere }),
-      prisma.dailyLog.count({ where: { ...logWhere, status: "APPROVED" } }),
-      prisma.dailyLog.count({ where: { ...logWhere, status: "REJECTED" } }),
-      prisma.dailyLog.count({ where: { status: "SUBMITTED" } }),
-      prisma.dailyLog.count({ where: { ...logWhere, status: "QUERIED" } }),
-      prisma.task.count({ where: taskWhere }),
-      prisma.task.count({ where: { status: "PENDING" } }),
-      prisma.task.count({ where: { ...taskWhere, status: "COMPLETED" } }),
-      prisma.leaveRequest.count({ where: leaveWhere }),
-      prisma.leaveRequest.count({ where: { status: "PENDING" } }),
-    ]);
+    // ── KPI counts (these are all numbers) ──────────────────────────
+    const totalStaff = isPrivileged ? await prisma.user.count({ where: { isActive: true } }) : 0;
+    const activeDepartments = isPrivileged ? await prisma.department.count() : 0;
+    
+    const logsInRange = await prisma.dailyLog.count({ where: logWhere });
+    const approvedLogs = await prisma.dailyLog.count({ where: { ...logWhere, status: "APPROVED" } });
+    const rejectedLogs = await prisma.dailyLog.count({ where: { ...logWhere, status: "REJECTED" } });
+    const pendingLogs = await prisma.dailyLog.count({ where: { status: "SUBMITTED", userId: user.id } });
+    const queriedLogs = await prisma.dailyLog.count({ where: { ...logWhere, status: "QUERIED" } });
+    
+    const tasksInRange = await prisma.task.count({ where: taskWhere });
+    const tasksPending = await prisma.task.count({ where: { status: "PENDING", assignedToId: user.id } });
+    const tasksCompleted = await prisma.task.count({ where: { ...taskWhere, status: "COMPLETED" } });
+    
+    const leaveInRange = await prisma.leaveRequest.count({ where: leaveWhere });
+    const leavePending = await prisma.leaveRequest.count({ where: { status: "PENDING", userId: user.id } });
 
+    // ── Calculate derived values ──────────────────────────────────────
     const submittedInRange = Math.max(
       0,
       logsInRange - approvedLogs - rejectedLogs - queriedLogs,
@@ -105,7 +116,7 @@ if (!userId) {
 
     // ── Build trend data ──────────────────────────────────────────────
     type TrendBucket = { submitted: number; approved: number; rejected: number };
-    type TrendPoint  = TrendBucket & { label: string };
+    type TrendPoint = TrendBucket & { label: string };
 
     function emptyBucket(): TrendBucket {
       return { submitted: 0, approved: 0, rejected: 0 };
@@ -120,7 +131,6 @@ if (!userId) {
     let trendData: TrendPoint[] = [];
 
     if (filter === "today") {
-      // hourly buckets 00–current hour
       const hours: Record<number, TrendBucket> = {};
       for (let h = 0; h <= now.getHours(); h++) hours[h] = emptyBucket();
       for (const log of allLogs) {
@@ -131,9 +141,7 @@ if (!userId) {
         label: `${String(h).padStart(2, "0")}:00`,
         ...v,
       }));
-
     } else if (filter === "week") {
-      // daily buckets Mon–today
       const buckets: Record<string, TrendBucket> = {};
       for (let i = 0; i < 7; i++) {
         const d = addDays(rangeStart, i);
@@ -147,9 +155,7 @@ if (!userId) {
         label: new Date(dateStr).toLocaleDateString("en-GB", { weekday: "short", day: "numeric" }),
         ...v,
       }));
-
     } else if (filter === "month") {
-      // daily buckets 1st–today
       const buckets: Record<string, TrendBucket> = {};
       const cursor = new Date(rangeStart);
       while (cursor <= now) {
@@ -164,16 +170,14 @@ if (!userId) {
         label: new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
         ...v,
       }));
-
     } else if (filter === "year") {
-      // monthly buckets Jan–current month
       const buckets: Record<string, TrendBucket> = {};
       for (let m = 0; m <= now.getMonth(); m++) {
         const key = `${now.getFullYear()}-${String(m + 1).padStart(2, "0")}`;
         buckets[key] = emptyBucket();
       }
       for (const log of allLogs) {
-        const d2  = new Date(log.date);
+        const d2 = new Date(log.date);
         const key = `${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, "0")}`;
         if (buckets[key]) classifyLog(log.status, buckets[key]);
       }
@@ -184,9 +188,7 @@ if (!userId) {
           ...v,
         };
       });
-
     } else {
-      // custom — weekly buckets
       const buckets: Record<string, TrendBucket> = {};
       const cursor = new Date(rangeStart);
       while (cursor <= rangeEnd) {
@@ -196,7 +198,7 @@ if (!userId) {
       const bucketKeys = Object.keys(buckets).sort();
       for (const log of allLogs) {
         const logDate = new Date(log.date);
-        let bucket    = bucketKeys[0];
+        let bucket = bucketKeys[0];
         for (const bk of bucketKeys) {
           if (new Date(bk) <= logDate) bucket = bk;
         }
@@ -204,7 +206,7 @@ if (!userId) {
       }
       trendData = Object.entries(buckets).map(([dateStr, v]) => {
         const start = new Date(dateStr);
-        const end   = addDays(start, 6);
+        const end = addDays(start, 6);
         return {
           label: `${start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}–${end.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`,
           ...v,
@@ -212,107 +214,107 @@ if (!userId) {
       });
     }
 
-    // ── Department bar chart ──────────────────────────────────────────
-    const deptLogsRaw = await prisma.dailyLog.findMany({
-      where: logWhere,
-      select: { userId: true, status: true },
-    });
+    // ── Department chart (only for privileged users) ──────────────────
+    let departmentChart: { name: string; logs: number; approved: number }[] = [];
+    let performers: { name: string; department: string; staffId: string | null; count: number }[] = [];
+    let lowActivity: { name: string; staff: number }[] = [];
 
-    const userIds = [...new Set(deptLogsRaw.map((l) => l.userId))];
-    const usersWithDept = await prisma.user.findMany({
-      where: { id: { in: userIds } },
-      select: { id: true, department: { select: { name: true } } },
-    });
-    const userDeptMap: Record<string, string> = {};
-    for (const u of usersWithDept) {
-      userDeptMap[u.id] = u.department?.name || "Unassigned";
+    if (isPrivileged) {
+      // Department chart
+      const deptLogsRaw = await prisma.dailyLog.findMany({
+        where: logWhere,
+        select: { userId: true, status: true },
+      });
+
+      const userIds = [...new Set(deptLogsRaw.map((l) => l.userId))];
+      const usersWithDept = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, department: { select: { name: true } } },
+      });
+      const userDeptMap: Record<string, string> = {};
+      for (const u of usersWithDept) {
+        userDeptMap[u.id] = u.department?.name || "Unassigned";
+      }
+
+      const deptAgg: Record<string, { total: number; approved: number }> = {};
+      for (const log of deptLogsRaw) {
+        const name = userDeptMap[log.userId] || "Unassigned";
+        if (!deptAgg[name]) deptAgg[name] = { total: 0, approved: 0 };
+        deptAgg[name].total++;
+        if (log.status === "APPROVED") deptAgg[name].approved++;
+      }
+
+      departmentChart = Object.entries(deptAgg)
+        .map(([name, v]) => ({
+          name: name.length > 18 ? name.slice(0, 18) + "…" : name,
+          logs: v.total,
+          approved: v.approved,
+        }))
+        .sort((a, b) => b.logs - a.logs)
+        .slice(0, 8);
+
+      // Top performers
+      const topRaw = await prisma.dailyLog.groupBy({
+        by: ["userId"],
+        where: { ...logWhere, status: "APPROVED" },
+        _count: { id: true },
+        orderBy: { _count: { id: "desc" } },
+        take: 5,
+      });
+
+      const topUserDetails = await prisma.user.findMany({
+        where: { id: { in: topRaw.map((t) => t.userId) } },
+        select: { id: true, name: true, staffId: true, department: { select: { name: true } } },
+      });
+
+      performers = topRaw.map((t) => {
+        const u = topUserDetails.find((x) => x.id === t.userId);
+        return {
+          name: u?.name || "Unknown",
+          department: u?.department?.name || "-",
+          staffId: u?.staffId || null,
+          count: t._count.id,
+        };
+      });
+
+      // Low activity departments
+      const allDepts = await prisma.department.findMany({
+        select: { id: true, name: true, _count: { select: { users: true } } },
+        orderBy: { name: "asc" },
+      });
+
+      const activeDeptSet = new Set(
+        Object.keys(deptAgg).map((n) => (n.endsWith("…") ? n.slice(0, -1) : n))
+      );
+
+      lowActivity = allDepts
+        .filter((d) => {
+          const truncated = d.name.length > 18 ? d.name.slice(0, 18) : d.name;
+          return !activeDeptSet.has(d.name) && !activeDeptSet.has(truncated);
+        })
+        .slice(0, 5)
+        .map((d) => ({ name: d.name, staff: d._count.users }));
     }
-
-    const deptAgg: Record<string, { total: number; approved: number }> = {};
-    for (const log of deptLogsRaw) {
-      const name = userDeptMap[log.userId] || "Unassigned";
-      if (!deptAgg[name]) deptAgg[name] = { total: 0, approved: 0 };
-      deptAgg[name].total++;
-      if (log.status === "APPROVED") deptAgg[name].approved++;
-    }
-
-    const departmentChart = Object.entries(deptAgg)
-      .map(([name, v]) => ({
-        name:     name.length > 18 ? name.slice(0, 18) + "…" : name,
-        logs:     v.total,
-        approved: v.approved,
-      }))
-      .sort((a, b) => b.logs - a.logs)
-      .slice(0, 8);
-
-    // ── Pie data ──────────────────────────────────────────────────────
-    const pieData = [
-      { name: "Approved",  value: approvedLogs,     fill: "#22c55e" },
-      { name: "Pending",   value: submittedInRange,  fill: "#f59e0b" },
-      { name: "Rejected",  value: rejectedLogs,      fill: "#ef4444" },
-      { name: "Queried",   value: queriedLogs,        fill: "#3b82f6" },
-    ];
-
-    // ── Top performers ────────────────────────────────────────────────
-    const topRaw = await prisma.dailyLog.groupBy({
-      by:       ["userId"],
-      where:    { ...logWhere, status: "APPROVED" },
-      _count:   { id: true },
-      orderBy:  { _count: { id: "desc" } },
-      take:     5,
-    });
-
-    const topUserDetails = await prisma.user.findMany({
-      where:  { id: { in: topRaw.map((t) => t.userId) } },
-      select: { id: true, name: true, staffId: true, department: { select: { name: true } } },
-    });
-
-    const performers = topRaw.map((t) => {
-      const u = topUserDetails.find((x) => x.id === t.userId);
-      return {
-        name:       u?.name       || "Unknown",
-        department: u?.department?.name || "—",
-        staffId:    u?.staffId    || null,
-        count:      t._count.id,
-      };
-    });
 
     // ── Recent logs ───────────────────────────────────────────────────
     const recentLogs = await prisma.dailyLog.findMany({
-      take:    8,
+      take: 8,
       orderBy: { createdAt: "desc" },
+      where: { userId: user.id },
       select: {
-        id: true, taskTitle: true, status: true, date: true,
+        id: true,
+        taskTitle: true,
+        status: true,
+        date: true,
         user: { select: { name: true, department: { select: { name: true } } } },
       },
     });
 
-    // ── Low activity departments ──────────────────────────────────────
-    const allDepts = await prisma.department.findMany({
-      select: { id: true, name: true, _count: { select: { users: true } } },
-      orderBy: { name: "asc" },
-    });
+    // ── Task breakdown ──────────────────────────────────────────────────
+    const taskInProgress = await prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } });
+    const taskOverdue = await prisma.task.count({ where: { ...taskWhere, status: "OVERDUE" } });
 
-    const activeDeptSet = new Set(
-      Object.keys(deptAgg).map((n) =>
-        n.endsWith("…") ? n.slice(0, -1) : n
-      )
-    );
-
-    const lowActivity = allDepts
-      .filter((d) => {
-        const truncated = d.name.length > 18 ? d.name.slice(0, 18) : d.name;
-        return !activeDeptSet.has(d.name) && !activeDeptSet.has(truncated);
-      })
-      .slice(0, 5)
-      .map((d) => ({ name: d.name, staff: d._count.users }));
-
-    // ── Tasks by status for task pie ──────────────────────────────────
-    const [taskInProgress, taskOverdue] = await Promise.all([
-      prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } }),
-      prisma.task.count({ where: { ...taskWhere, status: "OVERDUE" } }),
-    ]);
-
+    // ─── RETURN RESPONSE ──────────────────────────────────────────────
     return NextResponse.json({
       kpi: {
         totalStaff,
@@ -328,18 +330,24 @@ if (!userId) {
         tasksCompleted,
         leaveInRange,
         leavePending,
+        isPrivileged,
       },
       trendData,
       departmentChart,
-      pieData,
+      pieData: [
+        { name: "Approved", value: approvedLogs, fill: "#22c55e" },
+        { name: "Pending", value: submittedInRange, fill: "#f59e0b" },
+        { name: "Rejected", value: rejectedLogs, fill: "#ef4444" },
+        { name: "Queried", value: queriedLogs, fill: "#3b82f6" },
+      ],
       performers,
       recentLogs,
       lowActivity,
       taskBreakdown: [
-        { name: "Pending",     value: tasksPending,   fill: "#f59e0b" },
-        { name: "In Progress", value: taskInProgress,  fill: "#3b82f6" },
-        { name: "Completed",   value: tasksCompleted,  fill: "#22c55e" },
-        { name: "Overdue",     value: taskOverdue,     fill: "#ef4444" },
+        { name: "Pending", value: tasksPending, fill: "#f59e0b" },
+        { name: "In Progress", value: taskInProgress, fill: "#3b82f6" },
+        { name: "Completed", value: tasksCompleted, fill: "#22c55e" },
+        { name: "Overdue", value: taskOverdue, fill: "#ef4444" },
       ],
     });
   } catch (error) {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/layout/ThemeProvider";
@@ -324,7 +324,7 @@ useEffect(() => {
       }}>
 
         {/* ══════════════════════════════════════
-            SECTION 1 — LOGO (never shrinks)
+            SECTION 1 - LOGO (never shrinks)
         ══════════════════════════════════════ */}
         <div style={{
           flexShrink: 0,
@@ -372,7 +372,7 @@ useEffect(() => {
         </div>
 
         {/* ══════════════════════════════════════
-            SECTION 2 — ICON STRIP (below logo)
+            SECTION 2 - ICON STRIP (below logo)
         ══════════════════════════════════════ */}
         <div style={{
           flexShrink: 0,
@@ -478,7 +478,7 @@ useEffect(() => {
         </div>
 
         {/* ══════════════════════════════════════
-            SECTION 3 — NAV (scrollable)
+            SECTION 3 - NAV (scrollable)
         ══════════════════════════════════════ */}
         <nav style={{
           flex: 1,
@@ -486,7 +486,7 @@ useEffect(() => {
           overflowX: "hidden",
           paddingTop: 4,
           paddingBottom: 8,
-          // inhouse scroll — only this region scrolls
+          // inhouse scroll - only this region scrolls
         }}>
           {collapsed ? (
             /* Icon-only when collapsed */
@@ -599,7 +599,7 @@ useEffect(() => {
         </nav>
 
         {/* ══════════════════════════════════════
-            SECTION 4 — FOOTER (never scrolls)
+            SECTION 4 - FOOTER (never scrolls)
         ══════════════════════════════════════ */}
         <div style={{
           flexShrink: 0,
@@ -630,7 +630,7 @@ useEffect(() => {
                     {AGENCY.roleLabels?.[role as keyof typeof AGENCY.roleLabels] || role}
                   </div>
                   <div style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 700, color: "#ef4444", textTransform: "uppercase", marginTop: 2, letterSpacing: "0.05em" }}>
-                    ID: {userIdRef || "—"}
+                    ID: {userIdRef || "-"}
                   </div>
                 </div>
               </div>

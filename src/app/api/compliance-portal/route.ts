@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 
-// ── GET — fetch portal data ───────────────────────────────────────────
+// ── GET - fetch portal data ───────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ── POST — register business / issue fine / confirm payment ──────────
+// ── POST - register business / issue fine / confirm payment ──────────
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
         include: { business: true, fine: true },
       });
 
-      // If registration fee — activate the business
+      // If registration fee - activate the business
       if (payment.type === "REGISTRATION_FEE") {
         await prisma.registeredBusiness.update({
           where: { id: payment.businessId },
@@ -314,7 +314,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // If fine payment — mark fine as paid
+      // If fine payment - mark fine as paid
       if (payment.fineId) {
         await prisma.complianceFine.update({
           where: { id: payment.fineId },

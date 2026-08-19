@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -61,8 +61,8 @@ type Notification = {
 };
 
 const REVENUE_SOURCES = [
-  "Administrative Fine","Consent Order Settlement","Penalty — Competition Violation",
-  "Penalty — Consumer Protection","Merger Filing Fee","Licence Fee",
+  "Administrative Fine","Consent Order Settlement","Penalty - Competition Violation",
+  "Penalty - Consumer Protection","Merger Filing Fee","Licence Fee",
   "Cost Recovery","Forfeiture","Other",
 ];
 const VAULT_CATEGORIES = [
@@ -307,7 +307,7 @@ export default function EVCSuitePage() {
     if (lockedOut) return;
     if (passInput === EVC_SUITE_PASSWORD) {
       setUnlocked(true);
-      // FIX 1: clear immediately on success — useEffect above also does this
+      // FIX 1: clear immediately on success - useEffect above also does this
       setPassInput("");
       setPassError("");
       setPassAttempts(0);
@@ -401,7 +401,7 @@ export default function EVCSuitePage() {
     fetchSection("vault");
   }
 
-  // FIX 2: Task submit — uses FormData to support file attachment
+  // FIX 2: Task submit - uses FormData to support file attachment
   async function handleTaskSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true); setMsg({ text: "", ok: true });
@@ -552,12 +552,12 @@ export default function EVCSuitePage() {
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <div style={{ width: 88, height: 88, borderRadius: 22, background: "#0d1017", border: `2px solid ${gold}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 22px", fontSize: 40 }}>🔐</div>
             <div style={{ fontSize: 24, fontWeight: 700, color: gold, letterSpacing: "-0.02em", marginBottom: 8 }}>FCCPC Command Suite</div>
-            <div style={{ fontSize: 14, color: text2, lineHeight: 1.6 }}>Executive Vice Chairman — Private Access<br />Enter your personal access code to continue</div>
+            <div style={{ fontSize: 14, color: text2, lineHeight: 1.6 }}>Executive Vice Chairman - Private Access<br />Enter your personal access code to continue</div>
           </div>
           <div style={{ background: card, border: `0.5px solid ${border}`, borderRadius: 20, padding: "36px 32px" }}>
             <form onSubmit={handleUnlock}>
               <label style={{ ...lbl, textAlign: "center", display: "block", marginBottom: 14, fontSize: 14 }}>Private access code</label>
-              {/* FIX 1: autoComplete="off" + no defaultValue — never remembers the password */}
+              {/* FIX 1: autoComplete="off" + no defaultValue - never remembers the password */}
               <input
                 type="password"
                 value={passInput}
@@ -578,7 +578,7 @@ export default function EVCSuitePage() {
                 type="submit" disabled={lockedOut}
                 style={{ width: "100%", padding: 15, borderRadius: 12, border: `1.5px solid ${gold}`, background: "#1c1107", color: gold, fontSize: 15, fontWeight: 700, cursor: lockedOut ? "not-allowed" : "pointer", opacity: lockedOut ? 0.5 : 1, letterSpacing: "0.06em" }}
               >
-                {lockedOut ? "⛔ ACCESS LOCKED — WAIT 30s" : "ENTER COMMAND SUITE →"}
+                {lockedOut ? "⛔ ACCESS LOCKED - WAIT 30s" : "ENTER COMMAND SUITE →"}
               </button>
             </form>
             <div style={{ marginTop: 20, padding: "12px 14px", background: "#0a0c14", borderRadius: 10, border: `0.5px solid ${border}` }}>
@@ -797,7 +797,7 @@ export default function EVCSuitePage() {
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                       <div style={{ gridColumn: "1/-1" }}>
                         <label style={lbl}>Title / description *</label>
-                        <input style={inp} value={revForm.title} onChange={(e) => setRevForm({ ...revForm, title: e.target.value })} placeholder="e.g. Administrative fine — Company X" required />
+                        <input style={inp} value={revForm.title} onChange={(e) => setRevForm({ ...revForm, title: e.target.value })} placeholder="e.g. Administrative fine - Company X" required />
                       </div>
                       <div>
                         <label style={lbl}>Amount (₦) *</label>
@@ -959,7 +959,7 @@ export default function EVCSuitePage() {
                           <option value="">Select person...</option>
                           {staffList.map((s) => (
                             <option key={s.id} value={s.id}>
-                              {s.name} — {s.role.charAt(0) + s.role.slice(1).toLowerCase()}{s.department ? ` (${s.department.name})` : ""}
+                              {s.name} - {s.role.charAt(0) + s.role.slice(1).toLowerCase()}{s.department ? ` (${s.department.name})` : ""}
                             </option>
                           ))}
                         </select>
@@ -976,7 +976,7 @@ export default function EVCSuitePage() {
                           <option value="LOW">Low</option>
                           <option value="MEDIUM">Medium</option>
                           <option value="HIGH">High</option>
-                          <option value="CRITICAL">Critical — Urgent</option>
+                          <option value="CRITICAL">Critical - Urgent</option>
                         </select>
                       </div>
                       <div>
@@ -985,7 +985,7 @@ export default function EVCSuitePage() {
                       </div>
                       {/* FIX 2: Document attachment field */}
                       <div style={{ gridColumn: "1/-1" }}>
-                        <label style={lbl}>Attach document (optional — PDF, Word, Excel, image)</label>
+                        <label style={lbl}>Attach document (optional - PDF, Word, Excel, image)</label>
                         <input
                           ref={taskFileRef}
                           type="file"
@@ -1007,7 +1007,7 @@ export default function EVCSuitePage() {
                       <div style={{ gridColumn: "1/-1", display: "flex", alignItems: "center", gap: 12 }}>
                         <input type="checkbox" id="confidential" checked={taskForm.isConfidential} onChange={(e) => setTaskForm({ ...taskForm, isConfidential: e.target.checked })} style={{ width: 18, height: 18, accentColor: gold, cursor: "pointer" }} />
                         <label htmlFor="confidential" style={{ fontSize: 14, color: text2, cursor: "pointer" }}>
-                          Mark as confidential — recipient will be told this task is from EVC and is strictly confidential
+                          Mark as confidential - recipient will be told this task is from EVC and is strictly confidential
                         </label>
                       </div>
                     </div>
@@ -1067,7 +1067,7 @@ export default function EVCSuitePage() {
                               {task.isConfidential && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#1f0707", color: red, border: `0.5px solid #7f1d1d` }}>🔒 Confidential</span>}
                               {task.documentName && <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 6, background: "#0c1a2e", color: blue, border: `0.5px solid #1e3a5f` }}>📎 {task.documentName}</span>}
                             </div>
-                            <div style={{ fontSize: 13, color: text2 }}>{task.assignedTo.name} — {task.assignedTo.role}{task.assignedTo.department ? ` · ${task.assignedTo.department.name}` : ""}</div>
+                            <div style={{ fontSize: 13, color: text2 }}>{task.assignedTo.name} - {task.assignedTo.role}{task.assignedTo.department ? ` · ${task.assignedTo.department.name}` : ""}</div>
                           </div>
                           <div style={{ display: "flex", gap: 8, flexShrink: 0, marginLeft: 12 }}>
                             <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 7, background: `${prColor}22`, color: prColor, border: `0.5px solid ${prColor}44` }}>{task.priority}</span>
@@ -1095,7 +1095,7 @@ export default function EVCSuitePage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
                 <div>
                   <h2 style={{ fontSize: 24, fontWeight: 700, color: text1, marginBottom: 6 }}>Private Vault</h2>
-                  <p style={{ fontSize: 14, color: text2 }}>Documents, books, files, secrets — EVC eyes only · Max 50MB per file</p>
+                  <p style={{ fontSize: 14, color: text2 }}>Documents, books, files, secrets - EVC eyes only · Max 50MB per file</p>
                 </div>
                 <button onClick={() => setShowVault(!showVault)} style={{ padding: "10px 22px", borderRadius: 10, border: `1.5px solid ${gold}`, background: "#1c1107", color: gold, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
                   {showVault ? "Cancel" : "↑ Upload to vault"}
@@ -1109,7 +1109,7 @@ export default function EVCSuitePage() {
                       <div style={{ gridColumn: "1/-1" }}>
                         <label style={lbl}>Select file * (max 50MB)</label>
                         <input type="file" onChange={(e) => setVaultFile(e.target.files?.[0] || null)} style={{ ...inp, padding: "10px 14px" }} required />
-                        {vaultFile && <div style={{ fontSize: 13, color: green, marginTop: -10, marginBottom: 10 }}>✓ {vaultFile.name} — {formatFileSize(vaultFile.size)}</div>}
+                        {vaultFile && <div style={{ fontSize: 13, color: green, marginTop: -10, marginBottom: 10 }}>✓ {vaultFile.name} - {formatFileSize(vaultFile.size)}</div>}
                       </div>
                       <div style={{ gridColumn: "1/-1" }}>
                         <label style={lbl}>Title *</label>
@@ -1268,7 +1268,7 @@ export default function EVCSuitePage() {
           {!loading && activeTab === "promotions" && (
             <div>
               <h2 style={{ fontSize: 24, fontWeight: 700, color: text1, marginBottom: 6 }}>Promotion Intelligence</h2>
-              <p style={{ fontSize: 14, color: text2, marginBottom: 20 }}>Data-driven recommendations — private to EVC only</p>
+              <p style={{ fontSize: 14, color: text2, marginBottom: 20 }}>Data-driven recommendations - private to EVC only</p>
 
               {/* FIX 3: Promotions filter bar */}
               <FilterBar>
@@ -1350,7 +1350,7 @@ export default function EVCSuitePage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
                 <div>
                   <h2 style={{ fontSize: 24, fontWeight: 700, color: text1, marginBottom: 6 }}>Private Notes</h2>
-                  <p style={{ fontSize: 14, color: text2 }}>Confidential annotations — never visible to any other user</p>
+                  <p style={{ fontSize: 14, color: text2 }}>Confidential annotations - never visible to any other user</p>
                 </div>
                 <button onClick={() => setShowNoteForm(!showNoteForm)} style={{ padding: "10px 22px", borderRadius: 10, border: `1.5px solid ${gold}`, background: "#1c1107", color: gold, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
                   {showNoteForm ? "Cancel" : "+ Add note"}
@@ -1396,7 +1396,7 @@ export default function EVCSuitePage() {
                 <div style={{ textAlign: "center", padding: 64, color: text2 }}>
                   <div style={{ fontSize: 40, marginBottom: 14 }}>🔒</div>
                   <div style={{ fontSize: 16, color: text1, marginBottom: 8 }}>{annotations.length === 0 ? "No private notes" : "No notes match your filters"}</div>
-                  {annotations.length === 0 && <div>Your confidential notes appear here — visible to nobody else</div>}
+                  {annotations.length === 0 && <div>Your confidential notes appear here - visible to nobody else</div>}
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 
@@ -90,7 +90,7 @@ export async function PATCH(request: NextRequest) {
       data: {
         userId: supervisor.id,
         action: `LOG_${newStatus}`,
-        detail: `Log ID ${logId} — ${comment || "no comment"}`,
+        detail: `Log ID ${logId} - ${comment || "no comment"}`,
       },
     });
 

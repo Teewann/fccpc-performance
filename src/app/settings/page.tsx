@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef } from "react";
@@ -484,10 +484,10 @@ export default function SettingsPage() {
                 {[
                   { label: "Account status", value: "Active", color: "#4ade80" },
                   { label: "Authentication", value: "Email and password", color: "var(--text-primary)" },
-                  { label: "Session type", value: "JSON Web Token — expires on browser close", color: "var(--text-primary)" },
+                  { label: "Session type", value: "JSON Web Token - expires on browser close", color: "var(--text-primary)" },
                   { label: "Password hashing", value: "bcrypt", color: "var(--text-primary)" },
-                  { label: "Your role", value: AGENCY.roleLabels[profile?.role as keyof typeof AGENCY.roleLabels] || profile?.role || "—", color: "var(--text-primary)" },
-                  { label: "Account created", value: profile ? new Date(profile.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—", color: "var(--text-primary)" },
+                  { label: "Your role", value: AGENCY.roleLabels[profile?.role as keyof typeof AGENCY.roleLabels] || profile?.role || "-", color: "var(--text-primary)" },
+                  { label: "Account created", value: profile ? new Date(profile.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "-", color: "var(--text-primary)" },
                 ].map(({ label, value, color }) => (
                   <div key={label} style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",

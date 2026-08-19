@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// GET — download document attached to an EVC task
+// GET - download document attached to an EVC task
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

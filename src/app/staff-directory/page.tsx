@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +90,7 @@ function StaffCard({
             {person.jobTitle || person.unit?.name || person.department?.name || "FCCPC"}
           </div>
           <div style={{ fontSize: 11, fontFamily: "monospace", fontWeight: "bold", color: "#ef4444", marginTop: 4 }}>
-            User ID: {person.userIdRef || "—"}
+            User ID: {person.userIdRef || "-"}
           </div>
         </div>
       </div>
@@ -333,7 +333,7 @@ export default function StaffDirectoryPage() {
                   <div style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 10 }}>{selected.jobTitle}</div>
                 )}
                 <div style={{ fontSize: 13, fontFamily: "monospace", fontWeight: "bold", color: "#ef4444", marginBottom: 10 }}>
-                  User ID: {selected.userIdRef || "—"}
+                  User ID: {selected.userIdRef || "-"}
                 </div>
                 <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{

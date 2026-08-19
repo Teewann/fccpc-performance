@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// GET — list memos (received + sent, with read status)
+// GET - list memos (received + sent, with read status)
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email)
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ memos: enriched });
 }
 
-// POST — create a memo with audience logic
+// POST - create a memo with audience logic
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email)

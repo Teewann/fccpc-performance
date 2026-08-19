@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -6,25 +6,48 @@ import { authOptions } from "@/lib/auth";
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    // ✅ Use session.user.id directly — no extra database round-trip
-    const userId = (session?.user as any)?.id;
-    if (!userId) {
+    if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // ✅ Run both queries in parallel (cuts latency in half)
-    const [notifications, unreadCount] = await Promise.all([
+    // ✅ Get user from database using email
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
+    const skip = (page - 1) * limit;
+
+    // ✅ Run queries with proper userId from database
+    const [notifications, unreadCount, total] = await Promise.all([
       prisma.notification.findMany({
-        where: { userId },
+        where: { userId: user.id },
         orderBy: { createdAt: "desc" },
-        take: 100,
+        skip,
+        take: limit,
       }),
       prisma.notification.count({
-        where: { userId, read: false },
+        where: { userId: user.id, read: false },
+      }),
+      prisma.notification.count({
+        where: { userId: user.id },
       }),
     ]);
 
-    return NextResponse.json({ notifications, unreadCount });
+    return NextResponse.json({
+      notifications,
+      unreadCount,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    });
   } catch (error) {
     console.error("Notifications error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -34,32 +57,39 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const userId = (session?.user as any)?.id;
-    if (!userId) {
+    if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // ✅ Get user from database using email
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     const body = await request.json();
     const { notifId, markAllRead, deleteId, deleteAll } = body;
 
     if (deleteAll) {
-      // Delete all READ notifications for this user
       await prisma.notification.deleteMany({
-        where: { userId, read: true },
+        where: { userId: user.id, read: true },
       });
     } else if (deleteId) {
-      // Delete a single notification (only if it belongs to this user)
       await prisma.notification.deleteMany({
-        where: { id: deleteId, userId },
+        where: { id: deleteId, userId: user.id },
       });
     } else if (markAllRead) {
       await prisma.notification.updateMany({
-        where: { userId, read: false },
+        where: { userId: user.id, read: false },
         data: { read: true },
       });
     } else if (notifId) {
       await prisma.notification.updateMany({
-        where: { id: notifId, userId },
+        where: { id: notifId, userId: user.id },
         data: { read: true },
       });
     }

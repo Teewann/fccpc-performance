@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-// ─── PUBLIC route — no session required ──────────────────────────────
+// ─── PUBLIC route - no session required ──────────────────────────────
 // This handles business self-registration and status checks
 // Route: src/app/api/portal/route.ts
 

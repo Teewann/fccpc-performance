@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// GET — fetch all KPIs, optionally filtered by department
+// GET - fetch all KPIs, optionally filtered by department
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST — create a new KPI
+// POST - create a new KPI
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH — update KPI progress
+// PATCH - update KPI progress
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -124,7 +124,7 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// DELETE — remove a KPI
+// DELETE - remove a KPI
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// GET — fetch messages for a conversation
+// GET - fetch messages for a conversation
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   });
   if (!participant) return NextResponse.json({ error: "Not a participant" }, { status: 403 });
 
-  // Heartbeat — being in the chat page and polling counts as "online"
+  // Heartbeat - being in the chat page and polling counts as "online"
   await prisma.user.update({
     where: { id: user.id },
     data: { lastSeen: new Date() },
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     take: 100,
   });
 
-  // Read status of all participants (for ticks) — everyone but me
+  // Read status of all participants (for ticks) - everyone but me
   const participants = await prisma.chatParticipant.findMany({
     where: { conversationId, userId: { not: user.id } },
     select: { userId: true, lastReadAt: true, user: { select: { name: true, lastSeen: true } } },
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ messages, participants });
 }
 
-// POST — send a message (now supports replyToId)
+// POST - send a message (now supports replyToId)
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ message });
 }
 
-// PATCH — edit a message (only the sender can edit) — now marks `edited: true`
+// PATCH - edit a message (only the sender can edit) - now marks `edited: true`
 export async function PATCH(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -156,7 +156,7 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({ message: updated });
 }
 
-// DELETE — delete a message (only the sender can delete)
+// DELETE - delete a message (only the sender can delete)
 export async function DELETE(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

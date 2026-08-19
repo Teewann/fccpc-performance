@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// GET — returns report data (the frontend generates the actual PDF/Excel)
+// GET - returns report data (the frontend generates the actual PDF/Excel)
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -21,6 +21,11 @@ export async function GET(request: NextRequest) {
       where: { email: session.user.email },
       select: { name: true, role: true, staffId: true },
     });
+
+    // Check if user is admin for audit trail
+    if (type === "audit-trail" && user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Only Administrators can access the audit trail report." }, { status: 403 });
+    }
 
     const now        = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -156,9 +161,26 @@ export async function GET(request: NextRequest) {
             rate >= 85 ? "Excellent" :
             rate >= 70 ? "Good"      :
             rate >= 55 ? "Satisfactory" : "Needs Improvement",
-          status: rate >= 85 ? "Excellent" : rate >= 70 ? "Good" : rate >= 55 ? "Satisfactory" : "Needs Improvement", // duplicate for status coloring
+          status: rate >= 85 ? "Excellent" : rate >= 70 ? "Good" : rate >= 55 ? "Satisfactory" : "Needs Improvement",
         };
       });
+    } else if (type === "audit-trail") {
+      const logs = await prisma.auditLog.findMany({
+        where: { createdAt: { gte: dateFrom } },
+        include: { user: { include: { department: true } } },
+        orderBy: { createdAt: "desc" },
+      });
+
+      rows = logs.map((l) => ({
+        staffName:  l.user.name,
+        staffEmail: l.user.email,
+        role:       l.user.role,
+        department: l.user.department?.name ?? "-",
+        action:     l.action.replace(/_/g, " "),
+        detail:     l.detail ?? "",
+        ipAddress:  l.ipAddress ?? "-",
+        dateTime:   new Date(l.createdAt).toLocaleString("en-GB"),
+      }));
     }
 
     return NextResponse.json({

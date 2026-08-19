@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
 
     const isPrivileged = ["ADMIN", "HR", "DIRECTOR", "EXECUTIVE"].includes(user.role);
 
-    // ── Location check — called by frontend before check-in ──────────
+    // ── Location check - called by frontend before check-in ──────────
     if (view === "location-check") {
       const ip           = getIp(request);
       const ipOnPremises = isFccpcIp(ip);
@@ -219,7 +219,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ── POST — check in ──────────────────────────────────────────────────
+// ── POST - check in ──────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "You have already checked in today" }, { status: 400 });
     }
 
-    // Late threshold — 8:30 AM
+    // Late threshold - 8:30 AM
     const lateThreshold = new Date(today);
     lateThreshold.setHours(WORK_START_HOUR, WORK_START_MINUTE + LATE_GRACE_MINS, 0, 0);
     const status = now > lateThreshold ? "LATE" : "PRESENT";
@@ -293,7 +293,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId,
         action: "CHECK_IN",
-        detail: `Checked in ${now.toLocaleTimeString("en-GB")} — ${status} — IP: ${ip || "unknown"} (${ipOnPremises ? "FCCPC" : "external"}) — GPS: ${gps.onPremises ? "within HQ" : gpsLat != null ? `outside range (${Math.round(gps.distanceMeters || 0)}m)` : "not provided"} — Premises: ${onPremises ? "ON" : "OFF"} — Method: ${detectedMethod}`,
+        detail: `Checked in ${now.toLocaleTimeString("en-GB")} - ${status} - IP: ${ip || "unknown"} (${ipOnPremises ? "FCCPC" : "external"}) - GPS: ${gps.onPremises ? "within HQ" : gpsLat != null ? `outside range (${Math.round(gps.distanceMeters || 0)}m)` : "not provided"} - Premises: ${onPremises ? "ON" : "OFF"} - Method: ${detectedMethod}`,
       },
     });
 
@@ -304,7 +304,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ── PATCH — check out ────────────────────────────────────────────────
+// ── PATCH - check out ────────────────────────────────────────────────
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -362,7 +362,7 @@ export async function PATCH(request: NextRequest) {
       data: {
         userId: user.id,
         action: "CHECK_OUT",
-        detail: `Checked out ${now.toLocaleTimeString("en-GB")} — ${hoursWorked}h — ${finalStatus} — Location: ${checkOutOnPremises ? "on-premises" : "outside"} (${detectedMethod})`,
+        detail: `Checked out ${now.toLocaleTimeString("en-GB")} - ${hoursWorked}h - ${finalStatus} - Location: ${checkOutOnPremises ? "on-premises" : "outside"} (${detectedMethod})`,
       },
     });
 

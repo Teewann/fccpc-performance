@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
         },
       });
 
+      // ✅ Detail view - NO CACHING (dynamic data)
       return NextResponse.json({
         detail: {
           id: dept.id, name: dept.name, shortCode: dept.shortCode,
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // ── List view — all departments with real scores ──────────────────
+    // ── List view - all departments with real scores ──────────────────
     const departments = await prisma.department.findMany({
       include: {
         _count: { select: { users: true } },
@@ -138,7 +139,15 @@ export async function GET(request: NextRequest) {
       return b.approvalRate - a.approvalRate;
     });
 
-    return NextResponse.json({ departments: enriched });
+    // ✅ LIST VIEW - WITH CACHING (departments rarely change)
+    return NextResponse.json(
+      { departments: enriched },
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+        },
+      }
+    );
   } catch (error) {
     console.error("[Departments API]", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

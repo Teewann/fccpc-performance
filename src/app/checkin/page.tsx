@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +83,7 @@ export default function CheckInPage() {
     notes:           "",
   });
 
-  // Task time entries — one per selected active task
+  // Task time entries - one per selected active task
   const [taskEntries,  setTaskEntries]  = useState<TaskTimeEntry[]>([]);
   const [selectedTasks,setSelectedTasks]= useState<Set<string>>(new Set());
   const [freeHours,    setFreeHours]    = useState<number>(0); // hours NOT from tasks
@@ -297,7 +297,7 @@ export default function CheckInPage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
-                    Step 1 — Which tasks did you work on today?
+                    Step 1 - Which tasks did you work on today?
                   </div>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
                     Tick each task and enter how many hours you spent on it.
@@ -373,7 +373,7 @@ export default function CheckInPage() {
                             </div>
                           </div>
 
-                          {/* Hours input — only shows when selected */}
+                          {/* Hours input - only shows when selected */}
                           {selected && entry && (
                             <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}
                               onClick={e => e.stopPropagation()}>
@@ -421,7 +421,7 @@ export default function CheckInPage() {
                     <div style={{ display: "flex", justifyContent: "flex-end", padding: "6px 4px" }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: totalHours > 12 ? "#f87171" : "#4ade80" }}>
                         Total: {totalHours}h today
-                        {totalHours > 12 && " ⚠ Exceeds 12h — please verify"}
+                        {totalHours > 12 && " ⚠ Exceeds 12h - please verify"}
                       </span>
                     </div>
                   )}
@@ -432,7 +432,7 @@ export default function CheckInPage() {
             {/* ── Step 2: Work narrative ────────────────────────── */}
             <div style={card}>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
-                Step 2 — Describe your work today
+                Step 2 - Describe your work today
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 18px" }}>
@@ -453,13 +453,13 @@ export default function CheckInPage() {
                   </select>
                 </div>
 
-                {/* Title — pre-fill from selected tasks */}
+                {/* Title - pre-fill from selected tasks */}
                 <div style={{ gridColumn: "1/-1" }}>
                   <label style={lbl}>
                     Log title
                     {taskEntries.length > 0 && (
                       <span style={{ fontWeight: 400, color: "#60a5fa", textTransform: "none", marginLeft: 8 }}>
-                        (auto-filled from selected tasks — edit if needed)
+                        (auto-filled from selected tasks - edit if needed)
                       </span>
                     )}
                   </label>
@@ -604,7 +604,7 @@ export default function CheckInPage() {
                             Score: {log.supervisorScore}/100
                             {log.supervisorComment && (
                               <span style={{ fontWeight: 400, color: "var(--text-muted)", marginLeft: 6 }}>
-                                — {log.supervisorComment.slice(0, 40)}{log.supervisorComment.length > 40 ? "…" : ""}
+                                - {log.supervisorComment.slice(0, 40)}{log.supervisorComment.length > 40 ? "…" : ""}
                               </span>
                             )}
                           </div>

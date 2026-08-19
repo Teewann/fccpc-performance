@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -392,7 +392,7 @@ export default function LeavePage() {
             )}
           </div>
 
-          {/* Review panel — only for privileged users on PENDING requests */}
+          {/* Review panel - only for privileged users on PENDING requests */}
           {selected && (
             <div className="card-bg" style={{ borderRadius: 14, padding: 24, alignSelf: "start", position: "sticky", top: 24 }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, paddingBottom: 14, borderBottom: "0.5px solid var(--border-soft)" }}>
@@ -431,7 +431,7 @@ export default function LeavePage() {
                 </div>
               </div>
 
-              {/* Review actions — only privileged + only PENDING */}
+              {/* Review actions - only privileged + only PENDING */}
               {isPrivileged && selected.status === "PENDING" && (
                 <>
                   <div style={{ marginBottom: 16 }}>

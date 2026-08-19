@@ -1,7 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+
+// ─── Helper: build zero counts ──────────────────────────────────────
+function buildZeroCounts() {
+  return {
+    total: 0, pending: 0, inProgress: 0, underTreatment: 0,
+    awaitingResponse: 0, treated: 0, completed: 0, escalated: 0,
+    forwarded: 0, overdue: 0, myLoad: 0,
+  };
+}
 
 // ─── Generate random 10-character task ref ────────────────────────────
 async function generateTaskRef(): Promise<string> {
@@ -70,6 +79,11 @@ export async function GET(request: NextRequest) {
     const view = searchParams.get("view") || "assigned";
     const search = searchParams.get("search") || "";
     const targetUserId = searchParams.get("userId");
+    
+    // ✅ PAGINATION: Get page and limit from query params
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
+    const skip = (page - 1) * limit;
 
     // Special endpoint: return Finance staff list for payment routing UI
     if (searchParams.get("financeStaff") === "1") {
@@ -77,38 +91,82 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ financeStaff: staff });
     }
 
-    const isPrivileged = ["DIRECTOR", "SUPERVISOR", "HR", "ADMIN", "EXECUTIVE"].includes(user.role);
+    // ✅ ROLE-BASED VISIBILITY
+    const isAdmin = user.role === "ADMIN";
+    const isExecutive = user.role === "EXECUTIVE";
+    const isDirector = user.role === "DIRECTOR";
+    const isSupervisor = user.role === "SUPERVISOR";
+    const isHR = user.role === "HR";
+    const isPrivileged = isAdmin || isExecutive || isDirector || isSupervisor || isHR;
 
-    // ── Build view conditions ──────────────────────────────────────
+    // ── Build view conditions based on role ──────────────────────
     let viewCondition: any = {};
 
-    if (targetUserId && isPrivileged) {
+    // ── TARGET USER (Admin/Director/Executive can view specific user's tasks) ──
+    if (targetUserId && (isAdmin || isExecutive || isDirector)) {
       viewCondition = { assignedToId: targetUserId };
-    } else if (view === "assigned") {
+    } 
+    // ── VIEW: ASSIGNED ──
+    else if (view === "assigned") {
       viewCondition = {
         OR: [
           { assignedToId: user.id },
           { forwardedToId: user.id },
         ],
       };
-    } else if (view === "created") {
+    } 
+    // ── VIEW: CREATED ──
+    else if (view === "created") {
       viewCondition = { createdById: user.id };
-    } else if (view === "department") {
+    } 
+    // ── VIEW: DEPARTMENT (Directors/Supervisors see their department) ──
+    else if (view === "department") {
       if (!user.departmentId) {
-        return NextResponse.json({ tasks: [], counts: buildZeroCounts(), loadWarning: "" });
+        return NextResponse.json({ tasks: [], counts: buildZeroCounts(), loadWarning: "", total: 0, page: 1, pages: 0 });
       }
-      viewCondition = { departmentId: user.departmentId };
-    } else if (view === "all") {
-      const deptCondition = user.departmentId ? { departmentId: user.departmentId } : null;
-      viewCondition = {
-        OR: [
-          { assignedToId: user.id },
-          { forwardedToId: user.id },
-          { createdById: user.id },
-          ...(deptCondition ? [deptCondition] : []),
-        ],
-      };
-    } else {
+      // Directors and Supervisors see ALL department tasks
+      if (isDirector || isSupervisor) {
+        viewCondition = { departmentId: user.departmentId };
+      } else {
+        // Staff see only their own tasks in department view
+        viewCondition = {
+          OR: [
+            { assignedToId: user.id },
+            { createdById: user.id },
+          ],
+        };
+      }
+    } 
+    // ── VIEW: ALL ──
+    else if (view === "all") {
+      // ADMIN or EXECUTIVE: see ALL tasks system-wide
+      if (isAdmin || isExecutive) {
+        viewCondition = {}; // No filter = all tasks
+      } 
+      // DIRECTOR or SUPERVISOR: see ALL tasks in their department
+      else if (isDirector || isSupervisor) {
+        if (!user.departmentId) {
+          viewCondition = { createdById: user.id }; // Fallback to their own
+        } else {
+          viewCondition = { departmentId: user.departmentId };
+        }
+      } 
+      // STAFF: see their own + department tasks they're involved in
+      else {
+        const deptCondition = user.departmentId ? { departmentId: user.departmentId } : null;
+        viewCondition = {
+          OR: [
+            { assignedToId: user.id },
+            { forwardedToId: user.id },
+            { createdById: user.id },
+            ...(deptCondition ? [deptCondition] : []),
+          ],
+        };
+      }
+    } 
+    // ── DEFAULT ──
+    else {
+      // Staff see only their own tasks
       viewCondition = {
         OR: [
           { assignedToId: user.id },
@@ -135,22 +193,27 @@ export async function GET(request: NextRequest) {
 
     const whereClause = andConditions.length === 1 ? andConditions[0] : { AND: andConditions };
 
-    // ── Execute query with proper includes ──────────────────────────
-    const tasks = await prisma.task.findMany({
-      where: whereClause,
-      include: {
-        department: { select: { name: true } },
-        assignedTo: { 
-          select: { id: true, name: true, role: true, department: { select: { name: true } } } 
+    // ── Execute query with proper includes AND PAGINATION ──────────
+    const [tasks, total] = await Promise.all([
+      prisma.task.findMany({
+        where: whereClause,
+        include: {
+          department: { select: { name: true } },
+          assignedTo: { 
+            select: { id: true, name: true, role: true, department: { select: { name: true } } } 
+          },
+          createdBy: { select: { id: true, name: true, role: true } },
+          forwardedTo: { 
+            select: { id: true, name: true, role: true, department: { select: { name: true } } } 
+          },
+          forwardedFrom: { select: { id: true, name: true, role: true } },
         },
-        createdBy: { select: { id: true, name: true, role: true } },
-        forwardedTo: { 
-          select: { id: true, name: true, role: true, department: { select: { name: true } } } 
-        },
-        forwardedFrom: { select: { id: true, name: true, role: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+        orderBy: { createdAt: "desc" },
+        skip: skip,
+        take: limit,
+      }),
+      prisma.task.count({ where: whereClause }),
+    ]);
 
     // ── Sort EVC tasks to top ──────────────────────────────────────
     const sortedTasks = [
@@ -222,19 +285,19 @@ export async function GET(request: NextRequest) {
       myLoad,
     };
 
-    return NextResponse.json({ tasks: sortedTasks, counts, loadWarning });
+    // ✅ Return with pagination metadata
+    return NextResponse.json({ 
+      tasks: sortedTasks, 
+      counts, 
+      loadWarning,
+      total,
+      page,
+      pages: Math.ceil(total / limit)
+    });
   } catch (error) {
     console.error("GET /api/tasks error:", error);
     return NextResponse.json({ error: "Server error: " + (error as Error).message }, { status: 500 });
   }
-}
-
-function buildZeroCounts() {
-  return {
-    total: 0, pending: 0, inProgress: 0, underTreatment: 0,
-    awaitingResponse: 0, treated: 0, completed: 0, escalated: 0,
-    forwarded: 0, overdue: 0, myLoad: 0,
-  };
 }
 
 // ─── POST ────────────────────────────────────────────────────────────
@@ -391,7 +454,7 @@ export async function POST(request: NextRequest) {
         const fallbackFinance = await getFinanceStaff([user.id]);
         for (const fs of fallbackFinance) {
           await prisma.notification.create({
-            data: { userId: fs.id, title: notifTitle, message: `${notifMsg} (No specific routing found — broadcast to Finance)`, type: "INFO", link: "/tasks" },
+            data: { userId: fs.id, title: notifTitle, message: `${notifMsg} (No specific routing found - broadcast to Finance)`, type: "INFO", link: "/tasks" },
           });
         }
       } else {
@@ -419,7 +482,7 @@ export async function POST(request: NextRequest) {
       });
 
     } else {
-      // Normal task — notify assignee
+      // Normal task - notify assignee
       if (primaryAssigneeId && primaryAssigneeId !== user.id) {
         await prisma.notification.create({
           data: {

@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// ─── GET — full EVC intelligence data ────────────────────────────────
+// ─── GET - full EVC intelligence data ────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -161,7 +161,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ─── POST — revenue item OR annotation ───────────────────────────────
+// ─── POST - revenue item OR annotation ───────────────────────────────
 // Handles both JSON and FormData
 export async function POST(request: NextRequest) {
   try {
@@ -269,7 +269,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── PATCH — EVC approves or rejects a revenue item ──────────────────
+// ─── PATCH - EVC approves or rejects a revenue item ──────────────────
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

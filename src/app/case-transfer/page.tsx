@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,7 @@ type Transfer = {
 type Stats = { total: number; pendingAcceptance: number; inProgress: number; completed: number };
 
 const OFFICES = [
-  "HQ — Abuja",
+  "HQ - Abuja",
   "Lagos Zone", "Kano Zone", "Port Harcourt Zone",
   "Enugu Zone", "Ibadan Zone", "Maiduguri Zone",
   "Ilorin", "Asaba", "Uyo", "Jos", "Sokoto",
@@ -131,7 +131,7 @@ export default function CaseTransferPage() {
 
   const emptyForm = {
     caseRef: "", caseTitle: "", caseType: CASE_TYPES[0],
-    description: "", fromOffice: "HQ — Abuja", toOffice: "",
+    description: "", fromOffice: "HQ - Abuja", toOffice: "",
     transferType: "INTER_DEPARTMENTAL", priority: "MEDIUM",
     transferNote: "", targetUserId: "", dueDate: "",
   };
@@ -296,7 +296,7 @@ export default function CaseTransferPage() {
                 <div>
                   <label style={lbl}>To office / destination *</label>
                   <select style={inp} value={form.toOffice} onChange={(e) => setForm({ ...form, toOffice: e.target.value })} required>
-                    <option value="">— Select destination —</option>
+                    <option value="">- Select destination -</option>
                     {offices.filter((o) => o !== form.fromOffice).map((o) => <option key={o} value={o}>{o}</option>)}
                   </select>
                 </div>
@@ -314,16 +314,16 @@ export default function CaseTransferPage() {
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
                     <option value="HIGH">High</option>
-                    <option value="CRITICAL">Critical — Urgent</option>
+                    <option value="CRITICAL">Critical - Urgent</option>
                   </select>
                 </div>
 
                 <div>
                   <label style={lbl}>Assign to specific person (optional)</label>
                   <select style={inp} value={form.targetUserId} onChange={(e) => setForm({ ...form, targetUserId: e.target.value })}>
-                    <option value="">— No specific person —</option>
+                    <option value="">- No specific person -</option>
                     {staffList.map((s) => (
-                      <option key={s.id} value={s.id}>{s.name} — {s.jobTitle || s.role}</option>
+                      <option key={s.id} value={s.id}>{s.name} - {s.jobTitle || s.role}</option>
                     ))}
                   </select>
                 </div>

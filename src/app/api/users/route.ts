@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -75,7 +75,7 @@ async function sendPasswordResetEmail(toEmail: string, toName: string, adminName
   }
 }
 
-// ─── GET — list users (with department filtering for Directors) ─────────
+// ─── GET - list users (with department filtering for Directors) ─────────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -94,6 +94,11 @@ export async function GET(request: NextRequest) {
     const isActive = searchParams.get("isActive") === "true";
     const departmentId = searchParams.get("deptId") || null;
     const directory = searchParams.get("directory") === "true";
+    
+    // ✅ PAGINATION
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
+    const skip = (page - 1) * limit;
 
     const where: any = {};
 
@@ -122,20 +127,27 @@ export async function GET(request: NextRequest) {
       where.id = currentUser.id;
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true, name: true, email: true, role: true, jobTitle: true,
-        staffId: true, isActive: true, createdAt: true, phone: true,
-        userIdRef: true,
-        photo: true,
-        gradeLevel: true,   // ← ADDED
-        department: { select: { id: true, name: true, shortCode: true } },
-        unit: { select: { id: true, name: true } },
-      },
-      orderBy: { name: "asc" },
-    });
+    // ✅ Run with pagination
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true, name: true, email: true, role: true, jobTitle: true,
+          staffId: true, isActive: true, createdAt: true, phone: true,
+          userIdRef: true,
+          photo: true,
+          gradeLevel: true,
+          department: { select: { id: true, name: true, shortCode: true } },
+          unit: { select: { id: true, name: true } },
+        },
+        orderBy: { name: "asc" },
+        skip,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
 
+    // Departments and units (always return all - these are small lookup tables)
     const departments = await prisma.department.findMany({
       orderBy: { name: "asc" },
     });
@@ -143,16 +155,21 @@ export async function GET(request: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    const total = users.length;
-
-    return NextResponse.json({ users, departments, units, total });
+    return NextResponse.json({
+      users,
+      departments,
+      units,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    });
   } catch (error) {
     console.error("[Users GET]", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
 
-// ─── POST — create user ───────────────────────────────────────────────
+// ─── POST - create user ───────────────────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -202,7 +219,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: admin.id,
         action: "USER_CREATED",
-        detail: `Admin created user: ${user.name} (${user.email}) — Role: ${role}${phone ? ` — Phone: ${phone}` : ""}`,
+        detail: `Admin created user: ${user.name} (${user.email}) - Role: ${role}${phone ? ` - Phone: ${phone}` : ""}`,
       },
     });
 
@@ -213,7 +230,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── PATCH — update user or reset password ────────────────────────────
+// ─── PATCH - update user or reset password ────────────────────────────
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -266,8 +283,8 @@ export async function PATCH(request: NextRequest) {
         userId: admin.id,
         action: newPassword ? "PASSWORD_RESET" : "USER_UPDATED",
         detail: newPassword
-          ? `Admin reset password for ${target.name} (${target.email}) — Email notification: ${emailSent ? "sent" : "failed or skipped"}`
-          : `Admin updated user: ${target.name} — Fields: ${Object.keys(updateData).join(", ")}`,
+          ? `Admin reset password for ${target.name} (${target.email}) - Email notification: ${emailSent ? "sent" : "failed or skipped"}`
+          : `Admin updated user: ${target.name} - Fields: ${Object.keys(updateData).join(", ")}`,
       },
     });
 
@@ -278,7 +295,7 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-// ─── DELETE — remove user ─────────────────────────────────────────────
+// ─── DELETE - remove user ─────────────────────────────────────────────
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

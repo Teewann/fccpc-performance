@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
 
@@ -64,6 +64,17 @@ const REPORTS: ReportConfig[] = [
     icon: "👤",
     iconBg: "#1a0a2e",
     iconColor: "#a78bfa",
+    formats: ["PDF", "Excel"],
+  },
+  {
+    id: "audit-trail",
+    title: "System Audit Trail",
+    description:
+      "Every recorded system action - logins, approvals, check-ins, edits - with user, detail, IP and timestamp. Admin only.",
+    type: "audit-trail",
+    icon: "🔒",
+    iconBg: "#1f0707",
+    iconColor: "#f87171",
     formats: ["PDF", "Excel"],
   },
 ];
@@ -295,7 +306,7 @@ async function exportToPDF(
           doc.setTextColor(...cellColor);
           doc.setFontSize(baseFontSize);
 
-          cell.lines.forEach((line, li) => {
+          cell.lines.forEach((line: string, li: number) => {
             if (cell.alignment === "left") {
               doc.text(line, leftX, startY + li * lineHeight, { align: "left" });
             } else {
@@ -438,7 +449,7 @@ async function exportToPDF(
       const textBlockHeight = lines.length * lineHeight;
       const startY = y + (rowHeight - textBlockHeight) / 2 + lineHeight * 0.8;
 
-      lines.forEach((line, li) => {
+      lines.forEach((line: string, li: number) => {
         doc.text(line, centerX, startY + li * lineHeight, { align: "center" });
       });
     });
@@ -461,11 +472,21 @@ async function exportToPDF(
   doc.save(`${filename}.pdf`);
 }
 
-// ─── Main component (UI unchanged) ───────────────────────────
+// ─── Main component ───────────────────────────────────────────
 export default function ReportsPage() {
   const [period, setPeriod] = useState<Period>("monthly");
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [lastExported, setLastExported] = useState<Record<string, string>>({});
+  const [role, setRole] = useState("");
+
+  useEffect(() => {
+    fetch("/api/settings/account")
+      .then(r => r.json())
+      .then(d => { 
+        if (d.user) setRole(d.user.role); 
+      })
+      .catch(() => {});
+  }, []);
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long",
@@ -587,7 +608,7 @@ export default function ReportsPage() {
 
         {/* Report cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
-          {REPORTS.map((report) => (
+          {REPORTS.filter(r => r.id !== "audit-trail" || role === "ADMIN").map((report) => (
             <div
               key={report.id}
               className="card-bg"

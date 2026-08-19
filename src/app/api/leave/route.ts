@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// GET — fetch leave requests
+// GET - fetch leave requests
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST — submit leave request
+// POST - submit leave request
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: user.id,
         action: "LEAVE_REQUEST_SUBMITTED",
-        detail: `${type} leave — ${days} working days`,
+        detail: `${type} leave - ${days} working days`,
       },
     });
 
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH — Director/HR approves or rejects
+// PATCH - Director/HR approves or rejects
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -193,7 +193,7 @@ export async function PATCH(request: NextRequest) {
       data: {
         userId: reviewer.id,
         action: `LEAVE_${status}`,
-        detail: `Leave for ${updated.user.name} — ${updated.days} days`,
+        detail: `Leave for ${updated.user.name} - ${updated.days} days`,
       },
     });
 

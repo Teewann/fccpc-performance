@@ -1,4 +1,4 @@
-// FILE PATH: app/api/profile/photo/route.ts
+﻿// FILE PATH: app/api/profile/photo/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
       select: { id: true, name: true, photo: true },
     });
 
-    // Audit log (optional — only runs if AuditLog model exists)
+    // Audit log (optional - only runs if AuditLog model exists)
     try {
       await prisma.auditLog.create({
         data: {

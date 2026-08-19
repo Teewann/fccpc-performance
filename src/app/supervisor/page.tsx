@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -485,7 +485,7 @@ export default function SupervisorPage() {
                             onChange={e => setReviewScore(Number(e.target.value))}
                             style={{ width:"100%", accentColor:"#a78bfa", cursor:"pointer" }} />
                           <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"var(--text-muted)", marginTop:4 }}>
-                            <span>0 — Poor</span><span>50 — Average</span><span>100 — Excellent</span>
+                            <span>0 - Poor</span><span>50 - Average</span><span>100 - Excellent</span>
                           </div>
                         </div>
 

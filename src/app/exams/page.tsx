@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -346,7 +346,7 @@ export default function ExamsPage() {
               {result.percentage}%
             </div>
             <div style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginTop: 12 }}>
-              {result.passed ? "Congratulations — You passed!" : "Keep studying — You did not pass"}
+              {result.passed ? "Congratulations - You passed!" : "Keep studying - You did not pass"}
             </div>
             <div style={{ fontSize: 15, color: "var(--text-muted)", marginTop: 8 }}>
               Score: {result.score} / {result.totalMarks} marks · Pass mark: {result.passMark}%
@@ -424,7 +424,7 @@ export default function ExamsPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div style={{ gridColumn: "1/-1" }}>
                   <label style={lbl}>Exam title *</label>
-                  <input style={inp} value={createForm.title} onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })} placeholder="e.g. Promotion Exam — GL-08 to GL-10" required />
+                  <input style={inp} value={createForm.title} onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })} placeholder="e.g. Promotion Exam - GL-08 to GL-10" required />
                 </div>
                 <div style={{ gridColumn: "1/-1" }}>
                   <label style={lbl}>Description</label>

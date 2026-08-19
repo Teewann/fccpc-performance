@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
 import { AGENCY } from "@/config/agency.config";
@@ -33,6 +34,7 @@ type Kpi = {
   tasksCompleted: number;
   leaveInRange: number;
   leavePending: number;
+  isPrivileged?: boolean;
 };
 
 type TrendPoint = { label: string; submitted: number; approved: number; rejected: number };
@@ -69,13 +71,13 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; border: string }
 
 // ─── Sub-components ───────────────────────────────────────────────────
 function KpiCard({
-  label, value, sub, color, pct, loading,
+  label, value, sub, color, pct, loading, href,
 }: {
   label: string; value: string | number; sub: string;
-  color: string; pct: number; loading: boolean;
+  color: string; pct: number; loading: boolean; href?: string;
 }) {
-  return (
-    <div className="card-bg" style={{ borderRadius: 14, padding: "20px 22px" }}>
+  const cardContent = (
+    <div className="card-bg" style={{ borderRadius: 14, padding: "20px 22px", height: "100%", cursor: href ? "pointer" : "default", transition: "all 0.15s" }}>
       <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
         {label}
       </div>
@@ -93,6 +95,11 @@ function KpiCard({
       </div>
     </div>
   );
+
+  if (href) {
+    return <Link href={href} style={{ display: "block", height: "100%", textDecoration: "none" }}>{cardContent}</Link>;
+  }
+  return cardContent;
 }
 
 function ChartTooltip({ active, payload, label }: any) {
@@ -138,6 +145,7 @@ export default function DashboardPage() {
   const [showPicker, setShowPicker] = useState(false);
   const [data,       setData]       = useState<DashData | null>(null);
   const [loading,    setLoading]    = useState(true);
+  const [error,      setError]      = useState<string | null>(null);
   const [userInfo,   setUserInfo]   = useState({
     name: "Admin",
     role: "ADMIN",
@@ -145,6 +153,9 @@ export default function DashboardPage() {
     photo: null as string | null,
     userIdRef: null as string | null,
   });
+
+  // Check if user is privileged (can see system-wide stats)
+  const isPrivileged = data?.kpi?.isPrivileged ?? false;
 
   const today = new Date().toLocaleDateString("en-GB", {
     weekday: "long", year: "numeric", month: "long", day: "numeric",
@@ -172,6 +183,7 @@ export default function DashboardPage() {
 
   const fetchData = useCallback(async (f: Filter, from?: string, to?: string) => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({ filter: f });
       if (f === "custom" && from && to) {
@@ -179,10 +191,54 @@ export default function DashboardPage() {
         params.set("to", to);
       }
       const res  = await fetch(`/api/dashboard?${params}`);
+      
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`API error (${res.status}): ${errText}`);
+      }
+      
       const json = await res.json();
-      setData(json);
-    } catch {
-      setData(null);
+      
+      // ✅ Ensure all arrays exist even if empty
+      setData({
+        ...json,
+        trendData: json.trendData || [],
+        departmentChart: json.departmentChart || [],
+        pieData: json.pieData || [],
+        taskBreakdown: json.taskBreakdown || [],
+        performers: json.performers || [],
+        recentLogs: json.recentLogs || [],
+        lowActivity: json.lowActivity || [],
+      });
+    } catch (err: any) {
+      console.error("[Dashboard] Fetch error:", err);
+      setError(err.message || "Failed to load dashboard data");
+      // ✅ Set empty data so page doesn't crash
+      setData({
+        kpi: {
+          totalStaff: 0,
+          activeDepartments: 0,
+          logsInRange: 0,
+          approvedLogs: 0,
+          rejectedLogs: 0,
+          pendingLogs: 0,
+          queriedLogs: 0,
+          submittedInRange: 0,
+          tasksInRange: 0,
+          tasksPending: 0,
+          tasksCompleted: 0,
+          leaveInRange: 0,
+          leavePending: 0,
+          isPrivileged: false,
+        },
+        trendData: [],
+        departmentChart: [],
+        pieData: [],
+        taskBreakdown: [],
+        performers: [],
+        recentLogs: [],
+        lowActivity: [],
+      });
     } finally {
       setLoading(false);
     }
@@ -202,6 +258,15 @@ export default function DashboardPage() {
   const kpi = data?.kpi;
   const pct = (n: number, total: number) =>
     total > 0 ? Math.round((n / total) * 100) : 0;
+
+  // ✅ Safely get array data with fallbacks
+  const trendData = data?.trendData || [];
+  const departmentChart = data?.departmentChart || [];
+  const pieData = data?.pieData || [];
+  const taskBreakdown = data?.taskBreakdown || [];
+  const performers = data?.performers || [];
+  const recentLogs = data?.recentLogs || [];
+  const lowActivity = data?.lowActivity || [];
 
   return (
     <div className="flex min-h-screen" style={{ background: "var(--bg-page)" }}>
@@ -232,11 +297,9 @@ export default function DashboardPage() {
               <div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>{userInfo.name}</div>
                 <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{userInfo.role.charAt(0) + userInfo.role.slice(1).toLowerCase()}</div>
-                {/* ✅ User ID in red */}
                 <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "system-ui, -apple-system, sans-serif", color: "#ef4444", marginTop: 2 }}>
                   USER ID: {userInfo.userIdRef || "—"}
-                  
-                  </div>
+                </div>
               </div>
             </div>
 
@@ -284,22 +347,33 @@ export default function DashboardPage() {
           {loading && (
             <span style={{ fontSize: 14, color: "var(--text-hint)", marginLeft: 4 }}>Updating...</span>
           )}
+          {error && (
+            <span style={{ fontSize: 14, color: "#ef4444", marginLeft: 4 }}>⚠️ {error}</span>
+          )}
         </div>
 
         {/* ── KPI row 1 ──────────────────────────────────────────────── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
-          <KpiCard label="Total staff"     value={kpi?.totalStaff ?? 0}      sub="active accounts"                                              color="#a78bfa" pct={100}                                               loading={loading} />
-          <KpiCard label="Logs submitted"  value={kpi?.logsInRange ?? 0}     sub={`in ${FILTER_LABELS[filter].toLowerCase()}`}                 color="#3b82f6" pct={pct(kpi?.logsInRange ?? 0, (kpi?.totalStaff ?? 1) * 3)} loading={loading} />
-          <KpiCard label="Approved logs"   value={kpi?.approvedLogs ?? 0}    sub={`${pct(kpi?.approvedLogs ?? 0, kpi?.logsInRange ?? 1)}% approval rate`}  color="#22c55e" pct={pct(kpi?.approvedLogs ?? 0, kpi?.logsInRange ?? 1)}    loading={loading} />
-          <KpiCard label="Pending reviews" value={kpi?.pendingLogs ?? 0}     sub="need attention (all-time)"                                    color="#f59e0b" pct={pct(kpi?.pendingLogs ?? 0, kpi?.logsInRange ?? 1)}    loading={loading} />
+          {isPrivileged ? (
+            <KpiCard label="Total staff"     value={kpi?.totalStaff ?? 0}      sub="active accounts"                                              color="#a78bfa" pct={100}                                               loading={loading} href="/users" />
+          ) : (
+            <KpiCard label="My Logs"         value={kpi?.logsInRange ?? 0}     sub={`in ${FILTER_LABELS[filter].toLowerCase()}`}                 color="#3b82f6" pct={pct(kpi?.logsInRange ?? 0, (kpi?.totalStaff ?? 1) * 3)} loading={loading} href="/staff-logs" />
+          )}
+          <KpiCard label="Logs submitted"  value={kpi?.logsInRange ?? 0}     sub={`in ${FILTER_LABELS[filter].toLowerCase()}`}                 color="#3b82f6" pct={pct(kpi?.logsInRange ?? 0, (kpi?.totalStaff ?? 1) * 3)} loading={loading} href="/staff-logs" />
+          <KpiCard label="Approved logs"   value={kpi?.approvedLogs ?? 0}    sub={`${pct(kpi?.approvedLogs ?? 0, kpi?.logsInRange ?? 1)}% approval rate`}  color="#22c55e" pct={pct(kpi?.approvedLogs ?? 0, kpi?.logsInRange ?? 1)}    loading={loading} href="/staff-logs?status=APPROVED" />
+          <KpiCard label="Pending reviews" value={kpi?.pendingLogs ?? 0}     sub="need attention (all-time)"                                    color="#f59e0b" pct={pct(kpi?.pendingLogs ?? 0, kpi?.logsInRange ?? 1)}    loading={loading} href="/staff-logs?status=SUBMITTED" />
         </div>
 
         {/* ── KPI row 2 ──────────────────────────────────────────────── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
-          <KpiCard label="Rejected logs"    value={kpi?.rejectedLogs ?? 0}    sub={`${pct(kpi?.rejectedLogs ?? 0, kpi?.logsInRange ?? 1)}% rejection rate`} color="#ef4444" pct={pct(kpi?.rejectedLogs ?? 0, kpi?.logsInRange ?? 1)}   loading={loading} />
-          <KpiCard label="Tasks created"    value={kpi?.tasksInRange ?? 0}    sub={`in ${FILTER_LABELS[filter].toLowerCase()}`}                 color="#06b6d4" pct={pct(kpi?.tasksInRange ?? 0, (kpi?.totalStaff ?? 1) * 2)} loading={loading} />
-          <KpiCard label="Tasks pending"    value={kpi?.tasksPending ?? 0}    sub="unresolved (all-time)"                                        color="#f97316" pct={pct(kpi?.tasksPending ?? 0, kpi?.tasksInRange ?? 1)}    loading={loading} />
-          <KpiCard label="Departments"      value={kpi?.activeDepartments ?? 0} sub="registered"                                                 color="#22c55e" pct={100}                                                  loading={loading} />
+          <KpiCard label="Rejected logs"    value={kpi?.rejectedLogs ?? 0}    sub={`${pct(kpi?.rejectedLogs ?? 0, kpi?.logsInRange ?? 1)}% rejection rate`} color="#ef4444" pct={pct(kpi?.rejectedLogs ?? 0, kpi?.logsInRange ?? 1)}   loading={loading} href="/staff-logs?status=REJECTED" />
+          <KpiCard label="Tasks created"    value={kpi?.tasksInRange ?? 0}    sub={`in ${FILTER_LABELS[filter].toLowerCase()}`}                 color="#06b6d4" pct={pct(kpi?.tasksInRange ?? 0, (kpi?.totalStaff ?? 1) * 2)} loading={loading} href="/tasks?view=created" />
+          <KpiCard label="Tasks pending"    value={kpi?.tasksPending ?? 0}    sub="unresolved (all-time)"                                        color="#f97316" pct={pct(kpi?.tasksPending ?? 0, kpi?.tasksInRange ?? 1)}    loading={loading} href="/tasks?view=assigned" />
+          {isPrivileged ? (
+            <KpiCard label="Departments"      value={kpi?.activeDepartments ?? 0} sub="registered"                                                 color="#22c55e" pct={100}                                                  loading={loading} href="/departments" />
+          ) : (
+            <KpiCard label="Leave requests"   value={kpi?.leavePending ?? 0}     sub="pending approval"                                            color="#a78bfa" pct={pct(kpi?.leavePending ?? 0, kpi?.leaveInRange ?? 1)}    loading={loading} href="/leave" />
+          )}
         </div>
 
         {/* ── Row: Line chart + Log status pie ─────────────────────── */}
@@ -311,9 +385,9 @@ export default function DashboardPage() {
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
               Log submissions by status over time
             </p>
-            {!data || data.trendData.length === 0 ? <EmptyChart height={220} /> : (
+            {trendData.length === 0 ? <EmptyChart height={220} /> : (
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={data.trendData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
+                <LineChart data={trendData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="label" tick={{ fontSize: 13, fill: "var(--text-hint)" }} />
                   <YAxis tick={{ fontSize: 13, fill: "var(--text-hint)" }} allowDecimals={false} />
@@ -333,11 +407,11 @@ export default function DashboardPage() {
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 12 }}>
               For selected period
             </p>
-            {!data || data.pieData.every((p) => p.value === 0) ? <EmptyChart height={160} /> : (
+            {pieData.every((p) => p.value === 0) ? <EmptyChart height={160} /> : (
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
-                  <Pie data={data.pieData} dataKey="value" innerRadius={44} outerRadius={68} paddingAngle={3}>
-                    {data.pieData.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                  <Pie data={pieData} dataKey="value" innerRadius={44} outerRadius={68} paddingAngle={3}>
+                    {pieData.map((e, i) => <Cell key={i} fill={e.fill} />)}
                   </Pie>
                   <Tooltip
                     formatter={(v: any, n: any) => [v, n]}
@@ -347,7 +421,7 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
-              {data?.pieData.map((p) => (
+              {pieData.map((p) => (
                 <div key={p.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.fill, flexShrink: 0 }} />
@@ -360,26 +434,28 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Department bar chart ──────────────────────────────────── */}
-        <div className="card-bg" style={{ borderRadius: 14, padding: 24, marginBottom: 16 }}>
-          <SectionTitle>Department activity</SectionTitle>
-          <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
-            Log submissions per department in selected period
-          </p>
-          {!data || data.departmentChart.length === 0 ? <EmptyChart /> : (
-            <ResponsiveContainer width="100%" height={210}>
-              <BarChart data={data.departmentChart} margin={{ top: 4, right: 12, left: -24, bottom: 44 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 13, fill: "var(--text-hint)" }} angle={-30} textAnchor="end" interval={0} />
-                <YAxis tick={{ fontSize: 13, fill: "var(--text-hint)" }} allowDecimals={false} />
-                <Tooltip content={<ChartTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 14, color: "var(--text-muted)", paddingTop: 4 }} />
-                <Bar dataKey="logs"     name="Total logs" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                <Bar dataKey="approved" name="Approved"   fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={36} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+        {/* ── Department bar chart (only for privileged users) ──────────────────── */}
+        {isPrivileged && (
+          <div className="card-bg" style={{ borderRadius: 14, padding: 24, marginBottom: 16 }}>
+            <SectionTitle>Department activity</SectionTitle>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
+              Log submissions per department in selected period
+            </p>
+            {departmentChart.length === 0 ? <EmptyChart /> : (
+              <ResponsiveContainer width="100%" height={210}>
+                <BarChart data={departmentChart} margin={{ top: 4, right: 12, left: -24, bottom: 44 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 13, fill: "var(--text-hint)" }} angle={-30} textAnchor="end" interval={0} />
+                  <YAxis tick={{ fontSize: 13, fill: "var(--text-hint)" }} allowDecimals={false} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 14, color: "var(--text-muted)", paddingTop: 4 }} />
+                  <Bar dataKey="logs"     name="Total logs" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="approved" name="Approved"   fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        )}
 
         {/* ── Row: Task breakdown pie + Top performers + Recent logs ── */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
@@ -388,11 +464,11 @@ export default function DashboardPage() {
           <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
             <SectionTitle>Task breakdown</SectionTitle>
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 12 }}>All-time task status</p>
-            {!data || data.taskBreakdown.every((p) => p.value === 0) ? <EmptyChart height={150} /> : (
+            {taskBreakdown.every((p) => p.value === 0) ? <EmptyChart height={150} /> : (
               <ResponsiveContainer width="100%" height={150}>
                 <PieChart>
-                  <Pie data={data.taskBreakdown} dataKey="value" innerRadius={40} outerRadius={62} paddingAngle={3}>
-                    {data.taskBreakdown.map((e, i) => <Cell key={i} fill={e.fill} />)}
+                  <Pie data={taskBreakdown} dataKey="value" innerRadius={40} outerRadius={62} paddingAngle={3}>
+                    {taskBreakdown.map((e, i) => <Cell key={i} fill={e.fill} />)}
                   </Pie>
                   <Tooltip
                     formatter={(v: any, n: any) => [v, n]}
@@ -402,7 +478,7 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
-              {data?.taskBreakdown.map((p) => (
+              {taskBreakdown.map((p) => (
                 <div key={p.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
                     <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.fill, flexShrink: 0 }} />
@@ -414,16 +490,20 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Top performers */}
+          {/* Top performers (only for privileged users) */}
           <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
             <SectionTitle>Top performers</SectionTitle>
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 12 }}>Most approved logs in period</p>
-            {!data || data.performers.length === 0 ? (
+            {!isPrivileged ? (
+              <div style={{ color: "var(--text-hint)", fontSize: 15, textAlign: "center", padding: "24px 0" }}>
+                <Link href="/staff-logs" style={{ color: "#60a5fa", textDecoration: "none" }}>View your logs →</Link>
+              </div>
+            ) : performers.length === 0 ? (
               <div style={{ color: "var(--text-hint)", fontSize: 15, textAlign: "center", padding: "24px 0" }}>
                 No approved logs yet
               </div>
             ) : (
-              data.performers.map((p, i) => (
+              performers.map((p, i) => (
                 <div key={p.name} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderBottom: "0.5px solid var(--border-soft)" }}>
                   <div style={{
                     width: 30, height: 30, borderRadius: "50%", flexShrink: 0,
@@ -454,12 +534,12 @@ export default function DashboardPage() {
           <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
             <SectionTitle>Recent submissions</SectionTitle>
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 12 }}>Latest staff activity</p>
-            {!data || data.recentLogs.length === 0 ? (
+            {recentLogs.length === 0 ? (
               <div style={{ color: "var(--text-hint)", fontSize: 15, textAlign: "center", padding: "24px 0" }}>
                 No logs submitted yet
               </div>
             ) : (
-              data.recentLogs.map((log) => {
+              recentLogs.map((log) => {
                 const st       = STATUS_STYLE[log.status] || STATUS_STYLE.DRAFT;
                 const initials = log.user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
                 return (
@@ -490,34 +570,36 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Low activity departments ──────────────────────────────── */}
-        <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
-          <SectionTitle>Low activity departments</SectionTitle>
-          <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
-            Departments with no log submissions in the selected period
-          </p>
-          {!data ? null : data.lowActivity.length === 0 ? (
-            <div style={{ color: "#22c55e", fontSize: 16, fontWeight: 500, textAlign: "center", padding: "16px 0" }}>
-              🎉 All departments have activity in this period
-            </div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
-              {data.lowActivity.map((d) => (
-                <div key={d.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderRadius: 10, background: "var(--bg-input)", border: "0.5px solid var(--border)" }}>
-                  <div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
-                      {d.name.length > 24 ? d.name.slice(0, 24) + "…" : d.name}
+        {/* ── Low activity departments (only for privileged users) ──────────────── */}
+        {isPrivileged && (
+          <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
+            <SectionTitle>Low activity departments</SectionTitle>
+            <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
+              Departments with no log submissions in the selected period
+            </p>
+            {lowActivity.length === 0 ? (
+              <div style={{ color: "#22c55e", fontSize: 16, fontWeight: 500, textAlign: "center", padding: "16px 0" }}>
+                🎉 All departments have activity in this period
+              </div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+                {lowActivity.map((d) => (
+                  <div key={d.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderRadius: 10, background: "var(--bg-input)", border: "0.5px solid var(--border)" }}>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
+                        {d.name.length > 24 ? d.name.slice(0, 24) + "…" : d.name}
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>{d.staff} staff</div>
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>{d.staff} staff</div>
+                    <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 6, background: "#1c1107", color: "#f59e0b", border: "0.5px solid #78350f" }}>
+                      Inactive
+                    </span>
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 6, background: "#1c1107", color: "#f59e0b", border: "0.5px solid #78350f" }}>
-                    Inactive
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
       </main>
     </div>

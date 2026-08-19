@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -320,7 +320,7 @@ function CheckInContent() {
         if (ipOnPremises) methods.push("IP");
       }
     } catch {
-      // IP check failed — continue to GPS
+      // IP check failed - continue to GPS
     }
 
     const gps = await detectGPS();
@@ -333,7 +333,7 @@ function CheckInContent() {
         setGpsError(`GPS: ${Math.round(distanceMeters)}m from FCCPC HQ (limit: ${FCCPC_HQ.radiusMeters}m)`);
       }
     } else {
-      setGpsError("GPS unavailable or permission denied — IP only");
+      setGpsError("GPS unavailable or permission denied - IP only");
     }
 
     const isOnPremises = ipOnPremises || gpsOnPremises;
@@ -777,7 +777,7 @@ function CheckInContent() {
         {/* ── My Attendance Tab ───────────────────────────────── */}
         {tab === "checkin" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, alignItems: "start" }}>
-            {/* Left — main check-in panel */}
+            {/* Left - main check-in panel */}
             <div>
               <div
                 className="card-bg"
@@ -859,7 +859,7 @@ function CheckInContent() {
                   </>
                 )}
 
-                {/* Location badge — shown when not yet checked out */}
+                {/* Location badge - shown when not yet checked out */}
                 {!loading && !checkedOut && (
                   <div style={{ marginTop: 20 }}>
                     <LocationBadge />
@@ -1009,7 +1009,7 @@ function CheckInContent() {
                 ))}
             </div>
 
-            {/* Right — QR code panel */}
+            {/* Right - QR code panel */}
             {!checkedOut && (
               <div>
                 <div className="card-bg" style={{ borderRadius: 16, padding: 24, textAlign: "center" }}>
@@ -1456,10 +1456,10 @@ function CheckInContent() {
                       </div>
                       <div style={{ fontSize: 14, color: "var(--text-muted)" }}>{fmtTime(r.checkInAt)}</div>
                       <div style={{ fontSize: 14, color: "var(--text-muted)" }}>
-                        {r.checkOutAt ? fmtTime(r.checkOutAt) : "—"}
+                        {r.checkOutAt ? fmtTime(r.checkOutAt) : "-"}
                       </div>
                       <div style={{ fontSize: 14, color: "var(--text-primary)", fontWeight: 600 }}>
-                        {r.hoursWorked ? `${r.hoursWorked}h` : "—"}
+                        {r.hoursWorked ? `${r.hoursWorked}h` : "-"}
                       </div>
                       <div>
                         <span
@@ -1495,7 +1495,7 @@ function CheckInContent() {
                           textOverflow: "ellipsis",
                         }}
                       >
-                        {r.note || "—"}
+                        {r.note || "-"}
                       </div>
                     </div>
                   );

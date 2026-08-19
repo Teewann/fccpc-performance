@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -43,8 +43,8 @@ const CASE_TYPES = [
   "Acquisition Filing Fee",
   "Administrative Fine",
   "Consent Order Payment",
-  "Penalty — Competition",
-  "Penalty — Consumer Protection",
+  "Penalty - Competition",
+  "Penalty - Consumer Protection",
   "Licence Fee",
   "Cost Recovery",
   "Forfeiture",
@@ -303,7 +303,7 @@ export default function PaymentWorkflowPage() {
               <div style={{ display: "flex", gap: 12 }}>
                 <button type="button" onClick={() => setShowForm(false)} style={{ padding: "10px 20px", borderRadius: 10, border: "0.5px solid var(--border)", background: "var(--bg-input)", color: "var(--text-muted)", fontSize: 14, cursor: "pointer" }}>Cancel</button>
                 <button type="submit" disabled={submitting} style={{ padding: "10px 28px", borderRadius: 10, border: "1.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
-                  {submitting ? "Raising..." : "Raise request — notify Finance"}
+                  {submitting ? "Raising..." : "Raise request - notify Finance"}
                 </button>
               </div>
             </form>
@@ -407,7 +407,7 @@ export default function PaymentWorkflowPage() {
                   { label: "Case type",      value: selected.caseType },
                   { label: "Status",         value: STATUS_STYLE[selected.status]?.label || selected.status },
                   { label: "Expected",       value: formatNGN(selected.expectedAmount) },
-                  { label: "Actual",         value: selected.actualAmount ? formatNGN(selected.actualAmount) : "—" },
+                  { label: "Actual",         value: selected.actualAmount ? formatNGN(selected.actualAmount) : "-" },
                   { label: "Raised by",      value: `${selected.raisedBy.name} (${selected.raisedBy.department?.name || selected.raisedBy.role})` },
                   { label: "Date raised",    value: fmtDate(selected.createdAt) },
                   ...(selected.bankReference ? [{ label: "Bank reference", value: selected.bankReference }] : []),
@@ -478,7 +478,7 @@ export default function PaymentWorkflowPage() {
 
               {selected.status === "CONFIRMED" && (
                 <div style={{ textAlign: "center", padding: 14, background: "var(--accent-bg)", border: "0.5px solid var(--accent-border)", borderRadius: 10, color: "var(--accent-text)", fontSize: 14, fontWeight: 600 }}>
-                  ✅ Payment confirmed — M&A may proceed with case treatment
+                  ✅ Payment confirmed - M&A may proceed with case treatment
                 </div>
               )}
             </div>

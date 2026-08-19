@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Sidebar from "@/components/layout/Sidebar";
@@ -27,7 +27,7 @@ export default function CalibrateLocationPage() {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         if (pos.coords.accuracy > 5000) {
-          setError("That reading was too rough (network fallback, not real GPS). Ignored — try again.");
+          setError("That reading was too rough (network fallback, not real GPS). Ignored - try again.");
           setCapturing(false);
           return;
         }
@@ -40,7 +40,7 @@ export default function CalibrateLocationPage() {
   }
 
   // Only ground-level perimeter points define the building's footprint.
-  // Upper-floor readings are excluded from the center/radius calc — they're just a check.
+  // Upper-floor readings are excluded from the center/radius calc - they're just a check.
   const perimeter = readings.filter((r) => r.label !== "Upper floor (sanity check)");
   const upperFloor = readings.filter((r) => r.label === "Upper floor (sanity check)");
 
@@ -81,7 +81,7 @@ export default function CalibrateLocationPage() {
         <div style={{ marginBottom: 20 }}>
           {readings.map((r, i) => (
             <div key={i} style={{ fontSize: 13, color: "var(--text-muted)", padding: "4px 0" }}>
-              [{r.label}] {r.lat.toFixed(6)}, {r.lng.toFixed(6)} — ±{Math.round(r.accuracy)}m
+              [{r.label}] {r.lat.toFixed(6)}, {r.lng.toFixed(6)} - ±{Math.round(r.accuracy)}m
             </div>
           ))}
         </div>
@@ -89,7 +89,7 @@ export default function CalibrateLocationPage() {
         {center && (
           <div className="card-bg" style={{ borderRadius: 12, padding: 20 }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>
-              Center from {perimeter.length} perimeter readings — paste into agency.config.ts
+              Center from {perimeter.length} perimeter readings - paste into agency.config.ts
             </div>
             <pre style={{ fontSize: 13, background: "var(--bg-input)", padding: 12, borderRadius: 8, overflowX: "auto" }}>
 {`hqLocation: {
@@ -101,7 +101,7 @@ export default function CalibrateLocationPage() {
             </pre>
             <div style={{ fontSize: 12, color: "var(--text-hint)", marginTop: 8 }}>
               Radius = distance from the center to your farthest perimeter reading, plus that reading's own GPS margin.
-              {upperFloor.length > 0 && " Includes your upper-floor sanity-check readings — they fit inside this radius."}
+              {upperFloor.length > 0 && " Includes your upper-floor sanity-check readings - they fit inside this radius."}
             </div>
           </div>
         )}

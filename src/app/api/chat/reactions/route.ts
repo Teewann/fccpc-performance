@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// POST — add or change my reaction on a message (one reaction per user per message, upsert)
+// POST - add or change my reaction on a message (one reaction per user per message, upsert)
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ reaction });
 }
 
-// DELETE — remove my reaction from a message
+// DELETE - remove my reaction from a message
 export async function DELETE(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

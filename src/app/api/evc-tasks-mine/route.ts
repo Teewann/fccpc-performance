@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// ─── GET — fetch tasks assigned TO the current user by EVC ───────────
+// ─── GET - fetch tasks assigned TO the current user by EVC ───────────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -33,9 +33,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ─── PATCH — assignee updates their task status/adds a note ──────────
+// ─── PATCH - assignee updates their task status/adds a note ──────────
 // This mirrors the PATCH in evc-tasks/route.ts so the UI can call
-// either endpoint — whichever is more natural for the user-side page.
+// either endpoint - whichever is more natural for the user-side page.
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

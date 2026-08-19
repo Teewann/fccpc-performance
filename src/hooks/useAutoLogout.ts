@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useRef, useCallback } from "react";
 import { signOut } from "next-auth/react";
 
@@ -58,14 +58,14 @@ export function useAutoLogout() {
   }, [resetTimer]);
 }
 
-// Utility — get current timeout setting
+// Utility - get current timeout setting
 export function getSessionTimeout(): number {
   if (typeof window === "undefined") return DEFAULT_MINUTES;
   const saved = localStorage.getItem(STORAGE_KEY);
   return saved ? parseInt(saved) : DEFAULT_MINUTES;
 }
 
-// Utility — save timeout setting
+// Utility - save timeout setting
 export function setSessionTimeout(minutes: number): void {
   localStorage.setItem(STORAGE_KEY, String(minutes));
 }

@@ -62,7 +62,7 @@ function buildTimeline(task: HistoryTask) {
   if (task.forwardedFrom) {
     events.push({ time:task.updatedAt, icon:"➡️", color:"#38bdf8",
       title:"Task forwarded",
-      detail:`Forwarded by ${task.forwardedFrom.name}${task.forwardedTo ? ` to ${task.forwardedTo.name}` : ""}${task.forwardNote ? ` — Note: "${task.forwardNote}"` : ""}` });
+      detail:`Forwarded by ${task.forwardedFrom.name}${task.forwardedTo ? ` to ${task.forwardedTo.name}` : ""}${task.forwardNote ? ` - Note: "${task.forwardNote}"` : ""}` });
   }
 
   // Escalated
@@ -160,7 +160,7 @@ function TaskHistoryContent() {
       else if (viewMode==="staff" && staffFilter) url += `view=all&userId=${staffFilter}`;
       else url += `view=all`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
-      // Include all statuses in history — no status filter in URL, filter client-side
+      // Include all statuses in history - no status filter in URL, filter client-side
       const res  = await fetch(url);
       const data = await res.json();
       if (res.ok) setTasks(data.tasks||[]);
@@ -256,7 +256,7 @@ function TaskHistoryContent() {
               <select style={inp} value={staffFilter} onChange={e=>setStaffFilter(e.target.value)}>
                 <option value="">Select staff member…</option>
                 {staff.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} — {s.role}{s.department?` (${s.department.name})`:""}</option>
+                  <option key={s.id} value={s.id}>{s.name} - {s.role}{s.department?` (${s.department.name})`:""}</option>
                 ))}
               </select>
             )}

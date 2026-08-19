@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -170,18 +170,18 @@ function FormContent({ data, setData, isEdit = false, departments, units }: any)
       <div style={{ gridColumn: "1/-1" }}>
         <label style={labelStyle}>Job title / Position *</label>
         <select style={{ ...inputStyle, borderColor: !data.jobTitle ? "#f59e0b" : "var(--border)" }} value={data.jobTitle} onChange={(e) => setData({ ...data, jobTitle: e.target.value })} required>
-          <option value="">— Select job title —</option>
-          <optgroup label={`— Suggested for ${data.role.charAt(0) + data.role.slice(1).toLowerCase()} —`}>
+          <option value="">- Select job title -</option>
+          <optgroup label={`- Suggested for ${data.role.charAt(0) + data.role.slice(1).toLowerCase()} -`}>
             {suggestedTitles.map((t: string) => <option key={t} value={t}>{t}</option>)}
           </optgroup>
-          <optgroup label="— All other titles —">
+          <optgroup label="- All other titles -">
             {ALL_JOB_TITLES.filter((t) => !suggestedTitles.includes(t)).map((t) => <option key={t} value={t}>{t}</option>)}
           </optgroup>
         </select>
         {data.jobTitle && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: -6, marginBottom: 10, padding: "8px 12px", background: "var(--accent-bg)", borderRadius: 8, border: "0.5px solid var(--accent-border)" }}>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Will display as:</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-text)" }}>{data.name || "Staff name"} — {data.jobTitle}</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--accent-text)" }}>{data.name || "Staff name"} - {data.jobTitle}</span>
           </div>
         )}
       </div>
@@ -355,7 +355,7 @@ export default function UsersPage() {
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
             <div style={{ background: "var(--bg-card)", border: "0.5px solid var(--border)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24, paddingBottom: 14, borderBottom: "0.5px solid var(--border-soft)" }}>
-                <div><h2 style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}>Edit — {selected.name}</h2>{selected.jobTitle && <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 3 }}>Current title: <strong style={{ color: "var(--text-primary)" }}>{selected.jobTitle}</strong></div>}</div>
+                <div><h2 style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)" }}>Edit - {selected.name}</h2>{selected.jobTitle && <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 3 }}>Current title: <strong style={{ color: "var(--text-primary)" }}>{selected.jobTitle}</strong></div>}</div>
                 <button onClick={() => setShowEdit(false)} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, cursor: "pointer" }}>✕</button>
               </div>
               <form onSubmit={handleEdit} autoComplete="off">
@@ -392,12 +392,12 @@ export default function UsersPage() {
                     </div>
                   </div>
                   <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.email}</div>
-                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.phone || "—"}</div>
-                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.department?.name || "—"}</div>
-                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.unit?.name || "—"}</div>
-                  <div style={{ fontSize: 12, fontFamily: "monospace", fontWeight: "bold", color: "#ef4444" }}>{user.userIdRef || "—"}</div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.phone || "-"}</div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.department?.name || "-"}</div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.unit?.name || "-"}</div>
+                  <div style={{ fontSize: 12, fontFamily: "monospace", fontWeight: "bold", color: "#ef4444" }}>{user.userIdRef || "-"}</div>
                   <div><span style={{ fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: 8, background: rs.bg, color: rs.color, border: `0.5px solid ${rs.border}` }}>{user.role.charAt(0) + user.role.slice(1).toLowerCase().replace("_", "/")}</span></div>
-                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.gradeLevel || "—"}</div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{user.gradeLevel || "-"}</div>
                   <div><button onClick={() => openEdit(user)} style={{ padding: "7px 16px", borderRadius: 8, border: "0.5px solid var(--border)", background: "var(--bg-input)", color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontWeight: 500 }}>Edit</button></div>
                 </div>
               );

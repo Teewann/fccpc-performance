@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -178,7 +178,7 @@ export default function SupervisorPage() {
                 </div>
                 <div className="text-[13px]" style={{ color: "var(--text-muted)" }}>
                   {filter === "SUBMITTED"
-                    ? "All caught up — no logs waiting for review"
+                    ? "All caught up - no logs waiting for review"
                     : `No ${filter.toLowerCase()} logs yet`}
                 </div>
               </div>

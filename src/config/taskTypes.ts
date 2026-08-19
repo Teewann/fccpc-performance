@@ -1,5 +1,5 @@
-// src/config/taskTypes.ts
-// ─── Task Types — used in Daily Work Log AND Tasks pages ──────────────
+﻿// src/config/taskTypes.ts
+// ─── Task Types - used in Daily Work Log AND Tasks pages ──────────────
 // Import this wherever you need task type options
 
 export const TASK_TYPES = [

@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// ─── GET — EVC sees all tasks they created + grouped staff list ───────
+// ─── GET - EVC sees all tasks they created + grouped staff list ───────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ─── POST — EVC assigns a task (with optional document) ──────────────
+// ─── POST - EVC assigns a task (with optional document) ──────────────
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -182,8 +182,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── PATCH — assignee OR EVC updates task status/comment ─────────────
-// NO role restriction — any authenticated user who is the assignee
+// ─── PATCH - assignee OR EVC updates task status/comment ─────────────
+// NO role restriction - any authenticated user who is the assignee
 // or the EVC creator of a task can update it.
 export async function PATCH(request: NextRequest) {
   try {

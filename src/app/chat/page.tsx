@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -481,7 +481,7 @@ function NewChatModal({
   );
 }
 
-// ─── FIX #2 & #3: File Preview — inline modal with ✕ close, no new tab ─
+// ─── FIX #2 & #3: File Preview - inline modal with ✕ close, no new tab ─
 function FileAttachment({
   url,
   fileName,
@@ -511,7 +511,7 @@ function FileAttachment({
 
   return (
     <>
-      {/* Clickable attachment — opens modal instead of new tab */}
+      {/* Clickable attachment - opens modal instead of new tab */}
       <div
         style={{ marginTop: 4, cursor: "pointer" }}
         onClick={() => setShowPreview(true)}
@@ -1011,7 +1011,7 @@ export default function ChatPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // FIX #1: smart scroll — ref to the messages container
+  // FIX #1: smart scroll - ref to the messages container
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1070,7 +1070,7 @@ export default function ChatPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [activeConv, fetchMessages]);
 
-  // ── FIX #1: Smart auto-scroll — only scroll down if already near bottom ──
+  // ── FIX #1: Smart auto-scroll - only scroll down if already near bottom ──
   const prevMessageCountRef = useRef(0);
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -1138,7 +1138,7 @@ export default function ChatPage() {
     }
   }, [activeConv, input, fileToSend, replyingTo, fetchMessages, fetchConversations]);
 
-  // ── FIX #2: File upload — store file, don't auto-send ─────────────
+  // ── FIX #2: File upload - store file, don't auto-send ─────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1154,7 +1154,7 @@ export default function ChatPage() {
       const res = await fetch("/api/chat/upload", { method: "POST", body: formData });
       const data = await res.json();
       if (data.url) {
-        // Store the file — user can add a caption before sending
+        // Store the file - user can add a caption before sending
         setFileToSend({ url: data.url, name: data.fileName || file.name, type: data.fileType || file.type });
         setTimeout(() => captionInputRef.current?.focus(), 50);
       } else {
@@ -1814,7 +1814,7 @@ export default function ChatPage() {
                       }}
                     >
                       <span style={{ fontSize: 32 }}>💬</span>
-                      <span>No messages yet — say hello!</span>
+                      <span>No messages yet - say hello!</span>
                     </div>
                   ) : (
                     groupedMessages.map(({ dateLabel, messages: dayMsgs }) => (
@@ -1833,7 +1833,7 @@ export default function ChatPage() {
                                 marginBottom: msg.showAvatar ? 10 : 2,
                               }}
                             >
-                              {/* Other person avatar — only on last in run */}
+                              {/* Other person avatar - only on last in run */}
                               {!isMine && (
                                 <div style={{ width: 30, flexShrink: 0 }}>
                                   {msg.showAvatar && (
@@ -2083,7 +2083,7 @@ export default function ChatPage() {
                     </div>
                   )}
 
-                  {/* FIX #2: File caption bar — shows after file is picked */}
+                  {/* FIX #2: File caption bar - shows after file is picked */}
                   {fileToSend && (
                     <div
                       style={{
@@ -2167,7 +2167,7 @@ export default function ChatPage() {
                     </div>
                   )}
 
-                  {/* Normal text input row — hidden when caption bar is showing */}
+                  {/* Normal text input row - hidden when caption bar is showing */}
                   {!fileToSend && (
                     <div
                       style={{
@@ -2232,7 +2232,7 @@ export default function ChatPage() {
                         />
                       </label>
 
-                     {/* Mic / Send button — mic shows when input is empty, send when there's text */}
+                     {/* Mic / Send button - mic shows when input is empty, send when there's text */}
                       {input.trim() ? (
                         <button
                           onClick={sendMessage}
@@ -2284,7 +2284,7 @@ export default function ChatPage() {
                     </div>
                   )}
 
-                  {/* Recording overlay — replaces the whole input row while recording */}
+                  {/* Recording overlay - replaces the whole input row while recording */}
                   {isRecording && (
                     <div
                       style={{

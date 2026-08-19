@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +50,7 @@ type UnassignedTask = {
 
 type Department = { id: string; name: string };
 
-// ─── Load level config — calm, readable ──────────────────────────────
+// ─── Load level config - calm, readable ──────────────────────────────
 const LOAD = {
   EMPTY:    { label: "Free",      color: "#64748b", accent: "#94a3b8", bar: "#334155", pct: 0   },
   LOW:      { label: "Light",     color: "#16a34a", accent: "#4ade80", bar: "#4ade80", pct: 20  },
@@ -133,7 +133,7 @@ export default function TaskLoadBalancerPage() {
         setUserDeptId(meData.user.departmentId || null);
       }
     } catch {
-      showToast("Network error — check your connection", false);
+      showToast("Network error - check your connection", false);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -369,7 +369,7 @@ export default function TaskLoadBalancerPage() {
               ))}
             </div>
 
-            {/* Filters — only for workload tab */}
+            {/* Filters - only for workload tab */}
             {tab === "workload" && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <input
@@ -395,7 +395,7 @@ export default function TaskLoadBalancerPage() {
           </div>
         </div>
 
-        {/* ── STICKY ACTION BAR — always visible, never scrolls away ── */}
+        {/* ── STICKY ACTION BAR - always visible, never scrolls away ── */}
         {tab === "workload" && selectedTasks.size > 0 && (
           <div style={{
             flexShrink: 0,
@@ -450,7 +450,7 @@ export default function TaskLoadBalancerPage() {
                 </>
               ) : (
                 <div style={{ fontSize: 13, color: "#8b5cf6", fontStyle: "italic" }}>
-                  👇 Scroll down — click a staff card to select them
+                  👇 Scroll down - click a staff card to select them
                 </div>
               )}
               <button
@@ -511,7 +511,7 @@ export default function TaskLoadBalancerPage() {
                           <div style={{ padding: "16px 18px" }}>
                             {/* Staff info row */}
                             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-                              {/* Avatar — real photo if available */}
+                              {/* Avatar - real photo if available */}
                               <div
                                 onClick={e => { e.stopPropagation(); router.push(`/staff-directory?userId=${member.id}`); }}
                                 style={{ cursor: "pointer", flexShrink: 0 }}
@@ -521,7 +521,7 @@ export default function TaskLoadBalancerPage() {
                               </div>
 
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                {/* Name — clicking takes to staff profile */}
+                                {/* Name - clicking takes to staff profile */}
                                 <div style={{ marginBottom: 2 }}>
                                   <span
                                     onClick={e => { e.stopPropagation(); router.push(`/staff-directory?userId=${member.id}`); }}
@@ -626,7 +626,7 @@ export default function TaskLoadBalancerPage() {
                           {isExpanded && !assigningMode && (
                             <div style={{ borderTop: "0.5px solid var(--border)", padding: "14px 18px", background: "var(--bg-input)" }}>
                               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                                Tasks — click to select for reassignment
+                                Tasks - click to select for reassignment
                               </div>
                               {!member.tasks || member.tasks.length === 0 ? (
                                 <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: "16px 0" }}>No active tasks</div>
@@ -666,7 +666,7 @@ export default function TaskLoadBalancerPage() {
                                         </div>
 
                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                          {/* Task title — clickable link to the task */}
+                                          {/* Task title - clickable link to the task */}
                                           <div style={{ marginBottom: 4 }}>
                                             <span
                                               onClick={e => { e.stopPropagation(); router.push(`/tasks?taskId=${task.id}`); }}
@@ -842,7 +842,7 @@ export default function TaskLoadBalancerPage() {
                       <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 16px", lineHeight: 1.5 }}>
                         {selectedUnassigned.size === 0
                           ? "First select tasks from the list on the left"
-                          : `${selectedUnassigned.size} task${selectedUnassigned.size !== 1 ? "s" : ""} selected — now choose a staff member`}
+                          : `${selectedUnassigned.size} task${selectedUnassigned.size !== 1 ? "s" : ""} selected - now choose a staff member`}
                       </p>
 
                       {/* Staff options */}
@@ -930,7 +930,7 @@ export default function TaskLoadBalancerPage() {
                               {i + 1}
                             </div>
 
-                            {/* Name + dept — clickable */}
+                            {/* Name + dept - clickable */}
                             <div style={{ width: 200, flexShrink: 0 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }}
                                 onClick={() => router.push(`/staff-directory?userId=${member.id}`)}>
@@ -944,7 +944,7 @@ export default function TaskLoadBalancerPage() {
                                     {member.name}
                                   </div>
                                   <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                                    {member.department?.name?.split(" ")[0] || "—"} ↗
+                                    {member.department?.name?.split(" ")[0] || "-"} ↗
                                   </div>
                                 </div>
                               </div>

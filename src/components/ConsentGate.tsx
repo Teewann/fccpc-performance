@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useEffect } from "react";
 
 export default function ConsentGate({ children }: { children: React.ReactNode }) {
@@ -24,7 +24,7 @@ export default function ConsentGate({ children }: { children: React.ReactNode })
       <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.6 }}>
         This system records your check-in time, an approximate location (to confirm you're near
         the office), and asks your device to confirm it's really you using your fingerprint or
-        face unlock. None of your actual biometric data is ever sent to or stored on our servers —
+        face unlock. None of your actual biometric data is ever sent to or stored on our servers -
         only a yes/no confirmation from your device. By continuing, you agree to this.
       </p>
       <button

@@ -1,4 +1,4 @@
-// src/app/api/case-transfer/route.ts
+﻿// src/app/api/case-transfer/route.ts
 // ─── Zone-to-Zone / Zone-to-HQ / Interstate Case Transfer ────────────
 //
 // Prisma schema to add (after PaymentWorkflow):
@@ -62,7 +62,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 const OFFICES = [
-  "HQ — Abuja",
+  "HQ - Abuja",
   "Lagos Zone",
   "Kano Zone",
   "Port Harcourt Zone",
@@ -79,7 +79,7 @@ const OFFICES = [
   "Abeokuta",
 ];
 
-// ─── GET — list case transfers ─────────────────────────────────────────
+// ─── GET - list case transfers ─────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -133,7 +133,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ─── POST — initiate a case transfer ──────────────────────────────────
+// ─── POST - initiate a case transfer ──────────────────────────────────
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
       await prisma.notification.create({
         data: {
           userId:  targetUserId,
-          title:   `Case Transfer — ${caseRef}`,
+          title:   `Case Transfer - ${caseRef}`,
           message: `${user.name} has transferred case "${caseTitle}" from ${fromOffice} to you (${toOffice}). Note: ${transferNote.slice(0, 100)}`,
           type:    "ALERT" as any,
           link:    "/case-transfer",
@@ -204,7 +204,7 @@ export async function POST(request: NextRequest) {
       await prisma.notification.createMany({
         data: directors.map((d) => ({
           userId:  d.id,
-          title:   `Case Transfer Initiated — ${caseRef}`,
+          title:   `Case Transfer Initiated - ${caseRef}`,
           message: `${user.name} transferred case "${caseTitle}" from ${fromOffice} to ${toOffice}.`,
           type:    "INFO" as any,
           link:    "/case-transfer",
@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── PATCH — accept / reject / update transfer status ─────────────────
+// ─── PATCH - accept / reject / update transfer status ─────────────────
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -298,7 +298,7 @@ export async function PATCH(request: NextRequest) {
     await prisma.notification.create({
       data: {
         userId:  transfer.initiatedBy.id,
-        title:   `Case Transfer Update — ${transfer.caseRef}`,
+        title:   `Case Transfer Update - ${transfer.caseRef}`,
         message: `${user.name} ${actionLabel}: "${transfer.caseTitle}".${completedNote ? ` Note: ${completedNote}` : ""}${rejectedReason ? ` Reason: ${rejectedReason}` : ""}`,
         type:    action === "complete" ? "SUCCESS" : action === "reject" ? "ALERT" : ("INFO" as any),
         link:    "/case-transfer",
@@ -309,7 +309,7 @@ export async function PATCH(request: NextRequest) {
       data: {
         userId: user.id,
         action: `CASE_TRANSFER_${statusMap[action]}`,
-        detail: `Case ${transfer.caseRef} "${transfer.caseTitle}" — ${actionLabel} by ${user.name}`,
+        detail: `Case ${transfer.caseRef} "${transfer.caseTitle}" - ${actionLabel} by ${user.name}`,
       },
     });
 

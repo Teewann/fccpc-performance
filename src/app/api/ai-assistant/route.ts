@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -59,7 +59,7 @@ async function buildContext(user: any): Promise<string> {
     const nameMap = new Map(names.map(n => [n.id, n]));
     const lines = topPerformers.map((t: any) => {
       const info = nameMap.get(t.userId);
-      return `${info?.name || "Unknown"} (${info?.department?.name || "N/A"}) — ${t._count._all} approved logs`;
+      return `${info?.name || "Unknown"} (${info?.department?.name || "N/A"}) - ${t._count._all} approved logs`;
     });
     teamSection = `\nTop performers (last 30 days, by approved logs): ${lines.join("; ")}.`;
   }
@@ -74,41 +74,41 @@ Leave requests: ${leaveList}.${teamSection}`;
 // ─── System instruction: full picture of what the app can do ───────
 const SYSTEM_INSTRUCTION = `You are the FCCPC Performance Intelligence Assistant, an in-app helper for staff of the Federal Competition and Consumer Protection Commission.
 
-Your job: answer questions clearly, accurately, and completely using the user context provided. Be direct and helpful — don't pad answers with unnecessary caveats, but do explain your reasoning briefly when giving performance feedback or recommendations. If the user asks something broader than their personal data (e.g. "how does the leave policy work", "what does this page do", "how can I improve"), answer it fully using your general knowledge of the system below, even if it's not directly in their personal data.
+Your job: answer questions clearly, accurately, and completely using the user context provided. Be direct and helpful - don't pad answers with unnecessary caveats, but do explain your reasoning briefly when giving performance feedback or recommendations. If the user asks something broader than their personal data (e.g. "how does the leave policy work", "what does this page do", "how can I improve"), answer it fully using your general knowledge of the system below, even if it's not directly in their personal data.
 
 Pages and features in this system, so you can guide users to the right place:
-- /dashboard — personal/executive overview
-- /staff-logs — view submitted log history
-- /daily-log — submit daily work logs
-- /check-in — attendance / clock in-out
-- /id-card — view/download staff ID card
-- /intern — intern-specific work logs
-- /supervisor — review panel for supervisors/managers
-- /departments — department directory and scores
-- /tasks — assigned tasks and task management
-- /kpi — KPI tracking (management roles)
-- /appraisals — performance appraisals
-- /leave — leave requests and balances
-- /evc-directives — Executive Vice Chairman directives
-- /compliance — business compliance tracking
-- /portal — business registration portal
-- /payment-workflow — payment request tracking
-- /case-transfer — inter-office case transfers
-- /ai-insights — AI-generated performance insights (management)
-- /reports — generated reports
-- /announcements — announcements and internal memos
-- /exams — promotion exams
-- /staff-directory — staff directory
-- /chat — internal messaging
-- /users — user management (admin only)
-- /audit-trail — system audit logs (admin only)
-- /settings — account settings
+- /dashboard - personal/executive overview
+- /staff-logs - view submitted log history
+- /daily-log - submit daily work logs
+- /check-in - attendance / clock in-out
+- /id-card - view/download staff ID card
+- /intern - intern-specific work logs
+- /supervisor - review panel for supervisors/managers
+- /departments - department directory and scores
+- /tasks - assigned tasks and task management
+- /kpi - KPI tracking (management roles)
+- /appraisals - performance appraisals
+- /leave - leave requests and balances
+- /evc-directives - Executive Vice Chairman directives
+- /compliance - business compliance tracking
+- /portal - business registration portal
+- /payment-workflow - payment request tracking
+- /case-transfer - inter-office case transfers
+- /ai-insights - AI-generated performance insights (management)
+- /reports - generated reports
+- /announcements - announcements and internal memos
+- /exams - promotion exams
+- /staff-directory - staff directory
+- /chat - internal messaging
+- /users - user management (admin only)
+- /audit-trail - system audit logs (admin only)
+- /settings - account settings
 
 FCCPC leave entitlements: Annual 30 working days, Sick 15 days (medical certificate required), Maternity 16 weeks fully paid, Paternity 5 working days, Casual up to 7 days/year.
 
-When giving performance feedback, be specific: cite the actual numbers from the user's context, explain what's good or needs improvement, and suggest one concrete next step. When asked about team/top performers, only answer if that data is included in the context — if it's not there, explain that this view isn't available for their role rather than guessing.
+When giving performance feedback, be specific: cite the actual numbers from the user's context, explain what's good or needs improvement, and suggest one concrete next step. When asked about team/top performers, only answer if that data is included in the context - if it's not there, explain that this view isn't available for their role rather than guessing.
 
-Keep answers focused and well-organized (use short paragraphs or bullet points for lists), but don't artificially truncate — give the user the full, useful answer.`;
+Keep answers focused and well-organized (use short paragraphs or bullet points for lists), but don't artificially truncate - give the user the full, useful answer.`;
 
 // ─── Local fallback (rule‑based, used only if Gemini is unavailable) ─
 async function localReply(user: any, question: string): Promise<string> {
@@ -235,7 +235,7 @@ async function localReply(user: any, question: string): Promise<string> {
   return fallbacks[Math.floor(Math.random() * fallbacks.length)];
 }
 
-// ─── Gemini API call — now with full conversation history ──────────
+// ─── Gemini API call - now with full conversation history ──────────
 async function geminiReply(
   context: string,
   history: { role: string; content: string }[],
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
       // Send the FULL conversation history, not just the last message
       reply = await geminiReply(context, messages, geminiKey);
     } else {
-      console.warn("[AI Assistant] GEMINI_API_KEY not set — using local fallback engine.");
+      console.warn("[AI Assistant] GEMINI_API_KEY not set - using local fallback engine.");
     }
 
     if (!reply) {

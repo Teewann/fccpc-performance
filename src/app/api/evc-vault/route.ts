@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-// GET — list vault files
+// GET - list vault files
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
         ...(category ? { category } : {}),
       },
       orderBy: { createdAt: "desc" },
-      // Never return file data in list — only metadata
+      // Never return file data in list - only metadata
       select: {
         id: true, title: true, description: true, category: true,
         fileName: true, fileType: true, fileSize: true,
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST — upload file to vault
+// POST - upload file to vault
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Return metadata only — not file data
+    // Return metadata only - not file data
     const { fileData: _, ...safefile } = vaultFile;
     return NextResponse.json({ success: true, file: safefile }, { status: 201 });
   } catch (error) {
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE — remove file from vault
+// DELETE - remove file from vault
 export async function DELETE(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -140,7 +140,7 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-// PATCH — download file (requires password confirmation from client)
+// PATCH - download file (requires password confirmation from client)
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);

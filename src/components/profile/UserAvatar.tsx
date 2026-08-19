@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Image from "next/image";
 
 // ─── Deterministic colour per person ─────────────────────────────────────────
@@ -26,7 +26,7 @@ function initials(name?: string | null) {
 interface UserAvatarProps {
   /** Pass an object with photo + name */
   user: { photo?: string | null; name?: string | null };
-  /** Pixel size — width and height */
+  /** Pixel size - width and height */
   size?: number;
   className?: string;
   style?: React.CSSProperties;

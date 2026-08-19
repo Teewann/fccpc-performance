@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +62,7 @@ const logStatusStyle: Record<string, { bg: string; color: string; border: string
 const roleLabel = (r: string) => r.charAt(0) + r.slice(1).toLowerCase();
 
 // ═══════════════════════════════════════════════════════════════════════
-// ORGANOGRAM — white background, very high contrast, readable by all
+// ORGANOGRAM - white background, very high contrast, readable by all
 // ═══════════════════════════════════════════════════════════════════════
 
 function OrgBox({
@@ -210,7 +210,7 @@ function OrganogramTab() {
 
           {/* ── OPERATIONS ────────────────────────────────────── */}
           <div>
-            <SectionLabel label="DEPARTMENTS — OPERATIONS" />
+            <SectionLabel label="DEPARTMENTS - OPERATIONS" />
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
 
               {[
@@ -231,7 +231,7 @@ function OrganogramTab() {
 
           {/* ── CORPORATE SERVICES ────────────────────────────── */}
           <div>
-            <SectionLabel label="DEPARTMENTS — CORPORATE SERVICES" />
+            <SectionLabel label="DEPARTMENTS - CORPORATE SERVICES" />
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
 
               {/* Original 3 with units */}
@@ -418,7 +418,7 @@ export default function DepartmentsPage() {
                         <div style={{ width: 150, flexShrink: 0 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Approval rate</span>
-                            <span style={{ fontSize: 14, fontWeight: 700, color: c }}>{dept.status === "NO_DATA" ? "—" : `${dept.approvalRate}%`}</span>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: c }}>{dept.status === "NO_DATA" ? "-" : `${dept.approvalRate}%`}</span>
                           </div>
                           <div style={{ height: 6, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
                             <div style={{ height: "100%", borderRadius: 3, width: dept.status === "NO_DATA" ? "0%" : `${dept.approvalRate}%`, background: c, transition: "width 0.5s ease" }} />
@@ -520,7 +520,7 @@ export default function DepartmentsPage() {
                                 <div style={{ fontSize: 11, color: "var(--text-hint)" }}>{roleLabel(s.role)} · {s.totalLogs} logs · {s.hours}h</div>
                               </div>
                               <div style={{ fontSize: 12, fontWeight: 700, color: scoreColor(s.approvalRate, s.totalLogs > 0), flexShrink: 0 }}>
-                                {s.totalLogs > 0 ? `${s.approvalRate}%` : "—"}
+                                {s.totalLogs > 0 ? `${s.approvalRate}%` : "-"}
                               </div>
                             </div>
                           ))}

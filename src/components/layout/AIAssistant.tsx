@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -405,7 +405,7 @@ const onTouchEnd = useCallback(() => {
           <div ref={bottomRef} />
         </div>
 
-        {/* Quick chips — show only on first message */}
+        {/* Quick chips - show only on first message */}
         {messages.length <= 1 && (
           <div style={{ padding: "8px 14px 4px", display: "flex", gap: 6, flexWrap: "wrap", borderTop: "0.5px solid var(--border-soft)", flexShrink: 0 }}>
             {QUICK_CHIPS.slice(0, 4).map((chip) => (

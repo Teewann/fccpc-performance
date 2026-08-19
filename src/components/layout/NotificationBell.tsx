@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
@@ -188,7 +188,7 @@ export default function NotificationBell() {
             width: 8, height: 8, borderRadius: "50%",
             background: "#f59e0b",
             border: "1.5px solid var(--bg-sidebar)",
-          }} title="Notification error — check console" />
+          }} title="Notification error - check console" />
         )}
       </button>
 
@@ -277,7 +277,7 @@ export default function NotificationBell() {
               <div style={{ textAlign: "center", padding: 48, color: "var(--text-muted)", fontSize: 13 }}>
                 <div style={{ fontSize: 28, marginBottom: 10 }}>⚠️</div>
                 <div style={{ color: "#f87171", marginBottom: 12 }}>
-                  {error === "network" ? "Connection issue" : "Database error — run: npx prisma db push"}
+                  {error === "network" ? "Connection issue" : "Database error - run: npx prisma db push"}
                 </div>
                 <button
                   onClick={fetchNotifs}

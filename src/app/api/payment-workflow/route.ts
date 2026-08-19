@@ -1,4 +1,4 @@
-// src/app/api/payment-workflow/route.ts
+﻿// src/app/api/payment-workflow/route.ts
 // ─── M&A ↔ Finance Payment Confirmation Workflow ─────────────────────
 //
 // How it works:
@@ -16,7 +16,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// ─── Types (Prisma model — add to schema.prisma, see guide below) ─────
+// ─── Types (Prisma model - add to schema.prisma, see guide below) ─────
 //
 // model PaymentWorkflow {
 //   id              String   @id @default(cuid())
@@ -54,7 +54,7 @@ import { authOptions } from "@/lib/auth";
 //   raisedPayments    PaymentWorkflow[] @relation("RaisedPayments")
 //   confirmedPayments PaymentWorkflow[] @relation("ConfirmedPayments")
 
-// ─── GET — list payment workflow items ───────────────────────────────
+// ─── GET - list payment workflow items ───────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ─── POST — raise a payment confirmation request ──────────────────────
+// ─── POST - raise a payment confirmation request ──────────────────────
 // Called by M&A (or any dept) when they need Finance to confirm payment
 export async function POST(request: NextRequest) {
   try {
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
       await prisma.notification.createMany({
         data: financeStaff.map((f) => ({
           userId:  f.id,
-          title:   `Payment Confirmation Required — ${caseReference}`,
+          title:   `Payment Confirmation Required - ${caseReference}`,
           message: `${user.name} (${user.department?.name || user.role}) has raised a payment confirmation request for ${companyName}. Expected: ₦${Number(expectedAmount).toLocaleString()}. Case ref: ${caseReference}.`,
           type:    "ALERT" as any,
           link:    "/payment-workflow",
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: user.id,
         action: "PAYMENT_REQUEST_RAISED",
-        detail: `Payment confirmation request raised for ${companyName} (${caseReference}) — ₦${Number(expectedAmount).toLocaleString()}`,
+        detail: `Payment confirmation request raised for ${companyName} (${caseReference}) - ₦${Number(expectedAmount).toLocaleString()}`,
       },
     });
 
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── PATCH — Finance confirms or rejects payment ──────────────────────
+// ─── PATCH - Finance confirms or rejects payment ──────────────────────
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -264,7 +264,7 @@ export async function PATCH(request: NextRequest) {
     await prisma.notification.create({
       data: {
         userId:  item.raisedBy.id,
-        title:   `Payment ${action === "confirm" ? "Confirmed ✓" : action === "reject" ? "Rejected ✗" : "Partial ⚠️"} — ${item.caseReference}`,
+        title:   `Payment ${action === "confirm" ? "Confirmed ✓" : action === "reject" ? "Rejected ✗" : "Partial ⚠️"} - ${item.caseReference}`,
         message: notifMessage,
         type:    action === "confirm" ? "SUCCESS" : action === "reject" ? "ALERT" : ("WARNING" as any),
         link:    "/payment-workflow",
@@ -275,7 +275,7 @@ export async function PATCH(request: NextRequest) {
       data: {
         userId: user.id,
         action: `PAYMENT_${newStatus}`,
-        detail: `Finance ${action}ed payment for ${item.companyName} (${item.caseReference})${actualAmount ? ` — actual: ₦${Number(actualAmount).toLocaleString()}` : ""}`,
+        detail: `Finance ${action}ed payment for ${item.companyName} (${item.caseReference})${actualAmount ? ` - actual: ₦${Number(actualAmount).toLocaleString()}` : ""}`,
       },
     });
 

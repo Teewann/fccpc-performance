@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       const weekLogs = logs.filter((l) => new Date(l.createdAt) >= day7ago).length;
 
       // ── Scoring algorithm ──────────────────────────────────────
-      // 1. Log frequency (40%) — target: 22 days/month (working days)
+      // 1. Log frequency (40%) - target: 22 days/month (working days)
       const freqScore  = Math.min((uniqueDays / 22) * 100, 100);
 
       // 2. Approval rate (30%)
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       // 3. Supervisor quality scores (20%)
       const qualityScore = avgScore !== null ? (avgScore / 10) * 100 : 60;
 
-      // 4. Output volume (10%) — target: 30 tasks/month
+      // 4. Output volume (10%) - target: 30 tasks/month
       const volumeScore  = Math.min((totalLogs / 30) * 100, 100);
 
       const overallScore = Math.round(
@@ -75,22 +75,22 @@ export async function GET(request: NextRequest) {
 
       if (overallScore >= 85 && approved >= 15) {
         tag = "Promote"; tagColor = "green";
-        reason = `Outstanding performance — ${totalLogs} tasks, ${Math.round(approvalRate)}% approval rate`;
+        reason = `Outstanding performance - ${totalLogs} tasks, ${Math.round(approvalRate)}% approval rate`;
       } else if (overallScore >= 70) {
         tag = "On Track"; tagColor = "blue";
-        reason = `Consistent output — ${totalLogs} tasks logged, ${uniqueDays} active days`;
+        reason = `Consistent output - ${totalLogs} tasks logged, ${uniqueDays} active days`;
       } else if (uniqueDays < 10 && totalLogs < 10) {
         tag = "Low Activity"; tagColor = "amber";
         reason = `Only ${uniqueDays} active days and ${totalLogs} logs in 30 days`;
       } else if (rejected > approved && totalLogs > 5) {
         tag = "Quality Issues"; tagColor = "red";
-        reason = `${rejected} rejected logs — quality review needed`;
+        reason = `${rejected} rejected logs - quality review needed`;
       } else if (overallScore < 50) {
         tag = "Flag"; tagColor = "red";
-        reason = `Below performance threshold — score ${overallScore}%`;
+        reason = `Below performance threshold - score ${overallScore}%`;
       } else {
         tag = "Watch"; tagColor = "amber";
-        reason = `Performance trending below target — ${totalLogs} tasks, ${uniqueDays} active days`;
+        reason = `Performance trending below target - ${totalLogs} tasks, ${uniqueDays} active days`;
       }
 
       return {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +87,7 @@ export default function EVCDirectivesPage() {
 
   async function downloadDocument() {
     if (!selected) return;
-    // FIXED: was /api/evc-tasks/document — now matches the actual folder name
+    // FIXED: was /api/evc-tasks/document - now matches the actual folder name
     const res  = await fetch(`/api/evc-tasks-document?taskId=${selected.id}`);
     const data = await res.json();
     if (res.ok && data.fileData) {

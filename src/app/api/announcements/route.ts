@@ -15,24 +15,43 @@ export async function GET(request: NextRequest) {
     });
     if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    // Staff see announcements for their department or all-staff announcements
-    const announcements = await prisma.announcement.findMany({
-      where: {
-        OR: [
-          { targetDeptId: null },
-          { targetDeptId: user.departmentId ?? undefined },
-        ],
-      },
-      include: {
-        author: {
-          select: { name: true, role: true, department: { select: { name: true } } },
-        },
-      },
-      orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
-      take: 50,
-    });
+    const { searchParams } = new URL(request.url);
+    
+    // ✅ PAGINATION
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
+    const skip = (page - 1) * limit;
 
-    return NextResponse.json({ announcements });
+    // Staff see announcements for their department or all-staff announcements
+    const where = {
+      OR: [
+        { targetDeptId: null },
+        { targetDeptId: user.departmentId ?? undefined },
+      ],
+    };
+
+    // ✅ Run with pagination
+    const [announcements, total] = await Promise.all([
+      prisma.announcement.findMany({
+        where,
+        include: {
+          author: {
+            select: { name: true, role: true, department: { select: { name: true } } },
+          },
+        },
+        orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+        skip,
+        take: limit,
+      }),
+      prisma.announcement.count({ where }),
+    ]);
+
+    return NextResponse.json({
+      announcements,
+      total,
+      page,
+      pages: Math.ceil(total / limit),
+    });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { checkActivationCode, enrollDevice, listMyDevices, removeDevice } from "@/lib/webauthn-client";
@@ -38,7 +38,7 @@ export function BiometricEnrollment() {
   function startAction(action: "device" | "face") {
     setMsg({ text: "", ok: true });
     if (alreadyProven) {
-      // Already vetted once — no code needed for the other method.
+      // Already vetted once - no code needed for the other method.
       runAction(action);
     } else {
       setUnlockedForAction(action);
@@ -201,7 +201,7 @@ export function BiometricEnrollment() {
         </div>
         <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
           A quick photo confirms your identity at check-in. Only a mathematical description of your
-          face shape is stored, encrypted — never a viewable photo.
+          face shape is stored, encrypted - never a viewable photo.
         </div>
 
         {faceEnrolled ? (

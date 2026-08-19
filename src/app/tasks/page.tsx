@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
@@ -43,7 +43,6 @@ type StaffMember = {
   unit: { name: string } | null;
 };
 
-// Finance staff from dedicated endpoint — includes ALL Finance dept members
 type FinanceStaffMember = {
   id: string; name: string; role: string;
 };
@@ -54,11 +53,6 @@ type Counts = {
   overdue: number; myLoad: number;
 };
 
-// ── Performance rating computed from task stats ──────────────────────
-// Elite ≥80% completion + <10% overdue
-// High ≥60%
-// Standard ≥40%
-// Developing <40%
 function computePerformanceRating(counts: Counts): { label: string; color: string; bg: string; border: string; icon: string } {
   const total = counts.total || 1;
   const completionRate = counts.completed / total;
@@ -113,7 +107,6 @@ const STATUS_FILTERS = [
 
 type Panel = "detail" | "forward" | "escalate" | "comment" | "transfer";
 
-// ── Document viewer ────────────────────────────────────────────────────
 function DocumentViewer({ documentName, documentData, documentType, onClose }: {
   documentName: string; documentData: string; documentType: string; onClose: () => void;
 }) {
@@ -165,13 +158,19 @@ function TasksContent() {
   const router       = useRouter();
 
   const [tasks,      setTasks]      = useState<Task[]>([]);
-  // ── FIXED: counts are frozen during tab switch so they never disappear ──
   const [counts,     setCounts]     = useState<Counts>({ total:0,pending:0,underTreatment:0,awaitingResponse:0,treated:0,completed:0,escalated:0,forwarded:0,overdue:0,myLoad:0 });
-  const [prevCounts, setPrevCounts] = useState<Counts | null>(null); // frozen snapshot during loading
+  const [prevCounts, setPrevCounts] = useState<Counts | null>(null);
+  
+  // ✅ LAZY LOAD - staff list starts empty, only fetched when needed
   const [staffList,  setStaffList]  = useState<StaffMember[]>([]);
-  // ── FIXED: Finance staff fetched from dedicated endpoint, independent of staffList ──
+  const [staffLoaded, setStaffLoaded] = useState(false);
+  const [staffLoading, setStaffLoading] = useState(false);
+  
+  // ✅ LAZY LOAD - finance staff starts empty, only fetched when needed
   const [financeStaff,      setFinanceStaff]      = useState<FinanceStaffMember[]>([]);
   const [financeStaffLoaded, setFinanceStaffLoaded] = useState(false);
+  const [financeStaffLoading, setFinanceStaffLoading] = useState(false);
+  
   const [loading,    setLoading]    = useState(true);
   const [userRole,   setUserRole]   = useState("");
   const [userId,     setUserId]     = useState("");
@@ -212,24 +211,20 @@ function TasksContent() {
   const canAssign     = ["DIRECTOR","ADMIN","EXECUTIVE"].includes(userRole);
   const canUseBalancer= ["DIRECTOR","ADMIN","EXECUTIVE","HR","SUPERVISOR"].includes(userRole);
 
-  // ── ALL users see all 4 tabs ──
-  // "All" = assigned to me + created by me + department tasks combined (no org-wide leakage)
-  // Admin/EVC "All" additionally sees the whole organisation
   const viewTabs = [
     { key: "assigned",   label: "Assigned to me", hint: "Tasks assigned to you or transferred to you" },
     { key: "created",    label: "Created by me",  hint: "Tasks you created or assigned to others" },
     { key: "department", label: "Department",      hint: "All tasks in your department" },
     { key: "all",        label: "All",             hint: "Assigned to me + Created by me + Department tasks" },
   ];
-  // Count per tab (always based on the currently loaded counts, never hidden)
+
   const tabCounts: Record<string, number> = {
     assigned:   counts.myLoad,
-    created:    counts.total,   // rough — or you can track separately
+    created:    counts.total,
     department: counts.total,
     all:        counts.total,
   };
 
-  // ── FIXED: fetchTasks freezes previous counts until new ones arrive ──
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     try {
@@ -248,18 +243,25 @@ function TasksContent() {
     } finally { setLoading(false); }
   }, [view, searchTerm]);
 
-  const fetchStaff = useCallback(async () => {
+  // ✅ LAZY LOAD: Only fetch staff when user opens the create form
+  const loadStaffList = useCallback(async () => {
+    if (staffLoaded || staffLoading) return;
+    setStaffLoading(true);
     try {
       const res  = await fetch("/api/users?limit=500&isActive=true");
       const data = await res.json();
-      if (res.ok) setStaffList(data.users || []);
+      if (res.ok) {
+        setStaffList(data.users || []);
+        setStaffLoaded(true);
+      }
     } catch (err) { console.error(err); }
-  }, []);
+    finally { setStaffLoading(false); }
+  }, [staffLoaded, staffLoading]);
 
-  // ── FIXED: Finance staff fetched from dedicated endpoint ──
-  // Works for ALL roles — not dependent on staffList filtering
-  const fetchFinanceStaff = useCallback(async () => {
-    if (financeStaffLoaded) return;
+  // ✅ LAZY LOAD: Only fetch Finance staff when user opens payment form
+  const loadFinanceStaff = useCallback(async () => {
+    if (financeStaffLoaded || financeStaffLoading) return;
+    setFinanceStaffLoading(true);
     try {
       const res  = await fetch("/api/tasks?financeStaff=1");
       const data = await res.json();
@@ -268,7 +270,22 @@ function TasksContent() {
         setFinanceStaffLoaded(true);
       }
     } catch (err) { console.error("Finance staff fetch error:", err); }
-  }, [financeStaffLoaded]);
+    finally { setFinanceStaffLoading(false); }
+  }, [financeStaffLoaded, financeStaffLoading]);
+
+  // ✅ When user clicks "Create Task" button, load staff list lazily
+  const handleOpenCreateForm = useCallback(() => {
+    setShowForm(true);
+    loadStaffList();
+  }, [loadStaffList]);
+
+  // ✅ When user toggles payment request, load finance staff lazily
+  const handlePaymentToggle = useCallback((checked: boolean) => {
+    setForm(prev => ({ ...prev, isPaymentRequest: checked, assignedToId: "" }));
+    if (checked) {
+      loadFinanceStaff();
+    }
+  }, [loadFinanceStaff]);
 
   useEffect(() => {
     fetch("/api/settings/account").then(r => r.json()).then(d => {
@@ -281,19 +298,8 @@ function TasksContent() {
   }, []);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
-  useEffect(() => { if (userRole) fetchStaff(); }, [userRole, fetchStaff]);
 
-  // Fetch Finance staff as soon as the payment form is opened
-  useEffect(() => {
-    if (showForm && form.isPaymentRequest) {
-      fetchFinanceStaff();
-    }
-  }, [showForm, form.isPaymentRequest, fetchFinanceStaff]);
-
-  // Also pre-fetch Finance staff once role is known (for everyone)
-  useEffect(() => {
-    if (userRole) fetchFinanceStaff();
-  }, [userRole, fetchFinanceStaff]);
+  // ✅ DO NOT auto-fetch staff on page load - removed useEffect that called fetchStaff()
 
   // Handle ?taskId= URL param
   useEffect(() => {
@@ -304,10 +310,8 @@ function TasksContent() {
     }
   }, [searchParams, tasks]);
 
-  // ── Use prevCounts when loading to prevent count flash/disappear ────
   const displayCounts = loading && prevCounts ? prevCounts : counts;
 
-  // ── Client-side filter ──────────────────────────────────────────────
   const filteredTasks = tasks.filter(task => {
     if (filter === "ALL") return true;
     const TREATMENT_ONLY = ["UNDER_TREATMENT","AWAITING_RESPONSE","TREATED","ESCALATED","FORWARDED","ACKNOWLEDGED"];
@@ -319,7 +323,6 @@ function TasksContent() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title || !form.description) { showToast("Title and description are required.", false); return; }
-    // Payment routing validation
     if (form.isPaymentRequest && form.paymentRouting === "SPECIFIC" && !form.paymentRecipientId) {
       showToast("Please select a specific Finance staff member.", false); return;
     }
@@ -503,7 +506,8 @@ function TasksContent() {
                 ⚖ Load Balancer
               </button>
             )}
-            <button onClick={() => { setShowForm(!showForm); setSelected(null); }} style={{ padding:"10px 22px", borderRadius:10, border:"1.5px solid #22c55e", background:"#052e16", color:"#4ade80", fontSize:14, fontWeight:600, cursor:"pointer" }}>
+            {/* ✅ LAZY LOAD: onClick loads staff list only when needed */}
+            <button onClick={handleOpenCreateForm} style={{ padding:"10px 22px", borderRadius:10, border:"1.5px solid #22c55e", background:"#052e16", color:"#4ade80", fontSize:14, fontWeight:600, cursor:"pointer" }}>
               {showForm ? "Cancel" : canAssign ? "+ Assign task" : "+ Create task"}
             </button>
             <ThemeToggleButton />
@@ -516,11 +520,10 @@ function TasksContent() {
           </div>
         )}
 
-        {/* ── VIEW TABS — FIXED: all users see all tabs ── */}
+        {/* ── VIEW TABS ── */}
         <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
           {viewTabs.map(v => {
             const active = view === v.key;
-            // Use displayCounts so counts don't flash to zero during switch
             const cnt = v.key === "assigned" ? displayCounts.myLoad : displayCounts.total;
             return (
               <button key={v.key}
@@ -533,14 +536,13 @@ function TasksContent() {
                   color: active ? "#60a5fa" : "var(--text-muted)",
                 }}>
                 {v.label}
-                {/* Always show count badge on every tab, not just active */}
                 <span style={{
                   marginLeft:6, fontSize:11, fontWeight:700, padding:"1px 7px", borderRadius:20,
                   background: active ? "#60a5fa22" : "var(--bg-card)",
                   color: active ? "#60a5fa" : "var(--text-muted)",
                   border:`0.5px solid ${active ? "#60a5fa44" : "var(--border)"}`,
                 }}>
-                  {active ? cnt : "—"}
+                  {active ? cnt : "-"}
                 </span>
               </button>
             );
@@ -622,12 +624,12 @@ function TasksContent() {
                   <textarea style={{...inp,resize:"none",minHeight:90} as any} value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Full details of what needs to be done…" required />
                 </div>
 
-                {/* Payment request toggle */}
+                {/* Payment request toggle - ✅ LAZY LOAD finance staff when toggled */}
                 <div style={{ gridColumn:"1/-1" }}>
                   <div style={{ padding:"12px 16px", background:"var(--bg-input)", borderRadius:10, border:`1.5px solid ${form.isPaymentRequest ? "#22c55e" : "var(--border)"}`, display:"flex", alignItems:"center", gap:12, cursor:"pointer" }}
-                    onClick={() => setForm({...form, isPaymentRequest:!form.isPaymentRequest, assignedToId:""})}>
+                    onClick={() => handlePaymentToggle(!form.isPaymentRequest)}>
                     <input type="checkbox" id="payreq" checked={form.isPaymentRequest}
-                      onChange={e => setForm({...form,isPaymentRequest:e.target.checked,assignedToId:""})}
+                      onChange={e => handlePaymentToggle(e.target.checked)}
                       style={{ width:18, height:18, accentColor:"#22c55e", cursor:"pointer" }} onClick={e => e.stopPropagation()} />
                     <div>
                       <label htmlFor="payreq" style={{ fontSize:14, fontWeight:600, color: form.isPaymentRequest ? "#4ade80" : "var(--text-primary)", cursor:"pointer" }}>
@@ -647,8 +649,8 @@ function TasksContent() {
                       <select style={inp} value={form.paymentRouting} onChange={e => {
                         setForm({...form,paymentRouting:e.target.value,paymentRecipientId:""});
                         setSelectedFinanceStaff([]);
-                        // Load Finance staff when any routing option is chosen
-                        fetchFinanceStaff();
+                        // ✅ Lazy load finance staff if not loaded
+                        if (!financeStaffLoaded) loadFinanceStaff();
                       }}>
                         <option value="DIRECTOR">Head of Finance (Director only)</option>
                         <option value="ALL_FINANCE">All Finance Department staff</option>
@@ -658,7 +660,7 @@ function TasksContent() {
                     </div>
 
                     {/* ── Finance staff loading state ── */}
-                    {!financeStaffLoaded && (
+                    {financeStaffLoading && (
                       <div style={{ gridColumn:"1/-1", fontSize:13, color:"var(--text-muted)", padding:"10px 14px", background:"var(--bg-input)", borderRadius:9 }}>
                         Loading Finance staff…
                       </div>
@@ -673,7 +675,7 @@ function TasksContent() {
                             <option disabled>No Finance/Accounts staff found in database</option>
                           ) : (
                             financeStaff.map(s => (
-                              <option key={s.id} value={s.id}>{s.name} — {s.role}</option>
+                              <option key={s.id} value={s.id}>{s.name} - {s.role}</option>
                             ))
                           )}
                         </select>
@@ -699,7 +701,6 @@ function TasksContent() {
                           </div>
                         ) : (
                           <div style={{ background:"var(--bg-input)", border:"0.5px solid var(--border)", borderRadius:10, padding:8, display:"flex", flexDirection:"column", gap:6, maxHeight:220, overflowY:"auto" }}>
-                            {/* Select all row */}
                             <div onClick={() => setSelectedFinanceStaff(selectedFinanceStaff.length === financeStaff.length ? [] : financeStaff.map(s=>s.id))}
                               style={{ padding:"8px 10px", borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:10,
                                 background: selectedFinanceStaff.length === financeStaff.length ? "#052e16" : "var(--bg-card)",
@@ -749,8 +750,21 @@ function TasksContent() {
                     <select style={inp} value={form.assignedToId} onChange={e => setForm({...form,assignedToId:e.target.value})}>
                       <option value="">Select person…</option>
                       <option value="SELF">👤 Assign to myself (self task)</option>
-                      {staffGroups(false)}
+                      {/* ✅ STAFF LIST - already loaded lazily when form opened */}
+                      {staffLoaded ? staffGroups(false) : (
+                        <option value="" disabled>Loading staff list…</option>
+                      )}
                     </select>
+                    {!staffLoaded && !staffLoading && (
+                      <div style={{ fontSize:12, color:"#f59e0b", marginTop:-8, marginBottom:8 }}>
+                        Click the "Assign task" button to load staff list
+                      </div>
+                    )}
+                    {staffLoading && (
+                      <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:-8, marginBottom:8 }}>
+                        Loading staff…
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1069,7 +1083,9 @@ function TasksContent() {
                   <label style={lbl}>Forward to *</label>
                   <select style={inp} value={forwardToId} onChange={e => setForwardToId(e.target.value)}>
                     <option value="">Select person…</option>
-                    {staffGroups(true)}
+                    {staffLoaded ? staffGroups(true) : (
+                      <option value="" disabled>Loading staff…</option>
+                    )}
                   </select>
                   <label style={lbl}>Reason / note</label>
                   <textarea rows={3} value={forwardNote} onChange={e => setForwardNote(e.target.value)} placeholder="Why are you forwarding?" style={{...inp,resize:"none"}} />
@@ -1124,7 +1140,9 @@ function TasksContent() {
                   <label style={lbl}>Transfer to *</label>
                   <select style={inp} value={transferToId} onChange={e => setTransferToId(e.target.value)}>
                     <option value="">Select person…</option>
-                    {staffGroups(true)}
+                    {staffLoaded ? staffGroups(true) : (
+                      <option value="" disabled>Loading staff…</option>
+                    )}
                   </select>
                   <label style={lbl}>Transfer reason / note</label>
                   <textarea rows={3} value={transferNote} onChange={e => setTransferNote(e.target.value)} placeholder="Why are you transferring? (optional)" style={{...inp,resize:"none"}} />
@@ -1152,3 +1170,6 @@ export default function TasksPage() {
     </Suspense>
   );
 }
+
+
+

@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// GET — fetch questions for a specific exam (no correct answers sent to client)
+// GET - fetch questions for a specific exam (no correct answers sent to client)
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST — submit exam answers and calculate score
+// POST - submit exam answers and calculate score
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       breakdown.push({
         questionId:    question.id,
         correct:       isCorrect,
-        selected:      selected || "—",
+        selected:      selected || "-",
         correctAnswer: question.correctAnswer,
       });
     }
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
         data: {
           userId:  admin.id,
           title:   `Exam result: ${user.name}`,
-          message: `${user.name} scored ${percentage}% on "${exam.title}" — ${passed ? "PASSED" : "FAILED"}.`,
+          message: `${user.name} scored ${percentage}% on "${exam.title}" - ${passed ? "PASSED" : "FAILED"}.`,
           type:    passed ? "SUCCESS" : "WARNING",
         },
       });
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
       data: {
         userId: user.id,
         action: "EXAM_COMPLETED",
-        detail: `"${exam.title}" — ${percentage}% — ${passed ? "PASSED" : "FAILED"}`,
+        detail: `"${exam.title}" - ${percentage}% - ${passed ? "PASSED" : "FAILED"}`,
       },
     });
 
