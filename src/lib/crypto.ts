@@ -1,8 +1,16 @@
 import crypto from "crypto";
 
-const KEY = Buffer.from(process.env.FACE_ENCRYPTION_KEY || "", "hex");
+// ✅ Lazy load the key - only when needed, not at import time
+function getKey(): Buffer {
+  const key = process.env.FACE_ENCRYPTION_KEY;
+  if (!key) {
+    throw new Error("FACE_ENCRYPTION_KEY environment variable is not set");
+  }
+  return Buffer.from(key, "hex");
+}
 
 export function encrypt(text: string): string {
+  const KEY = getKey();
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv("aes-256-gcm", KEY, iv);
   const encrypted = Buffer.concat([cipher.update(text, "utf8"), cipher.final()]);
@@ -11,6 +19,7 @@ export function encrypt(text: string): string {
 }
 
 export function decrypt(payload: string): string {
+  const KEY = getKey();
   const data = Buffer.from(payload, "base64");
   const iv = data.subarray(0, 12);
   const authTag = data.subarray(12, 28);
