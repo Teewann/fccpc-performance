@@ -1,10 +1,10 @@
 import * as faceapi from "face-api.js";
 
 let modelsLoaded = false;
-
+export async function loadModels() {
 async function loadModels() {
   if (modelsLoaded) return;
-  
+      
   const MODEL_URL = "/models";
   
   await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
