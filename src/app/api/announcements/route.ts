@@ -9,14 +9,10 @@ export async function GET(request: NextRequest) {
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-    if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const userDeptId = (session.user as any).departmentId as string | null;
 
     const { searchParams } = new URL(request.url);
-    
+
     // ✅ PAGINATION
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
@@ -26,7 +22,7 @@ export async function GET(request: NextRequest) {
     const where = {
       OR: [
         { targetDeptId: null },
-        { targetDeptId: user.departmentId ?? undefined },
+        { targetDeptId: userDeptId ?? undefined },
       ],
     };
 
@@ -64,14 +60,12 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-    if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const userId = (session.user as any).id as string;
+    const userRole = (session.user as any).role as string;
+    const userName = (session.user as any).name as string;
 
     // Only Directors, Admin, Executive can post
-    if (!["DIRECTOR", "ADMIN", "EXECUTIVE"].includes(user.role)) {
+    if (!["DIRECTOR", "ADMIN", "EXECUTIVE"].includes(userRole)) {
       return NextResponse.json(
         { error: "Only Directors and Executives can post announcements" },
         { status: 403 }
@@ -92,7 +86,7 @@ export async function POST(request: NextRequest) {
       data: {
         title:        title.trim(),
         body:         bodyText.trim(),
-        authorId:     user.id,
+        authorId:     userId,
         targetDeptId: targetDeptId || null,
         isPinned:     isPinned     || false,
       },
@@ -112,23 +106,25 @@ export async function POST(request: NextRequest) {
       select: { id: true },
     });
 
-    await prisma.notification.createMany({
-      data: targetUsers.map((u) => ({
-        userId:  u.id,
-        title:   `New announcement: ${title}`,
-        message: `${user.name} posted: "${title}"`,
-        type:    "INFO" as const,
-        link:    "/announcements",
-      })),
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        userId: user.id,
-        action: "ANNOUNCEMENT_CREATED",
-        detail: `Posted: "${title}"`,
-      },
-    });
+    // Notification + audit log are independent — fire together
+    await Promise.all([
+      prisma.notification.createMany({
+        data: targetUsers.map((u) => ({
+          userId:  u.id,
+          title:   `New announcement: ${title}`,
+          message: `${userName} posted: "${title}"`,
+          type:    "INFO" as const,
+          link:    "/announcements",
+        })),
+      }),
+      prisma.auditLog.create({
+        data: {
+          userId,
+          action: "ANNOUNCEMENT_CREATED",
+          detail: `Posted: "${title}"`,
+        },
+      }),
+    ]);
 
     return NextResponse.json({ success: true, announcement }, { status: 201 });
   } catch (error) {
@@ -143,13 +139,9 @@ export async function DELETE(request: NextRequest) {
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
+    const userRole = (session.user as any).role as string;
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-    if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-    if (!["DIRECTOR", "ADMIN", "EXECUTIVE"].includes(user.role)) {
+    if (!["DIRECTOR", "ADMIN", "EXECUTIVE"].includes(userRole)) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 

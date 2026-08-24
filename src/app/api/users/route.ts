@@ -82,11 +82,12 @@ export async function GET(request: NextRequest) {
     if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-    const currentUser = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true, role: true, departmentId: true },
-    });
-    if (!currentUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    // ✅ Use session data directly — no DB round trip needed
+    const currentUser = {
+      id: (session.user as any).id as string,
+      role: (session.user as any).role as string,
+      departmentId: (session.user as any).departmentId as string | null,
+    };
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
@@ -94,7 +95,7 @@ export async function GET(request: NextRequest) {
     const isActive = searchParams.get("isActive") === "true";
     const departmentId = searchParams.get("deptId") || null;
     const directory = searchParams.get("directory") === "true";
-    
+
     // ✅ PAGINATION
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
@@ -127,8 +128,8 @@ export async function GET(request: NextRequest) {
       where.id = currentUser.id;
     }
 
-    // ✅ Run with pagination
-    const [users, total] = await Promise.all([
+    // ✅ Everything independent — fire all 4 queries at the same time
+    const [users, total, departments, units] = await Promise.all([
       prisma.user.findMany({
         where,
         select: {
@@ -145,15 +146,9 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.user.count({ where }),
+      prisma.department.findMany({ orderBy: { name: "asc" } }),
+      prisma.unit.findMany({ orderBy: { name: "asc" } }),
     ]);
-
-    // Departments and units (always return all - these are small lookup tables)
-    const departments = await prisma.department.findMany({
-      orderBy: { name: "asc" },
-    });
-    const units = await prisma.unit.findMany({
-      orderBy: { name: "asc" },
-    });
 
     return NextResponse.json({
       users,
@@ -176,8 +171,10 @@ export async function POST(request: NextRequest) {
     if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-    const admin = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!admin || admin.role !== "ADMIN")
+    // ✅ Use session data directly — no DB round trip needed
+    const adminId = (session.user as any).id as string;
+    const adminRole = (session.user as any).role as string;
+    if (adminRole !== "ADMIN")
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
@@ -217,7 +214,7 @@ export async function POST(request: NextRequest) {
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.id,
+        userId: adminId,
         action: "USER_CREATED",
         detail: `Admin created user: ${user.name} (${user.email}) - Role: ${role}${phone ? ` - Phone: ${phone}` : ""}`,
       },
@@ -237,8 +234,11 @@ export async function PATCH(request: NextRequest) {
     if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-    const admin = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!admin || admin.role !== "ADMIN")
+    // ✅ Use session data directly — no DB round trip needed
+    const adminId = (session.user as any).id as string;
+    const adminRole = (session.user as any).role as string;
+    const adminName = (session.user as any).name as string;
+    if (adminRole !== "ADMIN")
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
@@ -275,12 +275,12 @@ export async function PATCH(request: NextRequest) {
 
     let emailSent = false;
     if (newPassword && sendResetEmail) {
-      emailSent = await sendPasswordResetEmail(target.email, target.name, admin.name);
+      emailSent = await sendPasswordResetEmail(target.email, target.name, adminName);
     }
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.id,
+        userId: adminId,
         action: newPassword ? "PASSWORD_RESET" : "USER_UPDATED",
         detail: newPassword
           ? `Admin reset password for ${target.name} (${target.email}) - Email notification: ${emailSent ? "sent" : "failed or skipped"}`
@@ -302,26 +302,28 @@ export async function DELETE(request: NextRequest) {
     if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-    const admin = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!admin || admin.role !== "ADMIN")
+    // ✅ Use session data directly — no DB round trip needed
+    const adminId = (session.user as any).id as string;
+    const adminRole = (session.user as any).role as string;
+    if (adminRole !== "ADMIN")
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "User ID required" }, { status: 400 });
 
-    const target = await prisma.user.findUnique({ where: { id } });
-    if (!target)  return NextResponse.json({ error: "User not found" }, { status: 404 });
-
-    if (target.id === admin.id) {
+    if (id === adminId) {
       return NextResponse.json({ error: "You cannot delete your own account" }, { status: 400 });
     }
+
+    const target = await prisma.user.findUnique({ where: { id } });
+    if (!target)  return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     await prisma.user.delete({ where: { id } });
 
     await prisma.auditLog.create({
       data: {
-        userId: admin.id,
+        userId: adminId,
         action: "USER_DELETED",
         detail: `Admin deleted user: ${target.name} (${target.email})`,
       },

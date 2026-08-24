@@ -7,31 +7,32 @@ import { authOptions } from "@/lib/auth";
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = (session.user as any).id as string;
 
-  const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-  if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  const conversations = await prisma.chatConversation.findMany({
-    where: {
-      participants: { some: { userId: user.id } },
-    },
-    include: {
-      participants: {
-        include: { user: { select: { id: true, name: true, photo: true, lastSeen: true } } },
+  // Independent queries — run together instead of one after another
+  const [conversations, myParticipantRows] = await Promise.all([
+    prisma.chatConversation.findMany({
+      where: {
+        participants: { some: { userId } },
       },
-      messages: {
-        take: 1,
-        orderBy: { createdAt: "desc" },
-        select: { content: true, fileUrl: true, createdAt: true, senderId: true },
+      include: {
+        participants: {
+          include: { user: { select: { id: true, name: true, photo: true, lastSeen: true } } },
+        },
+        messages: {
+          take: 1,
+          orderBy: { createdAt: "desc" },
+          select: { content: true, fileUrl: true, createdAt: true, senderId: true },
+        },
       },
-    },
-    orderBy: { updatedAt: "desc" },
-  });
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.chatParticipant.findMany({
+      where: { userId },
+      select: { conversationId: true, lastReadAt: true },
+    }),
+  ]);
 
-  const myParticipantRows = await prisma.chatParticipant.findMany({
-    where: { userId: user.id },
-    select: { conversationId: true, lastReadAt: true },
-  });
   const myReadMap = new Map(myParticipantRows.map((p) => [p.conversationId, p.lastReadAt]));
 
   // Consider someone "online" if seen in the last 2 minutes
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
   const now = Date.now();
 
   const result = conversations.map((c) => {
-    const others = c.participants.filter((p) => p.userId !== user.id);
+    const others = c.participants.filter((p) => p.userId !== userId);
     const otherUser = others[0]?.user;
     const isOnline = otherUser?.lastSeen
       ? now - new Date(otherUser.lastSeen).getTime() < ONLINE_THRESHOLD_MS
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest) {
     const lastMsg = c.messages[0];
     const myLastRead = myReadMap.get(c.id);
     const hasUnread = lastMsg
-      ? lastMsg.senderId !== user.id && (!myLastRead || new Date(lastMsg.createdAt) > new Date(myLastRead))
+      ? lastMsg.senderId !== userId && (!myLastRead || new Date(lastMsg.createdAt) > new Date(myLastRead))
       : false;
 
     return {
@@ -75,9 +76,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const currentUser = await prisma.user.findUnique({ where: { email: session.user.email } });
-  if (!currentUser) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const currentUserId = (session.user as any).id as string;
 
   const body = await request.json();
   const { participantIds, isGroup, name } = body;
@@ -92,7 +91,7 @@ export async function POST(request: NextRequest) {
       where: {
         isGroup: false,
         AND: [
-          { participants: { some: { userId: currentUser.id } } },
+          { participants: { some: { userId: currentUserId } } },
           { participants: { some: { userId: otherId } } },
         ],
       },
@@ -102,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const userIds = [currentUser.id, ...participantIds];
+  const userIds = [currentUserId, ...participantIds];
   const conversation = await prisma.chatConversation.create({
     data: {
       name: isGroup ? name : null,

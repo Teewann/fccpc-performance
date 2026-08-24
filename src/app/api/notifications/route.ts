@@ -10,22 +10,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // ✅ Get user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    // ✅ Use session data directly — no DB round trip needed
+    const user = { id: (session.user as any).id as string };
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
     const skip = (page - 1) * limit;
 
-    // ✅ Run queries with proper userId from database
+    // ✅ Run queries with proper userId from session
     const [notifications, unreadCount, total] = await Promise.all([
       prisma.notification.findMany({
         where: { userId: user.id },
@@ -61,15 +54,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    // ✅ Get user from database using email
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    // ✅ Use session data directly — no DB round trip needed
+    const user = { id: (session.user as any).id as string };
 
     const body = await request.json();
     const { notifId, markAllRead, deleteId, deleteAll } = body;

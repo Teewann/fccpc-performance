@@ -145,20 +145,48 @@ model KPI {
   startDate    DateTime
   endDate      DateTime
   createdAt    DateTime   @default(now())
+  snapshots    KPISnapshot[]
+  goalId     String?
+  goal       OrgGoal? @relation(fields: [goalId], references: [id])
+  sourceType String   @default("MANUAL")   // "MANUAL" | "AUTO_REVENUE"
 }
 
+model KPISnapshot {
+  id           String   @id @default(cuid())
+  kpiId        String
+  kpi          KPI      @relation(fields: [kpiId], references: [id])
+  value        Float
+  updatedById  String?  // Who updated this
+  note         String?  // Optional note about the change
+  recordedAt   DateTime @default(now())
+  @@index([kpiId])
+  @@index([recordedAt])
+}
+model OrgGoal {
+  id          String   @id @default(cuid())
+  title       String              // "Generate ₦100B in 2026"
+  description String?
+  totalTarget Float
+  unit        String
+  year        Int
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+  contributions KPI[]
+}
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id])
   title     String
   message   String
-  type      NotificationType @default(INFO)
-  read      Boolean  @default(false)
+  type      NotifType @default(INFO)
+  read      Boolean   @default(false)
+  link      String?
   actionUrl String?
   metadata  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())   // ← ADDED @default(now())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model AuditLog {
@@ -854,4 +882,12 @@ enum NotificationType {
   WARNING
   ALERT
   SUCCESS
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
 }

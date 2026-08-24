@@ -12,10 +12,10 @@ export async function PATCH(
     const session = await getServerSession(authOptions);
     if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const userId = (session.user as any).id as string;
+
     const recipient = await prisma.memoRecipient.findFirst({
-      where: { memoId: id, userId: user.id },
+      where: { memoId: id, userId },
     });
     if (!recipient) return NextResponse.json({ error: "Not a recipient" }, { status: 403 });
     await prisma.memoRecipient.update({
@@ -38,11 +38,11 @@ export async function DELETE(
     const session = await getServerSession(authOptions);
     if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const userId = (session.user as any).id as string;
+
     const memo = await prisma.memo.findUnique({ where: { id } });
     if (!memo) return NextResponse.json({ error: "Memo not found" }, { status: 404 });
-    if (memo.senderId !== user.id)
+    if (memo.senderId !== userId)
       return NextResponse.json({ error: "Only sender can delete" }, { status: 403 });
     await prisma.memo.delete({ where: { id } });
     return NextResponse.json({ success: true });
@@ -61,18 +61,16 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { department: true },
-    });
-    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+    const userId = (session.user as any).id as string;
+    const userName = (session.user as any).name as string;
+
     const original = await prisma.memo.findUnique({
       where: { id },
       include: { sender: true, recipients: true },
     });
     if (!original) return NextResponse.json({ error: "Memo not found" }, { status: 404 });
-    const isRecipient = original.recipients.some((r: any) => r.userId === user.id);
-    const isSender = original.senderId === user.id;
+    const isRecipient = original.recipients.some((r: any) => r.userId === userId);
+    const isSender = original.senderId === userId;
     if (!isRecipient && !isSender)
       return NextResponse.json({ error: "Not allowed to forward" }, { status: 403 });
     const body = await request.json();
@@ -81,29 +79,29 @@ export async function POST(
       return NextResponse.json({ error: "Forwarding note required" }, { status: 400 });
     let toUserIds: string[] = [];
     if (targetType === "all") {
-      const all = await prisma.user.findMany({ where: { isActive: true, id: { not: user.id } }, select: { id: true } });
+      const all = await prisma.user.findMany({ where: { isActive: true, id: { not: userId } }, select: { id: true } });
       toUserIds = all.map(u => u.id);
     } else if (targetType === "department") {
       if (!targetDeptId) return NextResponse.json({ error: "Department required" }, { status: 400 });
-      const deptUsers = await prisma.user.findMany({ where: { departmentId: targetDeptId, isActive: true, id: { not: user.id } }, select: { id: true } });
+      const deptUsers = await prisma.user.findMany({ where: { departmentId: targetDeptId, isActive: true, id: { not: userId } }, select: { id: true } });
       toUserIds = deptUsers.map(u => u.id);
     } else if (targetType === "roles") {
       if (!targetRoles?.length) return NextResponse.json({ error: "Roles required" }, { status: 400 });
-      const roleUsers = await prisma.user.findMany({ where: { role: { in: targetRoles }, isActive: true, id: { not: user.id } }, select: { id: true } });
+      const roleUsers = await prisma.user.findMany({ where: { role: { in: targetRoles }, isActive: true, id: { not: userId } }, select: { id: true } });
       toUserIds = roleUsers.map(u => u.id);
     } else if (targetType === "specific") {
       if (!recipientIds?.length) return NextResponse.json({ error: "Recipients required" }, { status: 400 });
-      toUserIds = recipientIds.filter((uid: string) => uid !== user.id);
+      toUserIds = recipientIds.filter((uid: string) => uid !== userId);
     } else {
       return NextResponse.json({ error: "Invalid target type" }, { status: 400 });
     }
     if (toUserIds.length === 0) return NextResponse.json({ error: "No recipients" }, { status: 400 });
-    const forwardedBody = `${forwardNote.trim()}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nFORWARDED BY: ${user.name}\nDATE: ${new Date().toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nORIGINAL MEMO: ${original.subject}\nFROM: ${original.sender.name}\nDATED: ${new Date(original.createdAt).toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${original.body}`;
+    const forwardedBody = `${forwardNote.trim()}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nFORWARDED BY: ${userName}\nDATE: ${new Date().toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nORIGINAL MEMO: ${original.subject}\nFROM: ${original.sender.name}\nDATED: ${new Date(original.createdAt).toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${original.body}`;
     const forwarded = await prisma.memo.create({
       data: {
         subject: `FWD: ${original.subject}`,
         body: forwardedBody,
-        senderId: user.id,
+        senderId: userId,
         fileUrl: (original as any).fileUrl || null,
         fileName: (original as any).fileName || null,
         fileType: (original as any).fileType || null,
@@ -116,7 +114,7 @@ export async function POST(
         data: toUserIds.map(uid => ({
           userId: uid,
           title: `Forwarded: ${original.subject}`,
-          message: `${user.name} forwarded a memo to you: "${original.subject}"`,
+          message: `${userName} forwarded a memo to you: "${original.subject}"`,
           type: "INFO",
         })),
       });

@@ -246,12 +246,28 @@ const isResizing = useRef(false);
   // Load from sessionStorage on mount so state persists across navigation
   const [closedSections, setClosedSections] = useState<Set<string>>(() => loadClosedSections());
 
-  useEffect(() => {
+    useEffect(() => {
+    // Check sessionStorage first — avoids a DB trip on every page navigation
+    try {
+      const cached = sessionStorage.getItem("sidebar_account_cache");
+      if (cached) {
+        const d = JSON.parse(cached);
+        if (d?.photo)     setUserPhoto(d.photo);
+        if (d?.userIdRef) setUserIdRef(d.userIdRef);
+        return; // already have it this session, skip the network call
+      }
+    } catch {}
+
     fetch("/api/settings/account")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.user?.photo)     setUserPhoto(d.user.photo);
         if (d?.user?.userIdRef) setUserIdRef(d.user.userIdRef);
+        try {
+          sessionStorage.setItem("sidebar_account_cache", JSON.stringify({
+            photo: d?.user?.photo, userIdRef: d?.user?.userIdRef,
+          }));
+        } catch {}
       })
       .catch(() => {});
   }, []);

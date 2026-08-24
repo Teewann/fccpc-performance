@@ -1,9 +1,8 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -51,6 +50,7 @@ export const authOptions: NextAuthOptions = {
             email: user.email,
             name: user.name,
             role: user.role,
+            departmentId: user.departmentId,
           };
         } catch (error) {
           console.error("❌ Auth error:", error);
@@ -60,10 +60,11 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
+  async jwt({ token, user }) {
+    if (user) {
         token.id = user.id;
         token.role = (user as any).role;
+        token.departmentId = (user as any).departmentId;
       }
       return token;
     },
@@ -71,6 +72,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id as string;
         (session.user as any).role = token.role as string;
+        (session.user as any).departmentId = token.departmentId as string | null;
       }
       return session;
     },

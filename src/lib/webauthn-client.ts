@@ -191,3 +191,4 @@ export async function hasEnrolledDevice(): Promise<boolean> {
   const devices = await listMyDevices();
   return devices.length > 0;
 }
+

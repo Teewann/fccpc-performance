@@ -8,17 +8,13 @@ export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email },
-  });
-  if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const userId = (session.user as any).id as string;
 
   const memos = await prisma.memo.findMany({
     where: {
       OR: [
-        { senderId: user.id },
-        { recipients: { some: { userId: user.id } } },
+        { senderId: userId },
+        { recipients: { some: { userId } } },
       ],
     },
     include: {
@@ -45,7 +41,7 @@ export async function GET(request: NextRequest) {
 
   // Attach `_myRecipient` for the current user
   const enriched = memos.map((memo) => {
-    const myRec = memo.recipients.find((r) => r.user.id === user.id);
+    const myRec = memo.recipients.find((r) => r.user.id === userId);
     return {
       ...memo,
       _myRecipient: myRec
@@ -63,13 +59,11 @@ export async function POST(request: NextRequest) {
   if (!session?.user?.email)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const sender = await prisma.user.findUnique({
-    where: { email: session.user.email },
-  });
-  if (!sender)
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const senderId = (session.user as any).id as string;
+  const senderRole = (session.user as any).role as string;
+  const senderName = (session.user as any).name as string;
 
-  if (!["DIRECTOR", "HR", "ADMIN", "EXECUTIVE"].includes(sender.role)) {
+  if (!["DIRECTOR", "HR", "ADMIN", "EXECUTIVE"].includes(senderRole)) {
     return NextResponse.json(
       { error: "You don't have permission to create memos" },
       { status: 403 }
@@ -112,7 +106,7 @@ export async function POST(request: NextRequest) {
     finalRecipientIds = recipientIds;
   } else if (targetType === "all") {
     const allUsers = await prisma.user.findMany({
-      where: { isActive: true, id: { not: sender.id } },
+      where: { isActive: true, id: { not: senderId } },
       select: { id: true },
     });
     finalRecipientIds = allUsers.map((u) => u.id);
@@ -127,7 +121,7 @@ export async function POST(request: NextRequest) {
       where: {
         role: { in: targetRoles },
         isActive: true,
-        id: { not: sender.id },
+        id: { not: senderId },
       },
       select: { id: true },
     });
@@ -143,7 +137,7 @@ export async function POST(request: NextRequest) {
       where: {
         departmentId: targetDeptId,
         isActive: true,
-        id: { not: sender.id },
+        id: { not: senderId },
       },
       select: { id: true },
     });
@@ -161,7 +155,7 @@ export async function POST(request: NextRequest) {
     data: {
       subject: subject.trim(),
       body: memoBody.trim(),
-      senderId: sender.id,
+      senderId,
       fileUrl: fileUrl || null,
       fileName: fileName || null,
       fileType: fileType || null,
@@ -194,7 +188,7 @@ export async function POST(request: NextRequest) {
     data: finalRecipientIds.map((userId) => ({
       userId,
       title: `New Memo: ${subject}`,
-      message: `From ${sender.name}: ${memoBody.slice(0, 100)}...`,
+      message: `From ${senderName}: ${memoBody.slice(0, 100)}...`,
       type: "INFO",
       link: "/announcements?tab=memos",
     })),

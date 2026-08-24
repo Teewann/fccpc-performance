@@ -2,10 +2,10 @@
 
 export const dynamic = "force-dynamic";
 
-
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
+import OrgGoalsTab from "@/components/kpi/OrgGoalsTab";
 
 type KPI = {
   id: string;
@@ -49,6 +49,7 @@ export default function KPIPage() {
   const [showForm, setShowForm]       = useState(false);
   const [submitting, setSubmitting]   = useState(false);
   const [msg, setMsg]                 = useState({ text: "", ok: true });
+  const [mainTab, setMainTab]         = useState<"department" | "goals">("department");
   const [updateVal, setUpdateVal]     = useState("");
 
   const [form, setForm] = useState({
@@ -180,284 +181,323 @@ export default function KPIPage() {
           </div>
         </div>
 
-        {/* Summary stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
-          {[
-            { label: "Total KPIs",   value: counts.total,   color: "var(--text-primary)" },
-            { label: "On track",     value: counts.onTrack, color: "#4ade80" },
-            { label: "At risk",      value: counts.atRisk,  color: "#f59e0b" },
-            { label: "Behind",       value: counts.behind,  color: "#f87171" },
-          ].map((s) => (
-            <div key={s.label} className="card-bg" style={{ borderRadius: 12, padding: "16px 20px" }}>
-              <div style={{ fontSize: 32, fontWeight: 600, color: s.color, letterSpacing: "-0.02em" }}>{s.value}</div>
-              <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4, fontWeight: 500 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Create form (collapsible) */}
-        {showForm && (
-          <div className="card-bg" style={{ borderRadius: 14, padding: 24, marginBottom: 20 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginBottom: 20, paddingBottom: 12, borderBottom: "0.5px solid var(--border-soft)" }}>
-              Create new KPI
-            </h2>
-            {msg.text && (
-              <div style={{
-                background: msg.ok ? "var(--accent-bg)" : "#1f0707",
-                border: `0.5px solid ${msg.ok ? "var(--accent-border)" : "#7f1d1d"}`,
-                color: msg.ok ? "var(--accent-text)" : "#f87171",
-                borderRadius: 10, padding: "12px 16px", fontSize: 14, marginBottom: 16,
-              }}>{msg.text}</div>
-            )}
-            <form onSubmit={handleCreate}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div style={{ gridColumn: "1/-1" }}>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>KPI Title *</label>
-                  <input style={inputStyle} placeholder="e.g. Consumer complaints resolved per month"
-                    value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-                </div>
-                <div style={{ gridColumn: "1/-1" }}>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Description (optional)</label>
-                  <textarea style={{ ...inputStyle, resize: "none", minHeight: 70 } as any}
-                    placeholder="Describe what this KPI measures and why it matters..."
-                    value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Department *</label>
-                  <select style={inputStyle} value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} required>
-                    <option value="">Select department...</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Period *</label>
-                  <select style={inputStyle} value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })}>
-                    {periods.map((p) => <option key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Target value *</label>
-                  <input style={inputStyle} type="number" placeholder="e.g. 100"
-                    value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} required />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Unit *</label>
-                  <input style={inputStyle} placeholder="Cases, Hours, %, Reports"
-                    value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} required />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Start date *</label>
-                  <input style={inputStyle} type="date"
-                    value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} required />
-                </div>
-                <div>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>End date *</label>
-                  <input style={inputStyle} type="date"
-                    value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} required />
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 12, marginTop: 8, paddingTop: 16, borderTop: "0.5px solid var(--border-soft)" }}>
-                <button type="button" onClick={() => setShowForm(false)} style={{
-                  padding: "11px 20px", borderRadius: 10, border: "0.5px solid var(--border)",
-                  background: "var(--bg-input)", color: "var(--text-muted)", fontSize: 14, cursor: "pointer",
-                }}>Cancel</button>
-                <button type="submit" disabled={submitting} style={{
-                  padding: "11px 28px", borderRadius: 10, border: "1.5px solid #22c55e",
-                  background: "#052e16", color: "#4ade80", fontSize: 14, fontWeight: 600, cursor: "pointer",
-                }}>{submitting ? "Creating..." : "Create KPI"}</button>
-              </div>
-            </form>
-          </div>
-        )}
-
-        {/* Filters */}
-        <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-          <select
-            style={{ ...inputStyle, width: "auto", marginBottom: 0, fontSize: 14 }}
-            value={filterDept}
-            onChange={(e) => setFilterDept(e.target.value)}
+        {/* ─── TAB SWITCHER ─── */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+          <button
+            onClick={() => setMainTab("department")}
+            style={{
+              padding: "9px 20px", borderRadius: 10,
+              border: `0.5px solid ${mainTab === "department" ? "var(--accent)" : "var(--border)"}`,
+              background: mainTab === "department" ? "var(--accent-bg)" : "var(--bg-card)",
+              color: mainTab === "department" ? "var(--accent-text)" : "var(--text-muted)",
+              cursor: "pointer"
+            }}
           >
-            <option value="ALL">All departments</option>
-            {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-          {["ALL", "ON_TRACK", "AT_RISK", "BEHIND"].map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(s)}
-              style={{
-                padding: "9px 16px", borderRadius: 10, fontSize: 14, fontWeight: 500,
-                border: `0.5px solid ${filterStatus === s ? "var(--accent)" : "var(--border)"}`,
-                background: filterStatus === s ? "var(--accent-bg)" : "var(--bg-card)",
-                color: filterStatus === s ? "var(--accent-text)" : "var(--text-muted)",
-                cursor: "pointer",
-              }}
-            >
-              {s === "ALL" ? "All" : s === "ON_TRACK" ? "On track" : s === "AT_RISK" ? "At risk" : "Behind"}
-            </button>
-          ))}
+            Department KPIs
+          </button>
+          <button
+            onClick={() => setMainTab("goals")}
+            style={{
+              padding: "9px 20px", borderRadius: 10,
+              border: `0.5px solid ${mainTab === "goals" ? "var(--accent)" : "var(--border)"}`,
+              background: mainTab === "goals" ? "var(--accent-bg)" : "var(--bg-card)",
+              color: mainTab === "goals" ? "var(--accent-text)" : "var(--text-muted)",
+              cursor: "pointer"
+            }}
+          >
+            Organisational Goals
+          </button>
         </div>
 
-        {/* KPI list + detail panel */}
-        <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 380px" : "1fr", gap: 16 }}>
+        {/* ─── DEPARTMENT KPIs TAB ─── */}
+        {mainTab === "department" && (
+          <>
+            {/* Summary stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }}>
+              {[
+                { label: "Total KPIs",   value: counts.total,   color: "var(--text-primary)" },
+                { label: "On track",     value: counts.onTrack, color: "#4ade80" },
+                { label: "At risk",      value: counts.atRisk,  color: "#f59e0b" },
+                { label: "Behind",       value: counts.behind,  color: "#f87171" },
+              ].map((s) => (
+                <div key={s.label} className="card-bg" style={{ borderRadius: 12, padding: "16px 20px" }}>
+                  <div style={{ fontSize: 32, fontWeight: 600, color: s.color, letterSpacing: "-0.02em" }}>{s.value}</div>
+                  <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4, fontWeight: 500 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
 
-          {/* List */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {loading ? (
-              <div style={{ textAlign: "center", padding: 48, color: "var(--text-muted)", fontSize: 15 }}>Loading KPIs...</div>
-            ) : filtered.length === 0 ? (
-              <div className="card-bg" style={{ borderRadius: 14, padding: 48, textAlign: "center" }}>
-                <div style={{ fontSize: 17, fontWeight: 500, color: "var(--text-primary)", marginBottom: 8 }}>No KPIs found</div>
-                <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Create your first KPI using the button above</div>
-              </div>
-            ) : (
-              filtered.map((kpi) => {
-                const sc = statusConfig[kpi.status];
-                return (
-                  <div
-                    key={kpi.id}
-                    onClick={() => { setSelected(selected?.id === kpi.id ? null : kpi); setUpdateVal(""); setMsg({ text: "", ok: true }); }}
-                    className="card-bg"
-                    style={{
-                      borderRadius: 14,
-                      padding: "18px 20px",
-                      cursor: "pointer",
-                      transition: "border-color 0.15s",
-                      borderLeft: selected?.id === kpi.id ? "3px solid var(--accent)" : "3px solid transparent",
-                      outline: `0.5px solid ${selected?.id === kpi.id ? "var(--accent)" : "var(--border)"}`,
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, letterSpacing: "-0.01em" }}>
-                          {kpi.title}
-                        </div>
-                        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                          {kpi.department.name} · {kpi.period.charAt(0) + kpi.period.slice(1).toLowerCase()} · {kpi.daysLeft > 0 ? `${kpi.daysLeft} days left` : "Ended"}
-                        </div>
-                      </div>
-                      <span style={{
-                        fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 8,
-                        background: sc.bg, color: sc.color, border: `0.5px solid ${sc.border}`,
-                        flexShrink: 0, marginLeft: 12,
-                      }}>
-                        {sc.label}
-                      </span>
+            {/* Create form (collapsible) */}
+            {showForm && (
+              <div className="card-bg" style={{ borderRadius: 14, padding: 24, marginBottom: 20 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 600, color: "var(--text-primary)", marginBottom: 20, paddingBottom: 12, borderBottom: "0.5px solid var(--border-soft)" }}>
+                  Create new KPI
+                </h2>
+                {msg.text && (
+                  <div style={{
+                    background: msg.ok ? "var(--accent-bg)" : "#1f0707",
+                    border: `0.5px solid ${msg.ok ? "var(--accent-border)" : "#7f1d1d"}`,
+                    color: msg.ok ? "var(--accent-text)" : "#f87171",
+                    borderRadius: 10, padding: "12px 16px", fontSize: 14, marginBottom: 16,
+                  }}>{msg.text}</div>
+                )}
+                <form onSubmit={handleCreate}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    <div style={{ gridColumn: "1/-1" }}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>KPI Title *</label>
+                      <input style={inputStyle} placeholder="e.g. Consumer complaints resolved per month"
+                        value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
                     </div>
-                    <div style={{ marginBottom: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                        <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 500 }}>Progress</span>
-                        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
-                          {kpi.current} / {kpi.target} {kpi.unit}
-                          <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 400, marginLeft: 8 }}>
-                            ({kpi.percentage}%)
-                          </span>
-                        </span>
-                      </div>
-                      <div style={{ height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden" }}>
-                        <div style={{
-                          height: "100%", borderRadius: 4,
-                          width: `${Math.min(kpi.percentage, 100)}%`,
-                          background: barColor[kpi.status],
-                          transition: "width 0.3s",
-                        }} />
-                      </div>
+                    <div style={{ gridColumn: "1/-1" }}>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Description (optional)</label>
+                      <textarea style={{ ...inputStyle, resize: "none", minHeight: 70 } as any}
+                        placeholder="Describe what this KPI measures and why it matters..."
+                        value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
                     </div>
-                    <div style={{ display: "flex", gap: 24, fontSize: 13, color: "var(--text-hint)" }}>
-                      <span>Target: {kpi.target} {kpi.unit}</span>
-                      <span>Start: {new Date(kpi.startDate).toLocaleDateString("en-GB")}</span>
-                      <span>End: {new Date(kpi.endDate).toLocaleDateString("en-GB")}</span>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Department *</label>
+                      <select style={inputStyle} value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} required>
+                        <option value="">Select department...</option>
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Period *</label>
+                      <select style={inputStyle} value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })}>
+                        {periods.map((p) => <option key={p} value={p}>{p.charAt(0) + p.slice(1).toLowerCase()}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Target value *</label>
+                      <input style={inputStyle} type="number" placeholder="e.g. 100"
+                        value={form.target} onChange={(e) => setForm({ ...form, target: e.target.value })} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Unit *</label>
+                      <input style={inputStyle} placeholder="Cases, Hours, %, Reports"
+                        value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>Start date *</label>
+                      <input style={inputStyle} type="date"
+                        value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} required />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 6 }}>End date *</label>
+                      <input style={inputStyle} type="date"
+                        value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} required />
                     </div>
                   </div>
-                );
-              })
+                  <div style={{ display: "flex", gap: 12, marginTop: 8, paddingTop: 16, borderTop: "0.5px solid var(--border-soft)" }}>
+                    <button type="button" onClick={() => setShowForm(false)} style={{
+                      padding: "11px 20px", borderRadius: 10, border: "0.5px solid var(--border)",
+                      background: "var(--bg-input)", color: "var(--text-muted)", fontSize: 14, cursor: "pointer",
+                    }}>Cancel</button>
+                    <button type="submit" disabled={submitting} style={{
+                      padding: "11px 28px", borderRadius: 10, border: "1.5px solid #22c55e",
+                      background: "#052e16", color: "#4ade80", fontSize: 14, fontWeight: 600, cursor: "pointer",
+                    }}>{submitting ? "Creating..." : "Create KPI"}</button>
+                  </div>
+                </form>
+              </div>
             )}
-          </div>
 
-          {/* Detail / update panel */}
-          {selected && (
-            <div className="card-bg" style={{ borderRadius: 14, padding: 24, alignSelf: "start", position: "sticky", top: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 14, borderBottom: "0.5px solid var(--border-soft)" }}>
-                <h3 style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)" }}>KPI Detail</h3>
-                <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 18, cursor: "pointer" }}>✕</button>
-              </div>
+            {/* Filters */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+              <select
+                style={{ ...inputStyle, width: "auto", marginBottom: 0, fontSize: 14 }}
+                value={filterDept}
+                onChange={(e) => setFilterDept(e.target.value)}
+              >
+                <option value="ALL">All departments</option>
+                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              {["ALL", "ON_TRACK", "AT_RISK", "BEHIND"].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilterStatus(s)}
+                  style={{
+                    padding: "9px 16px", borderRadius: 10, fontSize: 14, fontWeight: 500,
+                    border: `0.5px solid ${filterStatus === s ? "var(--accent)" : "var(--border)"}`,
+                    background: filterStatus === s ? "var(--accent-bg)" : "var(--bg-card)",
+                    color: filterStatus === s ? "var(--accent-text)" : "var(--text-muted)",
+                    cursor: "pointer",
+                  }}
+                >
+                  {s === "ALL" ? "All" : s === "ON_TRACK" ? "On track" : s === "AT_RISK" ? "At risk" : "Behind"}
+                </button>
+              ))}
+            </div>
 
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>{selected.title}</div>
-                {selected.description && (
-                  <div style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 10 }}>{selected.description}</div>
+            {/* KPI list + detail panel */}
+            <div style={{ display: "grid", gridTemplateColumns: selected ? "1fr 380px" : "1fr", gap: 16 }}>
+
+              {/* List */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {loading ? (
+                  <div style={{ textAlign: "center", padding: 48, color: "var(--text-muted)", fontSize: 15 }}>Loading KPIs...</div>
+                ) : filtered.length === 0 ? (
+                  <div className="card-bg" style={{ borderRadius: 14, padding: 48, textAlign: "center" }}>
+                    <div style={{ fontSize: 17, fontWeight: 500, color: "var(--text-primary)", marginBottom: 8 }}>No KPIs found</div>
+                    <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Create your first KPI using the button above</div>
+                  </div>
+                ) : (
+                  filtered.map((kpi) => {
+                    const sc = statusConfig[kpi.status];
+                    return (
+                      <div
+                        key={kpi.id}
+                        onClick={() => { setSelected(selected?.id === kpi.id ? null : kpi); setUpdateVal(""); setMsg({ text: "", ok: true }); }}
+                        className="card-bg"
+                        style={{
+                          borderRadius: 14,
+                          padding: "18px 20px",
+                          cursor: "pointer",
+                          transition: "border-color 0.15s",
+                          borderLeft: selected?.id === kpi.id ? "3px solid var(--accent)" : "3px solid transparent",
+                          outline: `0.5px solid ${selected?.id === kpi.id ? "var(--accent)" : "var(--border)"}`,
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4, letterSpacing: "-0.01em" }}>
+                              {kpi.title}
+                            </div>
+                            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                              {kpi.department.name} · {kpi.period.charAt(0) + kpi.period.slice(1).toLowerCase()} · {kpi.daysLeft > 0 ? `${kpi.daysLeft} days left` : "Ended"}
+                            </div>
+                          </div>
+                          <span style={{
+                            fontSize: 12, fontWeight: 600, padding: "5px 12px", borderRadius: 8,
+                            background: sc.bg, color: sc.color, border: `0.5px solid ${sc.border}`,
+                            flexShrink: 0, marginLeft: 12,
+                          }}>
+                            {sc.label}
+                          </span>
+                        </div>
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                            <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 500 }}>Progress</span>
+                            <span style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)" }}>
+                              {kpi.current} / {kpi.target} {kpi.unit}
+                              <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 400, marginLeft: 8 }}>
+                                ({kpi.percentage}%)
+                              </span>
+                            </span>
+                          </div>
+                          <div style={{ height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden" }}>
+                            <div style={{
+                              height: "100%", borderRadius: 4,
+                              width: `${Math.min(kpi.percentage, 100)}%`,
+                              background: barColor[kpi.status],
+                              transition: "width 0.3s",
+                            }} />
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 24, fontSize: 13, color: "var(--text-hint)" }}>
+                          <span>Target: {kpi.target} {kpi.unit}</span>
+                          <span>Start: {new Date(kpi.startDate).toLocaleDateString("en-GB")}</span>
+                          <span>End: {new Date(kpi.endDate).toLocaleDateString("en-GB")}</span>
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
-                <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{selected.department.name}</div>
               </div>
 
-              {/* Progress ring area */}
-              <div style={{ background: "var(--bg-input)", border: "0.5px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 20, textAlign: "center" }}>
-                <div style={{ fontSize: 42, fontWeight: 700, color: barColor[selected.status], letterSpacing: "-0.03em" }}>
-                  {selected.percentage}%
-                </div>
-                <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>
-                  {selected.current} of {selected.target} {selected.unit}
-                </div>
-                <div style={{ height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden", marginTop: 12 }}>
-                  <div style={{
-                    height: "100%", borderRadius: 4,
-                    width: `${Math.min(selected.percentage, 100)}%`,
-                    background: barColor[selected.status],
-                  }} />
-                </div>
-              </div>
+              {/* Detail / update panel */}
+              {selected && (
+                <div className="card-bg" style={{ borderRadius: 14, padding: 24, alignSelf: "start", position: "sticky", top: 24 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 14, borderBottom: "0.5px solid var(--border-soft)" }}>
+                    <h3 style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)" }}>KPI Detail</h3>
+                    <button onClick={() => setSelected(null)} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 18, cursor: "pointer" }}>✕</button>
+                  </div>
 
-              {/* Update progress */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 8 }}>
-                  Update current progress
-                </label>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <input
-                    type="number"
-                    value={updateVal}
-                    onChange={(e) => setUpdateVal(e.target.value)}
-                    placeholder={`Current value (${selected.unit})`}
-                    style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
-                  />
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 17, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>{selected.title}</div>
+                    {selected.description && (
+                      <div style={{ fontSize: 14, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 10 }}>{selected.description}</div>
+                    )}
+                    <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{selected.department.name}</div>
+                  </div>
+
+                  {/* Progress ring area */}
+                  <div style={{ background: "var(--bg-input)", border: "0.5px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 20, textAlign: "center" }}>
+                    <div style={{ fontSize: 42, fontWeight: 700, color: barColor[selected.status], letterSpacing: "-0.03em" }}>
+                      {selected.percentage}%
+                    </div>
+                    <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>
+                      {selected.current} of {selected.target} {selected.unit}
+                    </div>
+                    <div style={{ height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden", marginTop: 12 }}>
+                      <div style={{
+                        height: "100%", borderRadius: 4,
+                        width: `${Math.min(selected.percentage, 100)}%`,
+                        background: barColor[selected.status],
+                      }} />
+                    </div>
+                  </div>
+
+                  {/* Update progress */}
+                  <div style={{ marginBottom: 20 }}>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 8 }}>
+                      Update current progress
+                    </label>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <input
+                        type="number"
+                        value={updateVal}
+                        onChange={(e) => setUpdateVal(e.target.value)}
+                        placeholder={`Current value (${selected.unit})`}
+                        style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
+                      />
+                      <button
+                        onClick={handleUpdateProgress}
+                        disabled={submitting || !updateVal}
+                        style={{
+                          padding: "11px 16px", borderRadius: 10, border: "1.5px solid #22c55e",
+                          background: "#052e16", color: "#4ade80", fontSize: 14, fontWeight: 600,
+                          cursor: "pointer", flexShrink: 0,
+                        }}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </div>
+
+                  {msg.text && (
+                    <div style={{
+                      background: msg.ok ? "var(--accent-bg)" : "#1f0707",
+                      border: `0.5px solid ${msg.ok ? "var(--accent-border)" : "#7f1d1d"}`,
+                      color: msg.ok ? "var(--accent-text)" : "#f87171",
+                      borderRadius: 10, padding: "11px 14px", fontSize: 14, marginBottom: 16,
+                    }}>{msg.text}</div>
+                  )}
+
+                  {/* Delete */}
                   <button
-                    onClick={handleUpdateProgress}
-                    disabled={submitting || !updateVal}
+                    onClick={() => handleDelete(selected.id)}
                     style={{
-                      padding: "11px 16px", borderRadius: 10, border: "1.5px solid #22c55e",
-                      background: "#052e16", color: "#4ade80", fontSize: 14, fontWeight: 600,
-                      cursor: "pointer", flexShrink: 0,
+                      width: "100%", padding: "10px", borderRadius: 10,
+                      border: "0.5px solid #7f1d1d", background: "#1f0707",
+                      color: "#f87171", fontSize: 14, fontWeight: 500, cursor: "pointer",
                     }}
                   >
-                    Save
+                    Delete this KPI
                   </button>
                 </div>
-              </div>
-
-              {msg.text && (
-                <div style={{
-                  background: msg.ok ? "var(--accent-bg)" : "#1f0707",
-                  border: `0.5px solid ${msg.ok ? "var(--accent-border)" : "#7f1d1d"}`,
-                  color: msg.ok ? "var(--accent-text)" : "#f87171",
-                  borderRadius: 10, padding: "11px 14px", fontSize: 14, marginBottom: 16,
-                }}>{msg.text}</div>
               )}
-
-              {/* Delete */}
-              <button
-                onClick={() => handleDelete(selected.id)}
-                style={{
-                  width: "100%", padding: "10px", borderRadius: 10,
-                  border: "0.5px solid #7f1d1d", background: "#1f0707",
-                  color: "#f87171", fontSize: 14, fontWeight: 500, cursor: "pointer",
-                }}
-              >
-                Delete this KPI
-              </button>
             </div>
-          )}
-        </div>
+          </>
+        )}
+
+        {/* ─── ORGANISATIONAL GOALS TAB ─── */}
+        {mainTab === "goals" && (
+          <OrgGoalsTab departments={departments} />
+        )}
+
       </main>
     </div>
   );

@@ -19,6 +19,7 @@ type ReportConfig = {
 };
 
 type Period = "weekly" | "monthly" | "quarterly" | "annual";
+type Department = { id: string; name: string };
 
 // ─── Report definitions ────────────────────────────────────────
 const REPORTS: ReportConfig[] = [
@@ -64,6 +65,93 @@ const REPORTS: ReportConfig[] = [
     icon: "👤",
     iconBg: "#1a0a2e",
     iconColor: "#a78bfa",
+    formats: ["PDF", "Excel"],
+  },
+  {
+    id: "tasks",
+    title: "Task Report",
+    description:
+      "All department and EVC tasks — who assigned them, who they're assigned to, status and completion.",
+    type: "tasks",
+    icon: "✅",
+    iconBg: "#1a0a2e",
+    iconColor: "#a78bfa",
+    formats: ["PDF", "Excel"],
+  },
+  {
+    id: "communications",
+    title: "Communications Report",
+    description:
+      "Announcements and memos posted, audience reached, and read rates. HR/Director/Admin/Executive only.",
+    type: "communications",
+    icon: "📢",
+    iconBg: "#1c1107",
+    iconColor: "#f59e0b",
+    formats: ["PDF", "Excel"],
+  },
+  {
+    id: "leave",
+    title: "Leave Report",
+    description:
+      "Leave requests — type, dates, days taken, and approval status.",
+    type: "leave",
+    icon: "🏖️",
+    iconBg: "#0c1a2e",
+    iconColor: "#60a5fa",
+    formats: ["PDF", "Excel"],
+  },
+  {
+    id: "attendance",
+    title: "Attendance Report",
+    description:
+      "Check-in/out times, hours worked, and on-premises status for the period.",
+    type: "attendance",
+    icon: "🕐",
+    iconBg: "#1c1107",
+    iconColor: "#f59e0b",
+    formats: ["PDF", "Excel"],
+  },
+  {
+    id: "exams",
+    title: "Promotion Exam Report",
+    description:
+      "Exam attempts, scores, and pass/fail results by staff.",
+    type: "exams",
+    icon: "🎓",
+    iconBg: "#1a0a2e",
+    iconColor: "#a78bfa",
+    formats: ["PDF", "Excel"],
+  },
+  {
+    id: "staff-directory",
+    title: "Staff Directory Report",
+    description:
+      "Full staff list with roles, departments, and status — for headcount and org records.",
+    type: "staff-directory",
+    icon: "👥",
+    iconBg: "#052e16",
+    iconColor: "#4ade80",
+    formats: ["PDF", "Excel"],
+  },
+  {
+    id: "chats",
+    title: "Chat Export",
+    description:
+      "Full chat message log for the period. Administrator only — every export is itself logged.",
+    type: "chats",
+    icon: "💬",
+    iconBg: "#1f0707",
+    iconColor: "#f87171",
+    formats: ["PDF", "Excel"],
+  },
+    {
+    id: "kpi-trend",
+    title: "KPI Trend Report",
+    description: "How each KPI has moved over time, not just its current snapshot.",
+    type: "kpi-trend",
+    icon: "📈",
+    iconBg: "#052e16",
+    iconColor: "#4ade80",
     formats: ["PDF", "Excel"],
   },
   {
@@ -161,7 +249,7 @@ async function exportToPDF(
     return;
   }
 
-  // ── Staff‑logs custom layout (unchanged, perfect) ──────────
+  // ── Staff‑logs custom layout ────────────────────────────────
   if (type === "staff-logs") {
     const processedRows = rows.map((row) => {
       const { staffName, staffEmail, unit, taskCategory, ...rest } = row;
@@ -207,7 +295,6 @@ async function exportToPDF(
     const headerRowH = 14;
     let y = headerHeight + 6;
 
-    // Header row
     doc.setFillColor(...HEADER_COLOR);
     doc.rect(margin, y, availableWidth, headerRowH, "F");
     doc.setTextColor(255, 255, 255);
@@ -243,7 +330,6 @@ async function exportToPDF(
 
     y += headerRowH;
 
-    // Data rows
     doc.setFont("helvetica", "normal");
     const baseFontSize = 9;
     const lineHeight = 5;
@@ -319,7 +405,6 @@ async function exportToPDF(
       y += rowHeight;
     });
 
-    // Footer
     doc.setFillColor(...HEADER_COLOR);
     doc.rect(0, pageH - 10, pageW, 10, "F");
     doc.setTextColor(255, 255, 255);
@@ -335,31 +420,27 @@ async function exportToPDF(
     return;
   }
 
-  // ── GENERIC REPORTS (Appraisal, KPI, etc.) – full text, no truncation ──
+  // ── GENERIC REPORTS – full text, no truncation ──
   const headers = Object.keys(rows[0]);
   const availableWidth = pageW - margin * 2;
   const cellPadding = 2;
 
   // 1. Measure the maximum text width for each column
   const columnMaxWidths = headers.map((header) => {
-    // header text width
     const headerLabel = header
       .replace(/([A-Z])/g, " $1")
       .replace(/^./, (s) => s.toUpperCase())
       .trim();
     let maxW = doc.getTextWidth(headerLabel);
 
-    // max data width
     for (const row of rows) {
       const val = (row[header] ?? "").toString();
-      // estimate width as the longest substring that doesn't exceed 200mm (arbitrary large) – just measure the whole string
       const tw = doc.getTextWidth(val);
       if (tw > maxW) maxW = tw;
     }
     return maxW;
   });
 
-  // 2. Compute column widths proportional to max widths, ensuring minimum 20mm
   const totalTextWidth = columnMaxWidths.reduce((a, b) => a + b, 0) || 1;
   const minColWidth = 20;
   const unscaledWidths = columnMaxWidths.map((w) => {
@@ -367,7 +448,6 @@ async function exportToPDF(
     return Math.max(desired, minColWidth);
   });
 
-  // Scale to exactly fit availableWidth
   let totalUnscaled = unscaledWidths.reduce((a, b) => a + b, 0);
   const scale = availableWidth / totalUnscaled;
   const colWidths = unscaledWidths.map((w) => w * scale);
@@ -379,7 +459,6 @@ async function exportToPDF(
     xPos += w;
   }
 
-  // 3. Draw header row
   const headerRowH = 10;
   let y = headerHeight + 6;
 
@@ -400,13 +479,11 @@ async function exportToPDF(
 
   y += headerRowH;
 
-  // 4. Data rows
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   const lineHeight = 5;
 
   rows.forEach((row, ri) => {
-    // Calculate wrapped lines for each cell
     const cellLines = headers.map((h, i) => {
       const val = (row[h] ?? "").toString();
       const maxWidth = colWidths[i] - cellPadding * 2;
@@ -421,7 +498,6 @@ async function exportToPDF(
       y = 14;
     }
 
-    // Alternating row background
     if (ri % 2 === 0) {
       doc.setFillColor(240, 245, 250);
     } else {
@@ -429,18 +505,31 @@ async function exportToPDF(
     }
     doc.rect(margin, y, availableWidth, rowHeight, "F");
 
-    // Draw each cell
     headers.forEach((h, i) => {
       const raw = (row[h] ?? "").toString();
       let cellColor: [number, number, number] = [50, 50, 50];
-      if (h.toLowerCase().includes("status") || h === "performanceRating") {
+      if (h.toLowerCase().includes("status") ||
+          h === "performanceRating" ||
+          h === "approvalStatus" ||
+          h === "verificationMethod" ||
+          h === "result" ||
+          h === "status") {
         const lower = raw.toLowerCase();
-        if (lower.includes("approved") || lower.includes("on track") || lower.includes("excellent") || lower.includes("good") || lower.includes("satisfactory"))
+        if (lower.includes("approved") || lower.includes("on track") || lower.includes("excellent") ||
+            lower.includes("good") || lower.includes("satisfactory") || lower.includes("present") ||
+            lower.includes("passed") || lower.includes("active") || lower.includes("completed") ||
+            lower.includes("treated") || lower.includes("accepted")) {
           cellColor = [34, 197, 94];
-        else if (lower.includes("rejected") || lower.includes("needs improvement"))
+        } else if (lower.includes("rejected") || lower.includes("needs improvement") ||
+                   lower.includes("absent") || lower.includes("failed") || lower.includes("inactive") ||
+                   lower.includes("cancelled") || lower.includes("revoked") || lower.includes("behind") ||
+                   lower.includes("overdue")) {
           cellColor = [239, 68, 68];
-        else if (lower.includes("pending") || lower.includes("submitted") || lower.includes("at risk"))
+        } else if (lower.includes("pending") || lower.includes("submitted") ||
+                   lower.includes("at risk") || lower.includes("late") || lower.includes("under") ||
+                   lower.includes("in progress") || lower.includes("suspended")) {
           cellColor = [245, 158, 11];
+        }
       }
 
       doc.setTextColor(...cellColor);
@@ -457,7 +546,6 @@ async function exportToPDF(
     y += rowHeight;
   });
 
-  // Footer
   doc.setFillColor(...HEADER_COLOR);
   doc.rect(0, pageH - 10, pageW, 10, "F");
   doc.setTextColor(255, 255, 255);
@@ -472,19 +560,94 @@ async function exportToPDF(
   doc.save(`${filename}.pdf`);
 }
 
+// ─── Staff Picker Component ────────────────────────────────────
+function StaffPicker({
+  value,
+  onChange,
+  callerRole,
+  callerDeptId
+}: {
+  value: string | null;
+  onChange: (id: string | null) => void;
+  callerRole: string;
+  callerDeptId: string | null;
+}) {
+  const [staff, setStaff] = useState<{ id: string; name: string; department: { name: string } | null }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!callerRole || !["DIRECTOR", "HR", "ADMIN", "EXECUTIVE"].includes(callerRole)) return;
+    setLoading(true);
+    const url = callerRole === "DIRECTOR" && callerDeptId
+      ? `/api/users?deptId=${callerDeptId}&limit=500`
+      : "/api/users?limit=500";
+    fetch(url)
+      .then(r => r.json())
+      .then(d => setStaff(d.users || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [callerRole, callerDeptId]);
+
+  if (!["DIRECTOR", "HR", "ADMIN", "EXECUTIVE"].includes(callerRole)) return null;
+
+  return (
+    <select
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      style={{
+        width: "100%",
+        background: "var(--bg-input)",
+        border: "0.5px solid var(--border)",
+        borderRadius: 10,
+        padding: "10px 14px",
+        fontSize: 14,
+        color: "var(--text-primary)",
+        outline: "none",
+        boxSizing: "border-box",
+      }}
+    >
+      <option value="">All staff {callerRole === "DIRECTOR" ? "in my department" : ""}</option>
+      {loading ? (
+        <option disabled>Loading...</option>
+      ) : (
+        staff.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name} {s.department ? `(${s.department.name})` : ""}
+          </option>
+        ))
+      )}
+    </select>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────
 export default function ReportsPage() {
   const [period, setPeriod] = useState<Period>("monthly");
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [lastExported, setLastExported] = useState<Record<string, string>>({});
   const [role, setRole] = useState("");
+  const [deptId, setDeptId] = useState<string | null>(null);
+  const [targetUserId, setTargetUserId] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [selectedDeptIds, setSelectedDeptIds] = useState<string[]>([]);
+  const [useCustomRange, setUseCustomRange] = useState(false);
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   useEffect(() => {
     fetch("/api/settings/account")
       .then(r => r.json())
-      .then(d => { 
-        if (d.user) setRole(d.user.role); 
+      .then(d => {
+        if (d.user) {
+          setRole(d.user.role);
+          setDeptId(d.user.departmentId || null);
+        }
       })
+      .catch(() => {});
+
+    fetch("/api/departments")
+      .then(r => r.json())
+      .then(d => setDepartments(d.departments || []))
       .catch(() => {});
   }, []);
 
@@ -495,12 +658,36 @@ export default function ReportsPage() {
     day: "numeric",
   });
 
+  const personScoped = ["staff-logs", "appraisal", "tasks", "leave", "attendance"];
+  const showPicker = role === "DIRECTOR" || ["HR", "ADMIN", "EXECUTIVE"].includes(role);
+  const canFilterDept = ["HR", "ADMIN", "EXECUTIVE"].includes(role);
+
+  function toggleDept(id: string) {
+    setSelectedDeptIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }
+
   async function handleExport(report: ReportConfig, format: "PDF" | "Excel") {
     const key = `${report.id}-${format}`;
     setLoading((prev) => ({ ...prev, [key]: true }));
 
     try {
-      const res = await fetch(`/api/reports?type=${report.type}&period=${period}`);
+      const params = new URLSearchParams({
+        type: report.type,
+        period: useCustomRange ? "custom" : period
+      });
+
+      if (personScoped.includes(report.id) && targetUserId) {
+        params.set("targetUserId", targetUserId);
+      }
+      if (selectedDeptIds.length > 0) {
+        params.set("deptIds", selectedDeptIds.join(","));
+      }
+      if (useCustomRange && customFrom && customTo) {
+        params.set("dateFrom", customFrom);
+        params.set("dateTo", customTo);
+      }
+
+      const res = await fetch(`/api/reports?${params.toString()}`);
       const data = await res.json();
       const meta = data.meta || {
         requestedBy: { name: "Unknown", role: "Unknown" },
@@ -549,9 +736,14 @@ export default function ReportsPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <div>
             <h1 style={{ fontSize: 26, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
-              Reports
+              Intelligence Reports
             </h1>
-            <p style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>
+            <p style={{
+              fontSize: 15,
+              color: "#d97706",
+              marginTop: 4,
+              fontWeight: 500,
+            }}>
               {today} · Export data as PDF or Excel
             </p>
           </div>
@@ -568,29 +760,140 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Period selector */}
+        {/* ─── Period selector with Custom Range ─────────────────── */}
         <div style={{ marginBottom: 28 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>
+          <div style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: "#800020",
+            marginBottom: 10
+          }}>
             Report period
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {PERIODS.map((p) => (
               <button
                 key={p.value}
-                onClick={() => setPeriod(p.value)}
+                onClick={() => { setPeriod(p.value); setUseCustomRange(false); }}
                 style={{
                   padding: "10px 22px", borderRadius: 10, fontSize: 14, fontWeight: 500,
-                  border: `0.5px solid ${period === p.value ? "var(--accent)" : "var(--border)"}`,
-                  background: period === p.value ? "var(--accent-bg)" : "var(--bg-card)",
-                  color: period === p.value ? "var(--accent-text)" : "var(--text-muted)",
-                  cursor: "pointer", transition: "all 0.15s",
+                  border: `0.5px solid ${!useCustomRange && period === p.value ? "var(--accent)" : "var(--border)"}`,
+                  background: !useCustomRange && period === p.value ? "var(--accent-bg)" : "var(--bg-card)",
+                  color: !useCustomRange && period === p.value ? "var(--accent-text)" : "var(--text-muted)",
+                  cursor: "pointer",
                 }}
               >
                 {p.label}
               </button>
             ))}
+            <button
+              onClick={() => setUseCustomRange(true)}
+              style={{
+                padding: "10px 22px", borderRadius: 10, fontSize: 14, fontWeight: 500,
+                border: `0.5px solid ${useCustomRange ? "var(--accent)" : "var(--border)"}`,
+                background: useCustomRange ? "var(--accent-bg)" : "var(--bg-card)",
+                color: useCustomRange ? "var(--accent-text)" : "var(--text-muted)",
+                cursor: "pointer",
+              }}
+            >
+              Custom range
+            </button>
           </div>
+
+          {useCustomRange && (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>From</span>
+              <input
+                type="date"
+                value={customFrom}
+                onChange={e => setCustomFrom(e.target.value)}
+                style={{
+                  padding: "9px 12px",
+                  borderRadius: 8,
+                  border: "0.5px solid var(--border)",
+                  background: "var(--bg-input)",
+                  color: "var(--text-primary)"
+                }}
+              />
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>To</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={e => setCustomTo(e.target.value)}
+                style={{
+                  padding: "9px 12px",
+                  borderRadius: 8,
+                  border: "0.5px solid var(--border)",
+                  background: "var(--bg-input)",
+                  color: "var(--text-primary)"
+                }}
+              />
+            </div>
+          )}
         </div>
+
+        {/* ─── Staff Picker + Department Filter ──────────────────── */}
+        {showPicker && (
+          <div style={{ marginBottom: 28, display: "flex", gap: 24, flexWrap: "wrap" }}>
+            <div style={{ maxWidth: 420, flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>
+                Generate for a specific staff member (optional)
+              </div>
+              <StaffPicker
+                value={targetUserId}
+                onChange={setTargetUserId}
+                callerRole={role}
+                callerDeptId={deptId}
+              />
+            </div>
+
+            {canFilterDept && (
+              <div style={{ maxWidth: 420, flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-muted)", marginBottom: 10 }}>
+                  Filter by department(s) (optional)
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {departments.map(d => {
+                    const active = selectedDeptIds.includes(d.id);
+                    return (
+                      <button
+                        key={d.id}
+                        onClick={() => toggleDept(d.id)}
+                        style={{
+                          padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          border: active ? "1.5px solid #22c55e" : "0.5px solid var(--border)",
+                          background: active ? "#052e16" : "var(--bg-input)",
+                          color: active ? "#4ade80" : "var(--text-muted)",
+                        }}
+                      >
+                        {d.name}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedDeptIds.length > 0 && (
+                  <div style={{ fontSize: 12, color: "#60a5fa", marginTop: 6 }}>
+                    Selected: {selectedDeptIds.length} department{selectedDeptIds.length > 1 ? "s" : ""}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{
+              fontSize: 12,
+              color: "#60a5fa",
+              background: "#0c1a2e",
+              border: "0.5px solid #1e3a5f",
+              borderRadius: 8,
+              padding: "10px 14px",
+              flexBasis: "100%"
+            }}>
+              <strong>📌 Note:</strong> Staff filter applies to Task, Staff Productivity, Appraisal, Leave and Attendance reports.
+              Department filter applies to the same, plus KPI and Department Rankings.
+              Leave both empty for {role === "DIRECTOR" ? "your whole department" : "the whole organisation"}.
+            </div>
+          </div>
+        )}
 
         {/* Info box */}
         <div style={{
@@ -602,13 +905,14 @@ export default function ReportsPage() {
           <div style={{ fontSize: 14, color: "#60a5fa", lineHeight: 1.5 }}>
             All reports are generated from live data. PDF files are formatted for printing and board presentations.
             Excel files are formatted for data analysis and further processing.
-            Reports are generated by side selection.
           </div>
         </div>
 
         {/* Report cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
-          {REPORTS.filter(r => r.id !== "audit-trail" || role === "ADMIN").map((report) => (
+          {REPORTS.filter(r =>
+            (r.id !== "audit-trail" && r.id !== "chats") || role === "ADMIN"
+          ).map((report) => (
             <div
               key={report.id}
               className="card-bg"
@@ -692,13 +996,20 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        {/* Bottom note */}
+        {/* Bottom note - RED DARK COLOR */}
         <div style={{
-          marginTop: 24, padding: "16px 20px",
-          background: "var(--bg-card)", border: "0.5px solid var(--border)",
-          borderRadius: 12, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6,
+          marginTop: 24,
+          padding: "16px 20px",
+          background: "#1a0000",
+          border: "1px solid #800020",
+          borderRadius: 12,
+          fontSize: 13,
+          color: "#cc3333",
+          lineHeight: 1.6,
+          fontWeight: 500,
+          fontStyle: "italic",
         }}>
-          <strong style={{ color: "var(--text-secondary)" }}>Security note:</strong> All reports contain live
+          <strong style={{ color: "#ff4444" }}>🔒 Security note:</strong> All reports contain live
           FCCPC data and are classified as internal documents. Do not distribute outside the Commission
           without authorisation from your Director or the Executive Vice Chairman.
         </div>

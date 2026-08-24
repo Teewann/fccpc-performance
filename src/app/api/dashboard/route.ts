@@ -25,15 +25,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // ✅ Get user from database
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true, role: true, departmentId: true },
-    });
-    
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+    // ✅ Use session data directly — no DB round trip needed
+    const user = {
+      id: (session.user as any).id as string,
+      role: (session.user as any).role as string,
+    };
 
     // ✅ Check if user is privileged (can see system-wide stats)
     const isPrivileged = ["ADMIN", "DIRECTOR", "HR", "EXECUTIVE"].includes(user.role);
@@ -72,47 +68,73 @@ export async function GET(request: NextRequest) {
     }
 
     // ✅ FILTER BY USER - personal stats
-    const logWhere = { 
+    const logWhere = {
       date: { gte: rangeStart, lte: rangeEnd },
-      userId: user.id
+      userId: user.id,
     };
-    const taskWhere = { 
+    const taskWhere = {
       createdAt: { gte: rangeStart, lte: rangeEnd },
-      assignedToId: user.id
+      assignedToId: user.id,
     };
-    const leaveWhere = { 
+    const leaveWhere = {
       createdAt: { gte: rangeStart, lte: rangeEnd },
-      userId: user.id
+      userId: user.id,
     };
 
-    // ── KPI counts (these are all numbers) ──────────────────────────
-    const totalStaff = isPrivileged ? await prisma.user.count({ where: { isActive: true } }) : 0;
-    const activeDepartments = isPrivileged ? await prisma.department.count() : 0;
-    
-    const logsInRange = await prisma.dailyLog.count({ where: logWhere });
-    const approvedLogs = await prisma.dailyLog.count({ where: { ...logWhere, status: "APPROVED" } });
-    const rejectedLogs = await prisma.dailyLog.count({ where: { ...logWhere, status: "REJECTED" } });
-    const pendingLogs = await prisma.dailyLog.count({ where: { status: "SUBMITTED", userId: user.id } });
-    const queriedLogs = await prisma.dailyLog.count({ where: { ...logWhere, status: "QUERIED" } });
-    
-    const tasksInRange = await prisma.task.count({ where: taskWhere });
-    const tasksPending = await prisma.task.count({ where: { status: "PENDING", assignedToId: user.id } });
-    const tasksCompleted = await prisma.task.count({ where: { ...taskWhere, status: "COMPLETED" } });
-    
-    const leaveInRange = await prisma.leaveRequest.count({ where: leaveWhere });
-    const leavePending = await prisma.leaveRequest.count({ where: { status: "PENDING", userId: user.id } });
+    // ── BATCH 1: fire all independent queries at the SAME time ─────────
+    // (previously these ran one-by-one, each paying full network latency)
+    const [
+      totalStaff,
+      activeDepartments,
+      logsInRange,
+      approvedLogs,
+      rejectedLogs,
+      pendingLogs,
+      queriedLogs,
+      tasksInRange,
+      tasksPending,
+      tasksCompleted,
+      leaveInRange,
+      leavePending,
+      allLogs,
+      taskInProgress,
+      taskOverdue,
+      recentLogs,
+    ] = await Promise.all([
+      isPrivileged ? prisma.user.count({ where: { isActive: true } }) : Promise.resolve(0),
+      isPrivileged ? prisma.department.count() : Promise.resolve(0),
+      prisma.dailyLog.count({ where: logWhere }),
+      prisma.dailyLog.count({ where: { ...logWhere, status: "APPROVED" } }),
+      prisma.dailyLog.count({ where: { ...logWhere, status: "REJECTED" } }),
+      prisma.dailyLog.count({ where: { status: "SUBMITTED", userId: user.id } }),
+      prisma.dailyLog.count({ where: { ...logWhere, status: "QUERIED" } }),
+      prisma.task.count({ where: taskWhere }),
+      prisma.task.count({ where: { status: "PENDING", assignedToId: user.id } }),
+      prisma.task.count({ where: { ...taskWhere, status: "COMPLETED" } }),
+      prisma.leaveRequest.count({ where: leaveWhere }),
+      prisma.leaveRequest.count({ where: { status: "PENDING", userId: user.id } }),
+      prisma.dailyLog.findMany({ where: logWhere, select: { date: true, status: true } }),
+      prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } }),
+      prisma.task.count({ where: { ...taskWhere, status: "OVERDUE" } }),
+      prisma.dailyLog.findMany({
+        take: 8,
+        orderBy: { createdAt: "desc" },
+        where: { userId: user.id },
+        select: {
+          id: true,
+          taskTitle: true,
+          status: true,
+          date: true,
+          user: { select: { name: true, department: { select: { name: true } } } },
+        },
+      }),
+    ]);
 
     // ── Calculate derived values ──────────────────────────────────────
     const submittedInRange = Math.max(
       0,
       logsInRange - approvedLogs - rejectedLogs - queriedLogs,
     );
-
-    // ── Fetch all logs in range for trend grouping ────────────────────
-    const allLogs = await prisma.dailyLog.findMany({
-      where: logWhere,
-      select: { date: true, status: true },
-    });
 
     // ── Build trend data ──────────────────────────────────────────────
     type TrendBucket = { submitted: number; approved: number; rejected: number };
@@ -214,23 +236,42 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // ── Department chart (only for privileged users) ──────────────────
+    // ── Department chart / performers / low activity (privileged only) ─
     let departmentChart: { name: string; logs: number; approved: number }[] = [];
     let performers: { name: string; department: string; staffId: string | null; count: number }[] = [];
     let lowActivity: { name: string; staff: number }[] = [];
 
     if (isPrivileged) {
-      // Department chart
-      const deptLogsRaw = await prisma.dailyLog.findMany({
-        where: logWhere,
-        select: { userId: true, status: true },
-      });
+      // BATCH 2: independent privileged-only queries, fired together
+      const [deptLogsRaw, topRaw, allDepts] = await Promise.all([
+        prisma.dailyLog.findMany({ where: logWhere, select: { userId: true, status: true } }),
+        prisma.dailyLog.groupBy({
+          by: ["userId"],
+          where: { ...logWhere, status: "APPROVED" },
+          _count: { id: true },
+          orderBy: { _count: { id: "desc" } },
+          take: 5,
+        }),
+        prisma.department.findMany({
+          select: { id: true, name: true, _count: { select: { users: true } } },
+          orderBy: { name: "asc" },
+        }),
+      ]);
 
       const userIds = [...new Set(deptLogsRaw.map((l) => l.userId))];
-      const usersWithDept = await prisma.user.findMany({
-        where: { id: { in: userIds } },
-        select: { id: true, department: { select: { name: true } } },
-      });
+
+      // BATCH 3: these depend on batch 2's results, but still fired together
+      const [usersWithDept, topUserDetails] = await Promise.all([
+        prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, department: { select: { name: true } } },
+        }),
+        prisma.user.findMany({
+          where: { id: { in: topRaw.map((t) => t.userId) } },
+          select: { id: true, name: true, staffId: true, department: { select: { name: true } } },
+        }),
+      ]);
+
       const userDeptMap: Record<string, string> = {};
       for (const u of usersWithDept) {
         userDeptMap[u.id] = u.department?.name || "Unassigned";
@@ -253,20 +294,6 @@ export async function GET(request: NextRequest) {
         .sort((a, b) => b.logs - a.logs)
         .slice(0, 8);
 
-      // Top performers
-      const topRaw = await prisma.dailyLog.groupBy({
-        by: ["userId"],
-        where: { ...logWhere, status: "APPROVED" },
-        _count: { id: true },
-        orderBy: { _count: { id: "desc" } },
-        take: 5,
-      });
-
-      const topUserDetails = await prisma.user.findMany({
-        where: { id: { in: topRaw.map((t) => t.userId) } },
-        select: { id: true, name: true, staffId: true, department: { select: { name: true } } },
-      });
-
       performers = topRaw.map((t) => {
         const u = topUserDetails.find((x) => x.id === t.userId);
         return {
@@ -275,12 +302,6 @@ export async function GET(request: NextRequest) {
           staffId: u?.staffId || null,
           count: t._count.id,
         };
-      });
-
-      // Low activity departments
-      const allDepts = await prisma.department.findMany({
-        select: { id: true, name: true, _count: { select: { users: true } } },
-        orderBy: { name: "asc" },
       });
 
       const activeDeptSet = new Set(
@@ -295,24 +316,6 @@ export async function GET(request: NextRequest) {
         .slice(0, 5)
         .map((d) => ({ name: d.name, staff: d._count.users }));
     }
-
-    // ── Recent logs ───────────────────────────────────────────────────
-    const recentLogs = await prisma.dailyLog.findMany({
-      take: 8,
-      orderBy: { createdAt: "desc" },
-      where: { userId: user.id },
-      select: {
-        id: true,
-        taskTitle: true,
-        status: true,
-        date: true,
-        user: { select: { name: true, department: { select: { name: true } } } },
-      },
-    });
-
-    // ── Task breakdown ──────────────────────────────────────────────────
-    const taskInProgress = await prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } });
-    const taskOverdue = await prisma.task.count({ where: { ...taskWhere, status: "OVERDUE" } });
 
     // ─── RETURN RESPONSE ──────────────────────────────────────────────
     return NextResponse.json({
