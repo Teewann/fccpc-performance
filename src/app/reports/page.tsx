@@ -71,7 +71,7 @@ const REPORTS: ReportConfig[] = [
     id: "tasks",
     title: "Task Report",
     description:
-      "All department and EVC tasks — who assigned them, who they're assigned to, status and completion.",
+      "All department and EVC tasks ; who assigned them, who they're assigned to, status and completion.",
     type: "tasks",
     icon: "✅",
     iconBg: "#1a0a2e",
@@ -93,7 +93,7 @@ const REPORTS: ReportConfig[] = [
     id: "leave",
     title: "Leave Report",
     description:
-      "Leave requests — type, dates, days taken, and approval status.",
+      "Leave requests ; type, dates, days taken, and approval status.",
     type: "leave",
     icon: "🏖️",
     iconBg: "#0c1a2e",
@@ -126,7 +126,7 @@ const REPORTS: ReportConfig[] = [
     id: "staff-directory",
     title: "Staff Directory Report",
     description:
-      "Full staff list with roles, departments, and status — for headcount and org records.",
+      "Full staff list with roles, departments, and status ; for headcount and org records.",
     type: "staff-directory",
     icon: "👥",
     iconBg: "#052e16",
@@ -137,7 +137,7 @@ const REPORTS: ReportConfig[] = [
     id: "chats",
     title: "Chat Export",
     description:
-      "Full chat message log for the period. Administrator only — every export is itself logged.",
+      "Full chat message log for the period. Administrator only ; every export is itself logged.",
     type: "chats",
     icon: "💬",
     iconBg: "#1f0707",
