@@ -6,8 +6,32 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 const rpName = "FCCPC Performance System";
-const rpID = process.env.NODE_ENV === "development" ? "localhost" : "fccpkpi.vercel.app";
-const origin = process.env.NODE_ENV === "development" ? "http://localhost:3000" : `https://${rpID}`;
+
+// ─── Dynamic RP ID based on request ──────────────────────────────
+function getRpId(request: NextRequest): string {
+  const hostname = request.headers.get("host") || "";
+  
+  // If on localhost, use localhost
+  if (hostname.includes("localhost") || hostname.includes("127.0.0.1")) {
+    return "localhost";
+  }
+  
+  // Remove port if present
+  const domain = hostname.split(":")[0];
+  return domain;
+}
+
+function getOrigin(request: NextRequest): string {
+  const hostname = request.headers.get("host") || "";
+  const protocol = request.headers.get("x-forwarded-proto") || "https";
+  
+  if (hostname.includes("localhost") || hostname.includes("127.0.0.1")) {
+    return "http://localhost:3000";
+  }
+  
+  return `https://${hostname.split(":")[0]}`;
+}
+
 // In-memory challenge store keyed by user id
 const challengeStore = new Map<string, string>();
 
@@ -27,6 +51,7 @@ export async function GET(request: NextRequest) {
     }
 
     const action = new URL(request.url).searchParams.get("action");
+    const rpID = getRpId(request);
 
     // ── Get enrollment options for enrolling a new device ──────────────
     if (action === "enroll-options") {
@@ -176,8 +201,8 @@ export async function POST(request: NextRequest) {
       const verification = await verifyRegistrationResponse({
         response,
         expectedChallenge: storedChallenge,
-        expectedOrigin: origin,
-        expectedRPID: rpID,
+        expectedOrigin: getOrigin(request),
+        expectedRPID: getRpId(request),
       });
 
       if (!verification.verified || !verification.registrationInfo) {
@@ -227,8 +252,8 @@ export async function POST(request: NextRequest) {
       const verification = await verifyAuthenticationResponse({
         response,
         expectedChallenge: storedChallenge,
-        expectedOrigin: origin,
-        expectedRPID: rpID,
+        expectedOrigin: getOrigin(request),
+        expectedRPID: getRpId(request),
         authenticator: {
           credentialID: Buffer.from(cred.credentialId, "base64url"),
           credentialPublicKey: Buffer.from(cred.publicKey, "base64url"),
