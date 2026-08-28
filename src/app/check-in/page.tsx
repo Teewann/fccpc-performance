@@ -496,9 +496,17 @@ function CheckInContent() {
         return;
       }
 
-      // ── Step 3: Always prefer face verification if available ──
-      if (faceEnrolled) {
-        console.log("📸 Face enrolled, using face verification");
+      // ── Step 3: If BOTH are enrolled, show the selector ──────────
+      if (faceEnrolled && deviceEnrolled) {
+        console.log("🔐 Both methods enrolled, showing selector");
+        setShowMethodSelector(true);
+        setActing(false);
+        return;
+      }
+
+      // ── Step 4: If only face is enrolled ──────────────────────────
+      if (faceEnrolled && !deviceEnrolled) {
+        console.log("📸 Only face enrolled, using face verification");
         const faceResult = await performFaceVerification();
         
         if (!faceResult.success) {
@@ -512,17 +520,12 @@ function CheckInContent() {
         return;
       }
       
-      // ── Step 4: Only use fingerprint if face is NOT enrolled ──
+      // ── Step 5: If only fingerprint is enrolled ────────────────────
       if (!faceEnrolled && deviceEnrolled) {
-        console.log("🖐️ Face not enrolled, using fingerprint verification");
+        console.log("🖐️ Only fingerprint enrolled, using fingerprint verification");
         await performFingerprintVerification();
         return;
       }
-
-      // ── Step 5: If BOTH are enrolled, show the selector ──────────
-      console.log("🔐 Both methods enrolled, showing selector");
-      setShowMethodSelector(true);
-      setActing(false);
       
     } catch (error) {
       console.error("Check-in error:", error);
@@ -673,12 +676,14 @@ function CheckInContent() {
             runLocationDetection();
           }}
           style={{
-            fontSize: 12,
-            color: "var(--text-hint)",
+            fontSize: 14,
+            fontWeight: 600,
+            color: "#60a5fa",
             background: "none",
             border: "none",
             cursor: "pointer",
             textDecoration: "underline",
+            padding: "4px 8px",
           }}
         >
           Re-check location
@@ -692,48 +697,50 @@ function CheckInContent() {
       <Sidebar />
       <main className="flex-1 p-6 min-w-0">
         {/* ── Header ──────────────────────────────────────────── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <div>
-            <h1 style={{ fontSize: 26, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
-              Daily Check-In
-            </h1>
-            <p style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>{todayStr}</p>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div
-              style={{
-                background: "var(--bg-card)",
-                border: "1.5px solid var(--accent-border)",
-                borderRadius: 16,
-                padding: "14px 24px",
-                boxShadow: "0 0 18px rgba(34,197,94,0.12)",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-              }}
-            >
-              <span style={{ fontSize: 14, color: "var(--accent-text)", opacity: 0.8 }}>🕐</span>
-              <span
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+          <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+            <div>
+              <h1 style={{ fontSize: 26, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+                Daily Check-In
+              </h1>
+              <p style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>{todayStr}</p>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div
                 style={{
-                  fontFamily: "Calibri, 'Segoe UI', sans-serif",
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: "var(--text-primary)",
-                  letterSpacing: "0.02em",
-                  lineHeight: 1,
+                  background: "var(--bg-card)",
+                  border: "1.5px solid var(--accent-border)",
+                  borderRadius: 16,
+                  padding: "10px 18px",
+                  boxShadow: "0 0 18px rgba(34,197,94,0.12)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
                 }}
               >
-                {clock
-                  ? clock.toLocaleTimeString("en-GB", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                      hour12: true,
-                    })
-                  : "--:--:--"}
-              </span>
+                <span style={{ fontSize: 14, color: "var(--accent-text)", opacity: 0.8 }}>🕐</span>
+                <span
+                  style={{
+                    fontFamily: "Calibri, 'Segoe UI', sans-serif",
+                    fontSize: 22,
+                    fontWeight: 700,
+                    color: "var(--text-primary)",
+                    letterSpacing: "0.02em",
+                    lineHeight: 1,
+                  }}
+                >
+                  {clock
+                    ? clock.toLocaleTimeString("en-GB", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                        hour12: true,
+                      })
+                    : "--:--:--"}
+                </span>
+              </div>
+              <ThemeToggleButton />
             </div>
-            <ThemeToggleButton />
           </div>
         </div>
 
@@ -748,6 +755,7 @@ function CheckInContent() {
             borderRadius: 12,
             padding: 4,
             width: "fit-content",
+            flexWrap: "wrap",
           }}
         >
           {([
@@ -759,7 +767,7 @@ function CheckInContent() {
               key={t.key}
               onClick={() => setTab(t.key as any)}
               style={{
-                padding: "9px 22px",
+                padding: "9px 18px",
                 borderRadius: 9,
                 fontSize: 14,
                 fontWeight: 500,
@@ -781,7 +789,7 @@ function CheckInContent() {
             <div>
               <div
                 className="card-bg"
-                style={{ borderRadius: 16, padding: 32, marginBottom: 20, textAlign: "center" }}
+                style={{ borderRadius: 16, padding: "clamp(20px, 4vw, 32px)", marginBottom: 20, textAlign: "center" }}
               >
                 {loading ? (
                   <div style={{ color: "var(--text-muted)", fontSize: 15 }}>Loading...</div>
@@ -1035,8 +1043,9 @@ function CheckInContent() {
 
                   <div
                     style={{
-                      fontSize: 11,
-                      color: "var(--text-hint)",
+                      fontSize: 14,
+                      fontWeight: 500,
+                      color: "#60a5fa",
                       marginBottom: 14,
                       wordBreak: "break-all",
                       lineHeight: 1.5,
@@ -1055,14 +1064,16 @@ function CheckInContent() {
                       window.location.reload();
                     }}
                     style={{
-                      fontSize: 12,
-                      color: "var(--text-hint)",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: "#f59e0b",
                       background: "none",
                       border: "none",
                       cursor: "pointer",
                       textDecoration: "underline",
                       marginTop: 8,
                       marginBottom: 12,
+                      padding: "4px 8px",
                     }}
                   >
                     🔄 Refresh QR code
@@ -1164,7 +1175,7 @@ function CheckInContent() {
         {/* ── Team Today Tab ──────────────────────────────────── */}
         {tab === "team" && isPrivileged && (
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginBottom: 20 }}>
               {[
                 { label: "Checked in", value: teamToday.length, color: "#22c55e" },
                 { label: "On time", value: teamToday.filter((t) => t.status === "PRESENT").length, color: "#4ade80" },
@@ -1178,7 +1189,7 @@ function CheckInContent() {
               ))}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16 }}>
               {/* In office */}
               <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
                 <h2 style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", marginBottom: 16 }}>
@@ -1356,7 +1367,7 @@ function CheckInContent() {
         {tab === "history" && (
           <div>
             {summary && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 20 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginBottom: 20 }}>
                 {[
                   { label: "Days present", value: summary.present, color: "#22c55e" },
                   { label: "Days late", value: summary.late, color: "#f59e0b" },
@@ -1374,7 +1385,7 @@ function CheckInContent() {
               </div>
             )}
 
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)" }}>Filter by:</span>
               {(["ALL", "PRESENT", "LATE", "HALF_DAY", "ABSENT"] as const).map((f) => {
                 const cs = FILTER_STYLE[f];
@@ -1404,7 +1415,7 @@ function CheckInContent() {
               </span>
             </div>
 
-            <div className="card-bg" style={{ borderRadius: 14, overflow: "hidden" }}>
+            <div className="card-bg" style={{ borderRadius: 14, overflow: "auto" }}>
               <div
                 style={{
                   display: "grid",
@@ -1412,6 +1423,7 @@ function CheckInContent() {
                   padding: "12px 20px",
                   borderBottom: "0.5px solid var(--border-soft)",
                   background: "var(--bg-input)",
+                  minWidth: 700,
                 }}
               >
                 {["Date", "Check in", "Check out", "Hours", "Status", "Location", "Note"].map((h) => (
@@ -1449,6 +1461,7 @@ function CheckInContent() {
                         borderBottom: "0.5px solid var(--border-soft)",
                         background: i % 2 === 0 ? "transparent" : "var(--bg-input)",
                         alignItems: "center",
+                        minWidth: 700,
                       }}
                     >
                       <div style={{ fontSize: 14, color: "var(--text-primary)", fontWeight: 500 }}>
@@ -1523,15 +1536,17 @@ function CheckInContent() {
           alignItems: "center",
           justifyContent: "center",
           zIndex: 1000,
+          padding: "20px",
         }}>
           <div style={{
             background: "var(--bg-card)",
             borderRadius: 20,
-            padding: "32px 28px",
+            padding: "clamp(24px, 4vw, 32px)",
             maxWidth: 440,
             width: "100%",
             textAlign: "center",
             border: "0.5px solid var(--border)",
+            margin: "20px",
           }}>
             <h2 style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>
               🔐 Verify Your Identity
