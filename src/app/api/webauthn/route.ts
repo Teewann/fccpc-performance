@@ -6,9 +6,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 const rpName = "FCCPC Performance System";
-const rpID = process.env.NODE_ENV === "development" ? "localhost" : "fccpc-performance-intelligence-syte.vercel.app";
+const rpID = process.env.NODE_ENV === "development" ? "localhost" : "fccpkpi.vercel.app";
 const origin = process.env.NODE_ENV === "development" ? "http://localhost:3000" : `https://${rpID}`;
-
 // In-memory challenge store keyed by user id
 const challengeStore = new Map<string, string>();
 
