@@ -65,9 +65,11 @@ export async function POST(request: NextRequest) {
         faceEmbedding = embedding;
         console.log("✅ Using embedding from request");
       } else if (image) {
-        // For now, we'll store a placeholder
-        console.warn("⚠️ Image received but server-side face extraction not implemented. Storing placeholder.");
-        faceEmbedding = [];
+        // ❌ REMOVED the silent placeholder - now fails loudly
+        console.error("❌ Image received but no embedding. This should not happen.");
+        return NextResponse.json({ 
+          error: "Face detection failed. Please make sure your face is clearly visible and try again."
+        }, { status: 400 });
       } else {
         return NextResponse.json({ error: "No face data provided" }, { status: 400 });
       }
@@ -98,33 +100,12 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // ── Handle empty embedding (placeholder) ──────────────────────
-      if (faceEmbedding.length === 0) {
-        console.log("📝 Storing placeholder face data");
-        
-        if (existingFace) {
-          await prisma.faceData.update({
-            where: { id: existingFace.id },
-            data: { 
-              embedding: "PLACEHOLDER",
-              updatedAt: new Date(),
-            },
-          });
-        } else {
-          await prisma.faceData.create({
-            data: {
-              userId: user.id,
-              embedding: "PLACEHOLDER",
-              algorithm: "face-api-128d",
-            },
-          });
-        }
-        return NextResponse.json({ success: true, warning: "Placeholder stored - please re-enroll with proper embedding" });
-      }
-
       // ── Encrypt and store real embedding ──────────────────────────
       try {
         console.log("🔐 Encrypting face embedding...");
+        console.log("🔐 FACE_ENCRYPTION_KEY exists:", !!process.env.FACE_ENCRYPTION_KEY);
+        console.log("🔐 FACE_ENCRYPTION_KEY length:", process.env.FACE_ENCRYPTION_KEY?.length || 0);
+        
         const encrypted = encrypt(JSON.stringify(faceEmbedding));
 
         if (existingFace) {
@@ -147,10 +128,18 @@ export async function POST(request: NextRequest) {
 
         console.log("✅ Face enrolled successfully!");
         return NextResponse.json({ success: true });
-      } catch (encryptError) {
+      } catch (encryptError: any) {
         console.error("❌ Encryption error:", encryptError);
+        console.error("❌ Error message:", encryptError?.message);
+        console.error("❌ Error stack:", encryptError?.stack);
+        
+        // Return the ACTUAL error message
         return NextResponse.json({ 
-          error: "Encryption failed. Please make sure FACE_ENCRYPTION_KEY is set in Vercel environment variables." 
+          error: encryptError?.message || "Encryption failed. Please check server logs for details.",
+          details: {
+            keyExists: !!process.env.FACE_ENCRYPTION_KEY,
+            keyLength: process.env.FACE_ENCRYPTION_KEY?.length || 0
+          }
         }, { status: 500 });
       }
     }
@@ -208,16 +197,17 @@ export async function POST(request: NextRequest) {
         }
         
         return NextResponse.json({ success: true, distance: distance });
-      } catch (decryptError) {
-        console.error("Decryption error:", decryptError);
+      } catch (decryptError: any) {
+        console.error("❌ Decryption error:", decryptError);
+        console.error("❌ Error message:", decryptError?.message);
         return NextResponse.json({ 
-          error: "Failed to decrypt face data. Please re-enroll your face." 
+          error: decryptError?.message || "Failed to decrypt face data. Please re-enroll your face." 
         }, { status: 500 });
       }
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("POST /api/face error:", error);
     return NextResponse.json({ error: "Server error: " + (error as Error).message }, { status: 500 });
   }
