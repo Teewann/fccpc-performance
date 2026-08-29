@@ -183,20 +183,36 @@ function useWebRTCViewer(
             pc.ontrack = (e) => {
               // e.streams[0] can sometimes be empty — use track directly as fallback
               const incomingStream = e.streams[0] || new MediaStream([e.track]);
-              onStream(incomingStream);
-              setConnected(true);
-              setWaiting(false);
+
+              // Wait for the track to actually be live before showing video
+              const track = e.track;
+              const checkLive = () => {
+                if (track.readyState === 'live') {
+                  onStream(incomingStream);
+                  setConnected(true);
+                  setWaiting(false);
+                } else {
+                  // Track not live yet — retry in 200ms
+                  setTimeout(checkLive, 200);
+                }
+              };
+              checkLive();
+            };
+
+            // Also handle connection state changes
+            pc.onconnectionstatechange = () => {
+              if (pc.connectionState === 'connected') {
+                setConnected(true);
+                setWaiting(false);
+              }
+              if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+                setConnected(false);
+              }
             };
 
             pc.onicecandidate = (e) => {
               if (e.candidate && sessionId && targetUserId) {
                 sendSignal(sessionId, targetUserId, 'ice-candidate', e.candidate.toJSON());
-              }
-            };
-
-            pc.onconnectionstatechange = () => {
-              if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
-                setConnected(false);
               }
             };
 
@@ -273,18 +289,42 @@ function ViewerScreenShare() {
   const { mySession, iAmViewer, isActive, endSession, showViewerPanel } = useScreenShare();
   const [stream,       setStream]       = useState<MediaStream | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPaused,     setIsPaused]     = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const sessionId    = mySession?.id ?? null;
   const targetUserId = mySession?.targetId ?? null;
   const { connected, waiting } = useWebRTCViewer(sessionId, targetUserId, iAmViewer && isActive, setStream);
 
+  // Robust stream attachment — handles all browser quirks
   useEffect(() => {
-    if (videoRef.current && stream) {
-      videoRef.current.srcObject = stream;
-      // Force play — required in some browsers after srcObject is set dynamically
-      videoRef.current.play().catch(() => {});
+    const video = videoRef.current;
+    if (!video || !stream) return;
+
+    // Must clear first, then re-assign — avoids stale stream issues
+    video.srcObject = null;
+    video.srcObject = stream;
+    video.muted = true; // set programmatically too, not just via attribute
+
+    const tryPlay = () => {
+      video.play().catch((err) => {
+        // NotAllowedError = autoplay blocked, user interaction needed
+        // Retry after short delay
+        if (err.name !== 'AbortError') {
+          setTimeout(() => video.play().catch(() => {}), 300);
+        }
+      });
+    };
+
+    if (video.readyState >= 2) {
+      tryPlay();
+    } else {
+      video.onloadeddata = tryPlay;
     }
+
+    return () => {
+      video.onloadeddata = null;
+    };
   }, [stream]);
 
   if (!showViewerPanel || !iAmViewer || !mySession) return null;
@@ -315,17 +355,51 @@ function ViewerScreenShare() {
       {/* Video */}
       <div style={styles.videoWrap}>
         {connected && stream ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            style={styles.video}
-            onLoadedMetadata={(e) => {
-              // Ensure video plays as soon as metadata is available
-              (e.target as HTMLVideoElement).play().catch(() => {});
-            }}
-          />
+          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              controls={false}
+              style={styles.video}
+              onCanPlay={(e) => {
+                const v = e.target as HTMLVideoElement;
+                v.play().catch(() => setIsPaused(true));
+              }}
+              onLoadedMetadata={(e) => {
+                const v = e.target as HTMLVideoElement;
+                v.play().catch(() => setIsPaused(true));
+              }}
+              onPause={() => setIsPaused(true)}
+              onPlay={()  => setIsPaused(false)}
+            />
+            {isPaused && (
+              <div
+                style={{
+                  position: 'absolute', inset: 0,
+                  display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.7)', cursor: 'pointer', gap: 12,
+                }}
+                onClick={() => {
+                  videoRef.current?.play().catch(() => {});
+                  setIsPaused(false);
+                }}
+              >
+                <div style={{
+                  width: 64, height: 64, borderRadius: '50%',
+                  background: 'rgba(34,197,94,0.2)',
+                  border: '2px solid #22c55e',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 28,
+                }}>▶</div>
+                <p style={{ color: '#94a3b8', fontSize: 13, margin: 0 }}>
+                  Click to resume video
+                </p>
+              </div>
+            )}
+          </div>
         ) : (
           <div style={styles.connectingWrap}>
             <div style={styles.spinner} />
