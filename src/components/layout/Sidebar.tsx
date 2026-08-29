@@ -629,62 +629,61 @@ export default function Sidebar() {
         {/* ══════════════════════════════════════
           {/* ══════════════════════════════════════
     SECTION 4 - FOOTER (never scrolls)
-{/* ══════════════════════════════════════
-    SECTION 4 - FOOTER (never scrolls)
-══════════════════════════════════════ */}
-<div style={{
-  flexShrink: 0,
-  padding: collapsed ? "10px 8px" : "12px 12px 14px",
-  borderTop: "0.5px solid var(--border-soft)",
-  transition: "padding 0.22s",
-}}>
-  {collapsed ? (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-      <UserAvatar user={{ photo: userPhoto, name: userName }} size={30} />
-      <ScreenShareButton compact={true} />
-      <button onClick={toggleTheme} title={dark ? "Light mode" : "Dark mode"} style={{
-        width: 30, height: 30, borderRadius: 8, border: "0.5px solid var(--border)",
-        background: "var(--bg-input)", cursor: "pointer", fontSize: 14,
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
-        {dark ? "☀️" : "🌙"}
-      </button>
-    </div>
-  ) : (
-    <>
-      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10, padding: "0 2px" }}>
-        <UserAvatar user={{ photo: userPhoto, name: userName }} size={34} />
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {userName}
-          </div>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
-            {AGENCY.roleLabels?.[role as keyof typeof AGENCY.roleLabels] || role}
-          </div>
-          <div style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 700, color: "#ef4444", textTransform: "uppercase", marginTop: 2, letterSpacing: "0.05em" }}>
-            ID: {userIdRef || "-"}
-          </div>
+        {/* ══════════════════════════════════════
+            SECTION 4 - FOOTER (never scrolls)
+        ══════════════════════════════════════ */}
+        <div style={{
+          flexShrink: 0,
+          padding: collapsed ? "10px 8px" : "12px 12px 14px",
+          borderTop: "0.5px solid var(--border-soft)",
+          transition: "padding 0.22s",
+        }}>
+          {collapsed ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <UserAvatar user={{ photo: userPhoto, name: userName }} size={30} />
+              <ScreenShareButton compact={true} />
+              <button onClick={toggleTheme} title={dark ? "Light mode" : "Dark mode"} style={{
+                width: 30, height: 30, borderRadius: 8, border: "0.5px solid var(--border)",
+                background: "var(--bg-input)", cursor: "pointer", fontSize: 14,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                {dark ? "☀️" : "🌙"}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10, padding: "0 2px" }}>
+                <UserAvatar user={{ photo: userPhoto, name: userName }} size={34} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {userName}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                    {AGENCY.roleLabels?.[role as keyof typeof AGENCY.roleLabels] || role}
+                  </div>
+                  <div style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 700, color: "#ef4444", textTransform: "uppercase", marginTop: 2, letterSpacing: "0.05em" }}>
+                    ID: {userIdRef || "-"}
+                  </div>
+                </div>
+              </div>
+              
+              <ScreenShareButton compact={false} />
+              
+              <button onClick={toggleTheme} style={{
+                display: "flex", alignItems: "center", gap: 9, width: "100%",
+                padding: "8px 12px", borderRadius: 9, marginBottom: 7,
+                fontSize: 13, fontWeight: 500,
+                border: "0.5px solid var(--border)", background: "var(--bg-input)",
+                color: "var(--text-muted)", cursor: "pointer",
+              }}>
+                <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span>
+                {dark ? "Light mode" : "Dark mode"}
+              </button>
+              
+              <LogoutButton />
+            </>
+          )}
         </div>
-      </div>
-      
-      {/* ✅ ScreenShareButton - full width, responsive to sidebar width */}
-      <ScreenShareButton compact={false} />
-      
-      <button onClick={toggleTheme} style={{
-        display: "flex", alignItems: "center", gap: 9, width: "100%",
-        padding: "8px 12px", borderRadius: 9, marginBottom: 7,
-        fontSize: 13, fontWeight: 500,
-        border: "0.5px solid var(--border)", background: "var(--bg-input)",
-        color: "var(--text-muted)", cursor: "pointer",
-      }}>
-        <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span>
-        {dark ? "Light mode" : "Dark mode"}
-      </button>
-      
-      <LogoutButton />
-    </>
-  )}
-</div>
         {!collapsed && (
           <div
             onMouseDown={handleResizeStart}
