@@ -3,6 +3,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import Providers from "@/components/provider";
 import AIAssistant from "@/components/layout/AIAssistant";
+import { ScreenShareProvider } from "@/components/screenshare/ScreenShareProvider";
+import { ScreenShareOrchestrator } from "@/components/screenshare/ScreenShareUI";
 
 export const metadata: Metadata = {
   title: "FCCPC Performance Intelligence System",
@@ -19,8 +21,11 @@ export default function RootLayout({
       <body>
         <Providers>
           <ThemeProvider>
-            {children}
-            <AIAssistant />
+            <ScreenShareProvider>
+              {children}
+              <ScreenShareOrchestrator />
+              <AIAssistant />
+            </ScreenShareProvider>
           </ThemeProvider>
         </Providers>
       </body>

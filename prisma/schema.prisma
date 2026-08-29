@@ -65,6 +65,8 @@ model User {
   hrApprovalsReceived HRCheckInApproval[] @relation("StaffHRApprovals")
   hrApprovalsGiven    HRCheckInApproval[] @relation("HRApprovers")
   otpCodes            OtpCode[]
+  screenShareRequests  ScreenShareSession[] @relation("ScreenShareRequests")
+  screenShareTargets   ScreenShareSession[] @relation("ScreenShareTargets")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
@@ -734,6 +736,59 @@ model AccountActivationCode {
   createdAt   DateTime  @default(now())
 }
 
+// Tracks an active or pending screen-share session between two users
+model ScreenShareSession {
+  id            String                @id @default(cuid())
+  requesterId   String                // User who initiates the view request
+  targetId      String                // User being watched
+  status        ScreenShareStatus     @default(PENDING)
+  startedAt     DateTime?             // When target accepted
+  endedAt       DateTime?             // When session ended
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  requester     User                  @relation("ScreenShareRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  target        User                  @relation("ScreenShareTargets",   fields: [targetId],   references: [id], onDelete: Cascade)
+  heartbeats    ScreenShareHeartbeat[]
+  auditLogs     ScreenShareAuditLog[]
+
+  @@index([requesterId])
+  @@index([targetId])
+  @@index([status])
+}
+
+// Each heartbeat = one snapshot of what the target user is doing
+model ScreenShareHeartbeat {
+  id          String   @id @default(cuid())
+  sessionId   String
+  currentUrl  String   // e.g. "/dashboard/performance"
+  pageTitle   String?
+  clickEvent  Json?    // { x, y, selector, text } — last click
+  actionEvent Json?    // { type: "modal_open"|"form_submit"|"navigation", detail }
+  inputEvent  Json?    // { field, maskedValue } — masked typing data
+  scrollY     Int?     // scroll position
+  timestamp   DateTime @default(now())
+
+  session     ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, timestamp])
+}
+
+// Immutable audit trail — who viewed whom, when, for how long
+model ScreenShareAuditLog {
+  id          String   @id @default(cuid())
+  sessionId   String
+  action      String   // "REQUESTED" | "ACCEPTED" | "REJECTED" | "ENDED_BY_REQUESTER" | "ENDED_BY_TARGET"
+  actorId     String   // Who performed this action
+  metadata    Json?    // extra context
+  createdAt   DateTime @default(now())
+
+  session     ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([actorId])
+}
+
 enum TransferType {
   ZONE_TO_ZONE
   ZONE_TO_HQ
@@ -890,4 +945,12 @@ enum GoalStatus {
   PAUSED
   COMPLETED
   ARCHIVED
+}
+
+enum ScreenShareStatus {
+  PENDING   // Request sent, waiting for target to accept
+  ACTIVE    // Both connected, heartbeats flowing
+  ENDED     // Session ended cleanly
+  REJECTED  // Target declined
+  EXPIRED   // No response within timeout
 }

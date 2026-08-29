@@ -9,6 +9,7 @@ import UserAvatar from "@/components/UserAvatar";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import NotificationBell from "@/components/layout/NotificationBell";
+import { ScreenShareButton } from '@/components/screenshare/ScreenShareUI';
 
 type NavLink = {
   label: string;
@@ -52,6 +53,7 @@ const NAV_LINKS: Record<string, { icon: string; color: string }> = {
   "/audit-trail":      { icon: "🔍", color: "#f87171" },
   "/settings":         { icon: "⚙",  color: "#94a3b8" },
   "/vc9k2":            { icon: "⚡", color: "#fbbf24" },
+  "/admin/account-activation": { icon: "🔑", color: "#f472b6" },
 };
 
 function makeLink(label: string, href: string, extra?: Partial<NavLink>): NavLink {
@@ -82,6 +84,7 @@ function getNavItems(role: string): NavSection[] {
   const canSeeExams      = isHR || isAdmin || isExecutive || isStaff || isSupervisor || isDirector;
   const canSeeUsers      = isAdmin;
   const canSeeAudit      = isAdmin;
+  const canSeeActivation = isAdmin;
 
   if (isAdmin) {
     return [
@@ -128,6 +131,7 @@ function getNavItems(role: string): NavSection[] {
           makeLink("Audit Trail", "/audit-trail"),
           makeLink("Settings",    "/settings"   ),
           makeLink("EVC Suite",   "/vc9k2"      ),
+          makeLink("Account Activation", "/admin/account-activation", { badge: "Admin", badgeGreen: true }),
         ],
       },
     ];
@@ -181,6 +185,7 @@ function getNavItems(role: string): NavSection[] {
         ...(canSeeAudit ? [makeLink("Audit Trail", "/audit-trail")] : []),
         makeLink("Settings", "/settings"),
         ...(isExecutive ? [makeLink("EVC Suite", "/vc9k2")] : []),
+        ...(canSeeActivation ? [makeLink("Account Activation", "/admin/account-activation", { badge: "Admin", badgeGreen: true })] : []),
       ],
     },
   ].filter((s) => s.links.length > 0);
@@ -232,21 +237,28 @@ export default function Sidebar() {
   );
   const [userIdRef,      setUserIdRef]      = useState<string>("");
   const [collapsed,      setCollapsed]      = useState(false);
-  const [expandedWidth, setExpandedWidth] = useState<number>(() => {
-  if (typeof window === "undefined") return 232;
-  try {
-    const raw = sessionStorage.getItem("sidebar_width");
-    return raw ? Number(raw) : 232;
-  } catch {
-    return 232;
-  }
-});
-const isResizing = useRef(false);
+  const [expandedWidth, setExpandedWidth] = useState<number>(232);
+
+  const isResizing = useRef(false);
 
   // Load from sessionStorage on mount so state persists across navigation
   const [closedSections, setClosedSections] = useState<Set<string>>(() => loadClosedSections());
 
-    useEffect(() => {
+  // Load saved width after mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = sessionStorage.getItem("sidebar_width");
+      if (raw) {
+        const w = Number(raw);
+        if (!isNaN(w) && w >= 180 && w <= 400) {
+          setExpandedWidth(w);
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
     // Check sessionStorage first — avoids a DB trip on every page navigation
     try {
       const cached = sessionStorage.getItem("sidebar_account_cache");
@@ -285,38 +297,39 @@ const isResizing = useRef(false);
       return next;
     });
   }, []);
+  
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
-  if (collapsed) return;
-  e.preventDefault();
-  isResizing.current = true;
-  document.body.style.cursor = "col-resize";
-  document.body.style.userSelect = "none";
-}, [collapsed]);
+    if (collapsed) return;
+    e.preventDefault();
+    isResizing.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [collapsed]);
 
-useEffect(() => {
-  function handleMouseMove(e: MouseEvent) {
-    if (!isResizing.current) return;
-    const newWidth = Math.min(400, Math.max(180, e.clientX));
-    setExpandedWidth(newWidth);
-  }
-  function handleMouseUp() {
-    if (isResizing.current) {
-      isResizing.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      setExpandedWidth((w) => {
-        try { sessionStorage.setItem("sidebar_width", String(w)); } catch {}
-        return w;
-      });
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (!isResizing.current) return;
+      const newWidth = Math.min(400, Math.max(180, e.clientX));
+      setExpandedWidth(newWidth);
     }
-  }
-  window.addEventListener("mousemove", handleMouseMove);
-  window.addEventListener("mouseup", handleMouseUp);
-  return () => {
-    window.removeEventListener("mousemove", handleMouseMove);
-    window.removeEventListener("mouseup", handleMouseUp);
-  };
-}, []);
+    function handleMouseUp() {
+      if (isResizing.current) {
+        isResizing.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        setExpandedWidth((w) => {
+          try { sessionStorage.setItem("sidebar_width", String(w)); } catch {}
+          return w;
+        });
+      }
+    }
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
 
   const navItems     = getNavItems(role);
   const sidebarWidth = collapsed ? 62 : expandedWidth;
@@ -328,7 +341,6 @@ useEffect(() => {
         flexShrink: 0,
         display: "flex",
         flexDirection: "column",
-        // ── KEY: fixed height + no overflow so sidebar never scrolls with page ──
         height: "100vh",
         position: "sticky",
         top: 0,
@@ -381,7 +393,7 @@ useEffect(() => {
                 </div>
                 <div style={{ fontSize: 15, color: "var(--text-muted)", marginTop: 3, whiteSpace: "normal", lineHeight: 1.35 }}>
                   {AGENCY.tagline}
-                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -481,7 +493,7 @@ useEffect(() => {
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = isActive ? `${item.color}25` : "transparent";
-                      e.currentTarget.style.border = `2px solid ${isActive ? item.color + "60" : "transparent"}`;
+                      e.currentTarget.style.border = isActive ? `2px solid ${item.color}60` : "transparent";
                       e.currentTarget.style.transform = "scale(1)";
                     }}
                   >
@@ -615,55 +627,64 @@ useEffect(() => {
         </nav>
 
         {/* ══════════════════════════════════════
-            SECTION 4 - FOOTER (never scrolls)
-        ══════════════════════════════════════ */}
-        <div style={{
-          flexShrink: 0,
-          padding: collapsed ? "10px 8px" : "12px 12px 14px",
-          borderTop: "0.5px solid var(--border-soft)",
-          transition: "padding 0.22s",
-        }}>
-          {collapsed ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <UserAvatar user={{ photo: userPhoto, name: userName }} size={30} />
-              <button onClick={toggleTheme} title={dark ? "Light mode" : "Dark mode"} style={{
-                width: 30, height: 30, borderRadius: 8, border: "0.5px solid var(--border)",
-                background: "var(--bg-input)", cursor: "pointer", fontSize: 14,
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                {dark ? "☀️" : "🌙"}
-              </button>
-            </div>
-          ) : (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10, padding: "0 2px" }}>
-                <UserAvatar user={{ photo: userPhoto, name: userName }} size={34} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {userName}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
-                    {AGENCY.roleLabels?.[role as keyof typeof AGENCY.roleLabels] || role}
-                  </div>
-                  <div style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 700, color: "#ef4444", textTransform: "uppercase", marginTop: 2, letterSpacing: "0.05em" }}>
-                    ID: {userIdRef || "-"}
-                  </div>
-                </div>
-              </div>
-              <button onClick={toggleTheme} style={{
-                display: "flex", alignItems: "center", gap: 9, width: "100%",
-                padding: "8px 12px", borderRadius: 9, marginBottom: 7,
-                fontSize: 13, fontWeight: 500,
-                border: "0.5px solid var(--border)", background: "var(--bg-input)",
-                color: "var(--text-muted)", cursor: "pointer",
-              }}>
-                <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span>
-                {dark ? "Light mode" : "Dark mode"}
-              </button>
-              <LogoutButton />
-            </>
-          )}
+          {/* ══════════════════════════════════════
+    SECTION 4 - FOOTER (never scrolls)
+{/* ══════════════════════════════════════
+    SECTION 4 - FOOTER (never scrolls)
+══════════════════════════════════════ */}
+<div style={{
+  flexShrink: 0,
+  padding: collapsed ? "10px 8px" : "12px 12px 14px",
+  borderTop: "0.5px solid var(--border-soft)",
+  transition: "padding 0.22s",
+}}>
+  {collapsed ? (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+      <UserAvatar user={{ photo: userPhoto, name: userName }} size={30} />
+      <ScreenShareButton compact={true} />
+      <button onClick={toggleTheme} title={dark ? "Light mode" : "Dark mode"} style={{
+        width: 30, height: 30, borderRadius: 8, border: "0.5px solid var(--border)",
+        background: "var(--bg-input)", cursor: "pointer", fontSize: 14,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        {dark ? "☀️" : "🌙"}
+      </button>
+    </div>
+  ) : (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10, padding: "0 2px" }}>
+        <UserAvatar user={{ photo: userPhoto, name: userName }} size={34} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {userName}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+            {AGENCY.roleLabels?.[role as keyof typeof AGENCY.roleLabels] || role}
+          </div>
+          <div style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 700, color: "#ef4444", textTransform: "uppercase", marginTop: 2, letterSpacing: "0.05em" }}>
+            ID: {userIdRef || "-"}
+          </div>
         </div>
+      </div>
+      
+      {/* ✅ ScreenShareButton - full width, responsive to sidebar width */}
+      <ScreenShareButton compact={false} />
+      
+      <button onClick={toggleTheme} style={{
+        display: "flex", alignItems: "center", gap: 9, width: "100%",
+        padding: "8px 12px", borderRadius: 9, marginBottom: 7,
+        fontSize: 13, fontWeight: 500,
+        border: "0.5px solid var(--border)", background: "var(--bg-input)",
+        color: "var(--text-muted)", cursor: "pointer",
+      }}>
+        <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span>
+        {dark ? "Light mode" : "Dark mode"}
+      </button>
+      
+      <LogoutButton />
+    </>
+  )}
+</div>
         {!collapsed && (
           <div
             onMouseDown={handleResizeStart}
