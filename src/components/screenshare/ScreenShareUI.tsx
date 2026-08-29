@@ -444,9 +444,9 @@ export function ScreenShareOrchestrator() {
   return (
     <>
       <ScreenShareRequestModal />
-      <ScreenShareIncomingModal />
-      <ScreenShareActiveBadge />
-      <ScreenShareViewerPanel />
+      {/* ScreenShareIncomingModal removed — WebRTC version handles this */}
+      {/* ScreenShareActiveBadge removed — WebRTC target badge handles this */}
+      {/* ScreenShareViewerPanel removed — WebRTC viewer handles this */}
     </>
   );
 }

@@ -10,39 +10,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const currentUser = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { id: true },
-    });
+    // Run both queries in parallel — fast
+    const [currentUser, allUsers] = await Promise.all([
+      prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { id: true },
+      }),
+      prisma.user.findMany({
+        select: { id: true, name: true, email: true, role: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
 
     if (!currentUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Select only core fields guaranteed to exist on every User model.
-    // Add `image: true` back to select if your User model has that field.
-    const users = await prisma.user.findMany({
-      where: {
-        id: { not: currentUser.id },
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-      },
-      orderBy: { name: "asc" },
-    });
+    // Exclude self, add image: null for UI compatibility
+    const users = allUsers
+      .filter((u) => u.id !== currentUser.id)
+      .map((u) => ({ ...u, image: null }));
 
-    // Normalise: add image as null so the UI doesn't crash on undefined
-    const normalised = users.map((u) => ({ ...u, image: null }));
-
-    return NextResponse.json({ users: normalised });
+    return NextResponse.json({ users });
   } catch (error) {
     console.error("[screenshare/users] Error:", error);
-    return NextResponse.json(
-      { error: "Server error", detail: String(error) },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
