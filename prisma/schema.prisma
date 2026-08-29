@@ -746,12 +746,11 @@ model ScreenShareSession {
   endedAt       DateTime?             // When session ended
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
-
   requester     User                  @relation("ScreenShareRequests", fields: [requesterId], references: [id], onDelete: Cascade)
   target        User                  @relation("ScreenShareTargets",   fields: [targetId],   references: [id], onDelete: Cascade)
   heartbeats    ScreenShareHeartbeat[]
   auditLogs     ScreenShareAuditLog[]
-
+  signals  ScreenShareSignal[]
   @@index([requesterId])
   @@index([targetId])
   @@index([status])
@@ -787,6 +786,22 @@ model ScreenShareAuditLog {
 
   @@index([sessionId])
   @@index([actorId])
+}
+
+// Stores WebRTC signaling data (offer, answer, ICE candidates)
+// Used as a polling-based signaling channel between two browsers
+model ScreenShareSignal {
+  id          String   @id @default(cuid())
+  sessionId   String
+  fromUserId  String   // who sent this signal
+  toUserId    String   // who should receive it
+  type        String   // "offer" | "answer" | "ice-candidate" | "end"
+  payload     Json     // the actual SDP or ICE candidate data
+  consumed    Boolean  @default(false) // mark as read so we don't re-process
+  createdAt   DateTime @default(now())
+  session     ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@index([sessionId, toUserId, consumed])
+  @@index([createdAt])
 }
 
 enum TransferType {

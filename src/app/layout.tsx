@@ -5,6 +5,7 @@ import Providers from "@/components/provider";
 import AIAssistant from "@/components/layout/AIAssistant";
 import { ScreenShareProvider } from "@/components/screenshare/ScreenShareProvider";
 import { ScreenShareOrchestrator } from "@/components/screenshare/ScreenShareUI";
+import { ScreenShareWebRTCOrchestrator } from "@/components/screenshare/ScreenShareWebRTC";
 
 export const metadata: Metadata = {
   title: "FCCPC Performance Intelligence System",
@@ -24,6 +25,7 @@ export default function RootLayout({
             <ScreenShareProvider>
               {children}
               <ScreenShareOrchestrator />
+              <ScreenShareWebRTCOrchestrator />
               <AIAssistant />
             </ScreenShareProvider>
           </ThemeProvider>
