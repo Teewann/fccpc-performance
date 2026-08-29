@@ -19,12 +19,14 @@ const ICE_SERVERS: RTCIceServer[] = [
 const SIGNAL_POLL_MS = 400; // Fast signaling
 
 // ── Device detection ──────────────────────────────────────────────────────────
+// Never block based on user agent — Chrome Android 112+ and Safari iOS 18+ 
+// support getDisplayMedia. Let the browser decide; fall back if it fails.
 function detectDevice() {
-  if (typeof window === 'undefined') return { mobile: false, supported: true };
+  if (typeof window === 'undefined') return { mobile: false, hasCamera: false };
   const ua = navigator.userAgent;
   const mobile = /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(ua);
-  const supported = !mobile && !!navigator.mediaDevices?.getDisplayMedia;
-  return { mobile, supported };
+  const hasCamera = !!navigator.mediaDevices?.getUserMedia;
+  return { mobile, hasCamera };
 }
 
 // ── Signal helpers ────────────────────────────────────────────────────────────
@@ -280,6 +282,115 @@ export function ScreenShareIncomingModalWebRTC() {
 }
 
 // ── TARGET COMPONENT ──────────────────────────────────────────────────────────
+// ── MOBILE CAMERA SHARE ───────────────────────────────────────────────────────
+// Since getDisplayMedia is blocked on mobile, we offer camera as a live feed.
+// The viewer sees the camera — useful for showing physical documents, whiteboards,
+// or pointing the phone at a screen.
+function MobileCameraShare({
+  viewerName,
+  onStream,
+  onCancel,
+}: {
+  viewerName: string;
+  onStream: (stream: MediaStream) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+  const previewRef = useRef<HTMLVideoElement>(null);
+  const streamRef  = useRef<MediaStream | null>(null);
+
+  // Start camera preview immediately
+  useEffect(() => {
+    let active = true;
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+      .then((s) => {
+        if (!active) { s.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = s;
+        if (previewRef.current) { previewRef.current.srcObject = s; previewRef.current.play().catch(() => {}); }
+      })
+      .catch(() => {
+        // Try front camera if back fails
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          .then((s) => {
+            if (!active) { s.getTracks().forEach(t => t.stop()); return; }
+            streamRef.current = s;
+            if (previewRef.current) { previewRef.current.srcObject = s; previewRef.current.play().catch(() => {}); }
+          })
+          .catch(() => setError('Camera access denied. Please allow camera permission in your browser settings.'));
+      });
+    return () => { active = false; streamRef.current?.getTracks().forEach(t => t.stop()); };
+  }, []);
+
+  const handleShare = async () => {
+    if (!streamRef.current) return;
+    setLoading(true);
+    try {
+      // Create a fresh stream from the same camera (so cleanup works independently)
+      const fresh = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      await onStream(fresh);
+    } catch {
+      setError('Could not start camera share. Please try again.');
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ width: '100%', maxWidth: 380, background: '#0d1526', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 20, overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ padding: '16px 20px', background: 'rgba(34,197,94,0.06)', borderBottom: '1px solid rgba(34,197,94,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>📸</div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#f0f4ff' }}>Share via Camera</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>{viewerName} will see your camera live</div>
+          </div>
+        </div>
+
+        {/* Camera preview */}
+        <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', background: '#000', overflow: 'hidden' }}>
+          <video ref={previewRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          {!error && (
+            <div style={{ position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.6)', borderRadius: 6, padding: '3px 8px', fontSize: 11, color: '#4ade80', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80', display: 'inline-block' }} />
+              Camera Preview
+            </div>
+          )}
+          {error && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
+              <span style={{ fontSize: 32, marginBottom: 8 }}>🚫</span>
+              <p style={{ color: '#f87171', fontSize: 13, lineHeight: 1.5 }}>{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: '16px 20px 20px' }}>
+          {/* Info banner */}
+          <div style={{ padding: '10px 12px', borderRadius: 8, marginBottom: 14, background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', fontSize: 12, color: '#60a5fa', lineHeight: 1.5 }}>
+            📱 <strong>Mobile tip:</strong> Point your camera at your screen, document, or whiteboard. Screen sharing is not available on mobile browsers — this is the best alternative.
+          </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={onCancel} style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid rgba(148,163,184,0.15)', background: 'rgba(255,255,255,0.04)', color: '#94a3b8', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button
+              onClick={handleShare}
+              disabled={loading || !!error || !streamRef.current}
+              style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: loading ? 'rgba(34,197,94,0.5)' : 'linear-gradient(135deg,#16a34a,#22c55e)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: loading ? 'wait' : 'pointer', opacity: error ? 0.5 : 1 }}
+            >
+              {loading ? 'Starting…' : '📸 Share Camera'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TargetScreenShareWebRTC() {
   const { mySession, iAmTarget, isActive, endSession } = useScreenShare();
   const viewerUserId = mySession?.requesterId ?? null;
@@ -287,33 +398,25 @@ export function TargetScreenShareWebRTC() {
   const viewerName   = mySession?.requester?.name || mySession?.requester?.email || 'Someone';
 
   const { sharing, error, setError, startWithStream, stop } = useWebRTCTarget(sessionId, viewerUserId, iAmTarget && isActive);
-  const [showPicker, setShowPicker] = useState(false);
-  const { mobile, supported } = detectDevice();
+  const [showPicker,       setShowPicker]       = useState(false);
+  const [showCameraFallback, setShowCameraFallback] = useState(false);
+  const { mobile, hasCamera } = detectDevice();
 
-  // Show picker when session becomes active
+  // Show our picker as soon as session is active — no device blocking
   useEffect(() => {
-    if (iAmTarget && isActive && !sharing && !error) {
-      if (!supported) {
-        setError(mobile
-          ? 'Screen sharing is not supported on mobile browsers. Please ask an admin to use a desktop computer.'
-          : 'Screen sharing requires HTTPS or localhost. Please access via the secure URL.'
-        );
-        return;
-      }
+    if (iAmTarget && isActive && !sharing && !error && !showPicker && !showCameraFallback) {
       setShowPicker(true);
     }
-    if (!isActive) setShowPicker(false);
+    if (!isActive) { setShowPicker(false); setShowCameraFallback(false); }
   }, [iAmTarget, isActive]);
 
   const handleStop = async () => { stop(true); await endSession(); };
 
-  // ── CRITICAL FIX: getDisplayMedia called DIRECTLY in onClick ─────────────
-  // No intermediate callbacks — Chrome requires the call to be synchronously
-  // inside the user gesture handler. Any await before it breaks Chrome.
+  // Called directly from button onClick — preserves Chrome gesture chain
+  // getDisplayMedia MUST be the first await after the click
   const handlePickShare = async (displaySurface: 'browser' | 'window' | 'monitor') => {
     setShowPicker(false);
     try {
-      // THIS LINE must be the first thing called after user click — no awaits before it
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: { frameRate: { ideal: 15, max: 30 }, displaySurface } as any,
         audio: false,
@@ -321,7 +424,19 @@ export function TargetScreenShareWebRTC() {
       await startWithStream(stream);
     } catch (err: any) {
       if (err.name === 'NotAllowedError') {
-        setError('Sharing cancelled. Click "Share Screen" again to retry.');
+        // User cancelled — just re-show picker
+        setShowPicker(true);
+      } else if (
+        err.name === 'NotSupportedError' ||
+        err.name === 'TypeError' ||
+        !navigator.mediaDevices?.getDisplayMedia
+      ) {
+        // Browser doesn't support getDisplayMedia — offer camera fallback
+        if (hasCamera) {
+          setShowCameraFallback(true);
+        } else {
+          setError('Screen sharing is not supported on this browser. Please use Chrome or Edge on desktop.');
+        }
       } else {
         setError('Could not start sharing: ' + (err.message || 'Unknown error'));
       }
@@ -332,8 +447,8 @@ export function TargetScreenShareWebRTC() {
 
   return (
     <>
-      {/* Screen picker modal — modern, centered */}
-      {showPicker && supported && (
+      {/* Screen picker modal — shown on ALL devices, let browser handle support */}
+      {showPicker && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div style={{ width: '100%', maxWidth: 420, background: '#0d1526', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 20, boxShadow: '0 40px 100px rgba(0,0,0,0.8)', overflow: 'hidden' }}>
             {/* Header */}
@@ -388,23 +503,13 @@ export function TargetScreenShareWebRTC() {
         </div>
       )}
 
-      {/* Mobile unsupported message */}
-      {showPicker && !supported && mobile && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 10002, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div style={{ maxWidth: 340, background: '#0d1526', border: '1px solid rgba(234,179,8,0.3)', borderRadius: 20, padding: 28, textAlign: 'center' }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>📱</div>
-            <h3 style={{ color: '#f0f4ff', fontSize: 17, fontWeight: 700, marginBottom: 10 }}>Not Available on Mobile</h3>
-            <p style={{ color: '#94a3b8', fontSize: 14, lineHeight: 1.6, marginBottom: 20 }}>
-              Screen sharing is a browser limitation on mobile devices. Please open this app on a <strong style={{ color: '#f0f4ff' }}>desktop or laptop computer</strong> to share your screen.
-            </p>
-            <p style={{ color: '#64748b', fontSize: 12, marginBottom: 20 }}>
-              The person requesting your screen can still see your activity feed and you can view their screen on mobile.
-            </p>
-            <button onClick={handleStop} style={{ padding: '12px 32px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#16a34a,#22c55e)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-              Got It
-            </button>
-          </div>
-        </div>
+      {/* Camera fallback — shown when getDisplayMedia fails (older mobile browsers) */}
+      {showCameraFallback && (
+        <MobileCameraShare
+          viewerName={viewerName}
+          onStream={async (stream) => { setShowCameraFallback(false); await startWithStream(stream); }}
+          onCancel={handleStop}
+        />
       )}
 
       {/* Status badge — top center */}
