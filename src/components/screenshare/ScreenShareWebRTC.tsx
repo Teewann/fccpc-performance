@@ -10,31 +10,41 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  // For home/remote users uncomment and fill in a TURN server:
-  // {
-  //   urls: process.env.NEXT_PUBLIC_TURN_URL || 'turn:openrelay.metered.ca:80',
-  //   username: process.env.NEXT_PUBLIC_TURN_USERNAME || 'openrelayproject',
-  //   credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL || 'openrelayproject',
-  // },
+  // TURN fallback for home/remote users (open relay - works for testing)
+  {
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
 ];
 
-const SIGNAL_POLL_MS = 1000;
+const SIGNAL_POLL_MS = 500; // Faster polling
 
 async function sendSignal(sessionId: string, toUserId: string, type: string, payload: unknown) {
-  await fetch('/api/screenshare/signal', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, toUserId, type, payload }),
-  });
+  try {
+    await fetch('/api/screenshare/signal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, toUserId, type, payload }),
+    });
+  } catch (e) { /* ignore */ }
 }
 
 async function pollSignals(sessionId: string) {
-  const res = await fetch(`/api/screenshare/signal/poll?sessionId=${sessionId}`);
-  const data = await res.json();
-  return data.signals as { id: string; type: string; payload: unknown; fromUserId: string }[];
+  try {
+    const res = await fetch(`/api/screenshare/signal/poll?sessionId=${sessionId}`);
+    const data = await res.json();
+    return data.signals as { id: string; type: string; payload: unknown; fromUserId: string }[];
+  } catch {
+    return [];
+  }
 }
 
-// ── Check if screen sharing is available in this browser context ──────────────
 function isScreenShareSupported(): boolean {
   return (
     typeof window !== 'undefined' &&
@@ -49,44 +59,54 @@ function useWebRTCTarget(
   viewerUserId: string | null,
   active: boolean
 ) {
-  const pcRef     = useRef<RTCPeerConnection | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const pollRef   = useRef<NodeJS.Timeout | null>(null);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
   const [sharing, setSharing] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
 
   const stop = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     streamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
-    pcRef.current   = null;
+    pcRef.current = null;
     streamRef.current = null;
     setSharing(false);
+    setStarting(false);
   }, []);
 
   const start = useCallback(async () => {
-    if (!sessionId || !viewerUserId) return;
+    if (!sessionId || !viewerUserId || starting) return;
     setError(null);
+    setStarting(true);
 
-    // ── HTTPS / localhost check ──────────────────────────────────────────────
+    // Check HTTPS/localhost
     if (!isScreenShareSupported()) {
-      setError(
-        'Screen sharing requires HTTPS. ' +
-        'Use https:// in production, or http://localhost:3000 when testing locally. ' +
-        'Accessing via an IP address (e.g. 192.168.x.x) will not work.'
-      );
+      setError('Screen sharing requires HTTPS. Use https:// or localhost.');
+      setStarting(false);
       return;
     }
 
     try {
+      // Request screen capture with better options
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 15, max: 30 } },
+        video: {
+          frameRate: { ideal: 15, max: 30 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
         audio: false,
       });
       streamRef.current = stream;
       setSharing(true);
+      setStarting(false);
 
-      stream.getVideoTracks()[0].onended = () => stop();
+      // Handle user closing the share dialog
+      stream.getVideoTracks()[0]?.addEventListener('ended', () => {
+        stop();
+        sendSignal(sessionId, viewerUserId, 'end', {});
+      });
 
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       pcRef.current = pc;
@@ -99,7 +119,17 @@ function useWebRTCTarget(
         }
       };
 
-      const offer = await pc.createOffer();
+      pc.oniceconnectionstatechange = () => {
+        if (pc.iceConnectionState === 'failed') {
+          // Try restarting ICE
+          pc.restartIce();
+        }
+      };
+
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: false,
+        offerToReceiveVideo: true,
+      });
       await pc.setLocalDescription(offer);
       await sendSignal(sessionId, viewerUserId, 'offer', { type: offer.type, sdp: offer.sdp });
 
@@ -120,31 +150,32 @@ function useWebRTCTarget(
             }
             if (sig.type === 'end') stop();
           }
-        } catch { /* ignore polling errors */ }
+        } catch { /* ignore */ }
       }, SIGNAL_POLL_MS);
 
     } catch (err: any) {
-      if (err.name === 'NotAllowedError') {
-        setError('Screen sharing was denied. Please allow it when the browser asks.');
+      if (err.name === 'NotAllowedError' || err.name === 'AbortError') {
+        setError('Screen sharing was cancelled or denied.');
       } else if (err.name === 'NotSupportedError') {
         setError('Your browser does not support screen sharing. Try Chrome or Edge.');
       } else {
-        setError('Failed to start: ' + (err.message || 'Unknown error'));
+        setError(err.message || 'Failed to start screen sharing.');
       }
+      setStarting(false);
       stop();
     }
-  }, [sessionId, viewerUserId, stop]);
+  }, [sessionId, viewerUserId, starting, stop]);
 
   useEffect(() => {
-    if (active && sessionId && viewerUserId && !sharing && !error) {
+    if (active && sessionId && viewerUserId && !sharing && !error && !starting) {
       start();
     }
     if (!active) stop();
-  }, [active, sessionId, viewerUserId]);
+  }, [active, sessionId, viewerUserId, sharing, error, starting, start, stop]);
 
   useEffect(() => () => stop(), [stop]);
 
-  return { sharing, error, stop };
+  return { sharing, error, stop, starting };
 }
 
 // ── VIEWER HOOK ───────────────────────────────────────────────────────────────
@@ -152,21 +183,21 @@ function useWebRTCViewer(
   sessionId: string | null,
   targetUserId: string | null,
   active: boolean,
-  onStream: (stream: MediaStream | null) => void
+  onStream: (stream: MediaStream | null) => void,
+  onConnected: (connected: boolean) => void
 ) {
-  const pcRef   = useRef<RTCPeerConnection | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [waiting,   setWaiting]   = useState(false);
+  const [waiting, setWaiting] = useState(false);
 
   const stop = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     pcRef.current?.close();
     pcRef.current = null;
-    setConnected(false);
     setWaiting(false);
     onStream(null);
-  }, [onStream]);
+    onConnected(false);
+  }, [onStream, onConnected]);
 
   const startPolling = useCallback(() => {
     if (!sessionId || !targetUserId) return;
@@ -181,32 +212,30 @@ function useWebRTCViewer(
             pcRef.current = pc;
 
             pc.ontrack = (e) => {
-              // e.streams[0] can sometimes be empty — use track directly as fallback
-              const incomingStream = e.streams[0] || new MediaStream([e.track]);
-
-              // Wait for the track to actually be live before showing video
-              const track = e.track;
-              const checkLive = () => {
-                if (track.readyState === 'live') {
-                  onStream(incomingStream);
-                  setConnected(true);
+              if (e.streams && e.streams.length > 0) {
+                const stream = e.streams[0];
+                // Check if stream has video tracks
+                if (stream.getVideoTracks().length > 0) {
+                  onStream(stream);
+                  onConnected(true);
                   setWaiting(false);
-                } else {
-                  // Track not live yet — retry in 200ms
-                  setTimeout(checkLive, 200);
                 }
-              };
-              checkLive();
-            };
-
-            // Also handle connection state changes
-            pc.onconnectionstatechange = () => {
-              if (pc.connectionState === 'connected') {
-                setConnected(true);
+              } else if (e.track) {
+                // Fallback: create stream from track
+                const stream = new MediaStream([e.track]);
+                onStream(stream);
+                onConnected(true);
                 setWaiting(false);
               }
-              if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
-                setConnected(false);
+            };
+
+            pc.oniceconnectionstatechange = () => {
+              if (pc.iceConnectionState === 'connected') {
+                onConnected(true);
+                setWaiting(false);
+              }
+              if (['failed', 'disconnected', 'closed'].includes(pc.iceConnectionState)) {
+                onConnected(false);
               }
             };
 
@@ -225,33 +254,35 @@ function useWebRTCViewer(
           }
 
           if (sig.type === 'ice-candidate' && pcRef.current) {
-            await pcRef.current.addIceCandidate(
-              new RTCIceCandidate(sig.payload as RTCIceCandidateInit)
-            ).catch(() => {});
+            try {
+              await pcRef.current.addIceCandidate(
+                new RTCIceCandidate(sig.payload as RTCIceCandidateInit)
+              );
+            } catch { /* ignore duplicate candidates */ }
           }
 
           if (sig.type === 'end') stop();
         }
       } catch { /* ignore */ }
     }, SIGNAL_POLL_MS);
-  }, [sessionId, targetUserId, onStream, stop]);
+  }, [sessionId, targetUserId, onStream, onConnected, stop]);
 
   useEffect(() => {
     if (active && sessionId && targetUserId) startPolling();
     if (!active) stop();
-  }, [active, sessionId, targetUserId]);
+  }, [active, sessionId, targetUserId, startPolling, stop]);
 
   useEffect(() => () => stop(), [stop]);
 
-  return { connected, waiting };
+  return { waiting };
 }
 
-// ── TARGET COMPONENT ──────────────────────────────────────────────────────────
+// ─── TARGET COMPONENT ──────────────────────────────────────────────────────────
 function TargetScreenShare() {
   const { mySession, iAmTarget, isActive, endSession } = useScreenShare();
   const viewerUserId = mySession?.requesterId ?? null;
-  const sessionId    = mySession?.id ?? null;
-  const { sharing, error, stop } = useWebRTCTarget(sessionId, viewerUserId, iAmTarget && isActive);
+  const sessionId = mySession?.id ?? null;
+  const { sharing, error, stop, starting } = useWebRTCTarget(sessionId, viewerUserId, iAmTarget && isActive);
 
   const handleStop = async () => {
     stop();
@@ -274,9 +305,14 @@ function TargetScreenShare() {
           <span>Your screen is being shared live</span>
           <button style={styles.stopBtn} onClick={handleStop}>Stop Sharing</button>
         </>
+      ) : starting ? (
+        <>
+          <span>⏳ Opening screen picker...</span>
+          <button style={styles.stopBtn} onClick={handleStop}>Cancel</button>
+        </>
       ) : (
         <>
-          <span>Starting screen share… pick a window or tab when prompted</span>
+          <span>Ready to share screen...</span>
           <button style={styles.stopBtn} onClick={handleStop}>Cancel</button>
         </>
       )}
@@ -284,34 +320,37 @@ function TargetScreenShare() {
   );
 }
 
-// ── VIEWER COMPONENT ──────────────────────────────────────────────────────────
+// ─── VIEWER COMPONENT ──────────────────────────────────────────────────────────
 function ViewerScreenShare() {
   const { mySession, iAmViewer, isActive, endSession, showViewerPanel } = useScreenShare();
-  const [stream,       setStream]       = useState<MediaStream | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [connected, setConnected] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isPaused,     setIsPaused]     = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [position, setPosition] = useState({ x: 20, y: 20 });
+  const [isDragging, setIsDragging] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const sessionId    = mySession?.id ?? null;
+  const sessionId = mySession?.id ?? null;
   const targetUserId = mySession?.targetId ?? null;
-  const { connected, waiting } = useWebRTCViewer(sessionId, targetUserId, iAmViewer && isActive, setStream);
+  const { waiting } = useWebRTCViewer(sessionId, targetUserId, iAmViewer && isActive, setStream, setConnected);
 
-  // Robust stream attachment — handles all browser quirks
+  // Handle stream attachment
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) return;
 
-    // Must clear first, then re-assign — avoids stale stream issues
+    // Ensure muted is set programmatically
+    video.muted = true;
     video.srcObject = null;
     video.srcObject = stream;
-    video.muted = true; // set programmatically too, not just via attribute
 
     const tryPlay = () => {
       video.play().catch((err) => {
-        // NotAllowedError = autoplay blocked, user interaction needed
-        // Retry after short delay
-        if (err.name !== 'AbortError') {
-          setTimeout(() => video.play().catch(() => {}), 300);
+        if (err.name === 'NotAllowedError') {
+          setIsPaused(true);
         }
       });
     };
@@ -327,27 +366,123 @@ function ViewerScreenShare() {
     };
   }, [stream]);
 
+  // Drag handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    setIsDragging(true);
+    const rect = containerRef.current.getBoundingClientRect();
+    setDragOffset({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging) return;
+    const newX = Math.min(window.innerWidth - 360, Math.max(0, e.clientX - dragOffset.x));
+    const newY = Math.min(window.innerHeight - 320, Math.max(0, e.clientY - dragOffset.y));
+    setPosition({ x: newX, y: newY });
+  }, [isDragging, dragOffset]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, handleMouseMove, handleMouseUp]);
+
+  // Touch handlers for mobile
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!containerRef.current) return;
+    const touch = e.touches[0];
+    const rect = containerRef.current.getBoundingClientRect();
+    setDragOffset({
+      x: touch.clientX - rect.left,
+      y: touch.clientY - rect.top,
+    });
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = useCallback((e: TouchEvent) => {
+    if (!isDragging) return;
+    const touch = e.touches[0];
+    const newX = Math.min(window.innerWidth - 360, Math.max(0, touch.clientX - dragOffset.x));
+    const newY = Math.min(window.innerHeight - 320, Math.max(0, touch.clientY - dragOffset.y));
+    setPosition({ x: newX, y: newY });
+  }, [isDragging, dragOffset]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('touchmove', handleTouchMove, { passive: true });
+      window.addEventListener('touchend', handleTouchEnd);
+    }
+    return () => {
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [isDragging, handleTouchMove, handleTouchEnd]);
+
   if (!showViewerPanel || !iAmViewer || !mySession) return null;
 
   const target = mySession.target;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
   return (
-    <div style={{ ...styles.viewerPanel, ...(isFullscreen ? styles.viewerFullscreen : {}) }}>
+    <div
+      ref={containerRef}
+      style={{
+        ...styles.viewerPanel,
+        ...(isFullscreen ? styles.viewerFullscreen : {
+          right: 'auto',
+          bottom: 'auto',
+          left: position.x,
+          top: position.y,
+          cursor: isDragging ? 'grabbing' : 'grab',
+        }),
+        width: isMobile ? 'calc(100vw - 40px)' : 640,
+        height: isMobile ? 300 : 420,
+      }}
+    >
+      {/* Drag handle */}
+      <div
+        style={styles.dragHandle}
+        onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
+      >
+        <span style={{ color: '#475569', fontSize: 12 }}>⋯</span>
+      </div>
+
       {/* Header */}
       <div style={styles.viewerHeader}>
         <div style={styles.viewerHeaderLeft}>
           <span style={styles.liveIndicator}>
             {connected
               ? <><span style={styles.recordDot} /> LIVE</>
-              : waiting ? '⏳ Waiting for screen…'
-              : '○ Connecting…'}
+              : waiting ? '⏳ Waiting for screen...'
+              : '○ Connecting...'}
           </span>
-          <span style={styles.viewerTitle}>{target.name || target.email}'s Screen</span>
+          <span style={styles.viewerTitle}>
+            {target.name || target.email}'s Screen
+          </span>
         </div>
         <div style={styles.viewerHeaderRight}>
-          <button style={styles.iconBtn} onClick={() => setIsFullscreen(!isFullscreen)}>
-            {isFullscreen ? '⊡ Exit' : '⛶ Fullscreen'}
-          </button>
+          {!isMobile && (
+            <button style={styles.iconBtn} onClick={() => setIsFullscreen(!isFullscreen)}>
+              {isFullscreen ? '⊡ Exit' : '⛶ Fullscreen'}
+            </button>
+          )}
           <button style={styles.endBtn} onClick={endSession}>✕ End</button>
         </div>
       </div>
@@ -363,16 +498,8 @@ function ViewerScreenShare() {
               muted
               controls={false}
               style={styles.video}
-              onCanPlay={(e) => {
-                const v = e.target as HTMLVideoElement;
-                v.play().catch(() => setIsPaused(true));
-              }}
-              onLoadedMetadata={(e) => {
-                const v = e.target as HTMLVideoElement;
-                v.play().catch(() => setIsPaused(true));
-              }}
               onPause={() => setIsPaused(true)}
-              onPlay={()  => setIsPaused(false)}
+              onPlay={() => setIsPaused(false)}
             />
             {isPaused && (
               <div
@@ -380,7 +507,9 @@ function ViewerScreenShare() {
                   position: 'absolute', inset: 0,
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
-                  background: 'rgba(0,0,0,0.7)', cursor: 'pointer', gap: 12,
+                  background: 'rgba(0,0,0,0.7)',
+                  cursor: 'pointer',
+                  gap: 12,
                 }}
                 onClick={() => {
                   videoRef.current?.play().catch(() => {});
@@ -418,17 +547,14 @@ function ViewerScreenShare() {
       {/* Footer */}
       {connected && (
         <div style={styles.viewerFooter}>
-          <span style={{ color: '#4ade80', fontSize: 12 }}>🔒 Encrypted peer-to-peer · No video stored on server</span>
-          <button style={styles.iconBtn} onClick={() => videoRef.current?.requestFullscreen?.()}>
-            Expand ↗
-          </button>
+          <span style={{ color: '#4ade80', fontSize: 11 }}>🔒 Encrypted · Peer-to-peer</span>
         </div>
       )}
     </div>
   );
 }
 
-// ── EXPORT ────────────────────────────────────────────────────────────────────
+// ─── EXPORT ────────────────────────────────────────────────────────────────────
 export function ScreenShareWebRTCOrchestrator() {
   return (
     <>
@@ -438,69 +564,159 @@ export function ScreenShareWebRTCOrchestrator() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ─── Styles ────────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   targetBadge: {
-    position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
-    zIndex: 9999, display: 'flex', alignItems: 'center', gap: 10,
-    padding: '10px 20px', borderRadius: 100,
+    position: 'fixed',
+    top: 12,
+    left: '50%',
+    transform: 'translateX(-50%)',
+    zIndex: 9999,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 20px',
+    borderRadius: 100,
     background: 'rgba(10,15,30,0.95)',
     border: '1px solid rgba(239,68,68,0.5)',
     boxShadow: '0 4px 24px rgba(239,68,68,0.2)',
-    fontSize: 13, color: '#f0f4ff', backdropFilter: 'blur(12px)', whiteSpace: 'nowrap',
+    fontSize: 13,
+    color: '#f0f4ff',
+    backdropFilter: 'blur(12px)',
+    whiteSpace: 'nowrap',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   recordDot: {
-    display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
-    background: '#ef4444', boxShadow: '0 0 8px #ef4444',
-    animation: 'ssRecordPulse 1.5s ease-in-out infinite', flexShrink: 0,
+    display: 'inline-block',
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    background: '#ef4444',
+    boxShadow: '0 0 8px #ef4444',
+    animation: 'ssRecordPulse 1.5s ease-in-out infinite',
+    flexShrink: 0,
   },
   stopBtn: {
-    padding: '4px 14px', borderRadius: 6, border: 'none',
-    background: '#ef4444', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', marginLeft: 6,
+    padding: '4px 14px',
+    borderRadius: 6,
+    border: 'none',
+    background: '#ef4444',
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    marginLeft: 6,
   },
   viewerPanel: {
-    position: 'fixed', bottom: 24, right: 24, width: 680, height: 440,
-    background: '#060c18', border: '1px solid rgba(34,197,94,0.2)',
-    borderRadius: 16, boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
-    zIndex: 9990, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    transition: 'all 0.3s ease',
+    position: 'fixed',
+    background: '#060c18',
+    border: '1px solid rgba(34,197,94,0.2)',
+    borderRadius: 16,
+    boxShadow: '0 24px 80px rgba(0,0,0,0.7)',
+    zIndex: 9990,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    transition: 'box-shadow 0.3s ease',
   },
   viewerFullscreen: {
-    bottom: 0, right: 0, left: 0, top: 0, width: '100vw', height: '100vh', borderRadius: 0,
+    bottom: 0,
+    right: 0,
+    left: 0,
+    top: 0,
+    width: '100vw',
+    height: '100vh',
+    borderRadius: 0,
+  },
+  dragHandle: {
+    height: 16,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'grab',
+    background: 'rgba(255,255,255,0.02)',
+    borderBottom: '1px solid rgba(148,163,184,0.05)',
+    flexShrink: 0,
+    userSelect: 'none',
+    touchAction: 'none',
   },
   viewerHeader: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '10px 16px', background: 'rgba(255,255,255,0.03)',
-    borderBottom: '1px solid rgba(148,163,184,0.08)', flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '8px 16px',
+    background: 'rgba(255,255,255,0.03)',
+    borderBottom: '1px solid rgba(148,163,184,0.08)',
+    flexShrink: 0,
   },
-  viewerHeaderLeft:  { display: 'flex', alignItems: 'center', gap: 12 },
-  viewerHeaderRight: { display: 'flex', alignItems: 'center', gap: 8 },
+  viewerHeaderLeft: { display: 'flex', alignItems: 'center', gap: 12, flex: 1, overflow: 'hidden' },
+  viewerHeaderRight: { display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 },
   liveIndicator: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    fontSize: 11, fontWeight: 700, color: '#4ade80', letterSpacing: '0.08em',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontSize: 11,
+    fontWeight: 700,
+    color: '#4ade80',
+    letterSpacing: '0.08em',
+    flexShrink: 0,
   },
-  viewerTitle: { fontSize: 13, fontWeight: 600, color: '#f0f4ff' },
+  viewerTitle: { fontSize: 13, fontWeight: 600, color: '#f0f4ff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   iconBtn: {
-    background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(148,163,184,0.15)',
-    borderRadius: 6, color: '#94a3b8', fontSize: 12, cursor: 'pointer', padding: '4px 10px',
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(148,163,184,0.15)',
+    borderRadius: 6,
+    color: '#94a3b8',
+    fontSize: 12,
+    cursor: 'pointer',
+    padding: '4px 10px',
   },
   endBtn: {
-    padding: '4px 12px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)',
-    background: 'rgba(239,68,68,0.1)', color: '#f87171', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+    padding: '4px 12px',
+    borderRadius: 6,
+    border: '1px solid rgba(239,68,68,0.3)',
+    background: 'rgba(239,68,68,0.1)',
+    color: '#f87171',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
   },
-  videoWrap: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', overflow: 'hidden' },
-  video:     { width: '100%', height: '100%', objectFit: 'contain', background: '#000' },
-  connectingWrap: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: 32 },
+  videoWrap: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: '#000',
+    overflow: 'hidden',
+    minHeight: 150,
+  },
+  video: { width: '100%', height: '100%', objectFit: 'contain', background: '#000' },
+  connectingWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 16,
+    padding: 32,
+    textAlign: 'center',
+  },
   spinner: {
-    width: 36, height: 36, borderRadius: '50%',
-    border: '3px solid rgba(34,197,94,0.15)', borderTop: '3px solid #22c55e',
+    width: 36,
+    height: 36,
+    borderRadius: '50%',
+    border: '3px solid rgba(34,197,94,0.15)',
+    borderTop: '3px solid #22c55e',
     animation: 'ssSpin 0.8s linear infinite',
   },
-  connectingText: { fontSize: 14, color: '#94a3b8', textAlign: 'center', margin: 0 },
-  connectingHint: { fontSize: 12, color: '#475569', textAlign: 'center', margin: 0 },
+  connectingText: { fontSize: 14, color: '#94a3b8', margin: 0 },
+  connectingHint: { fontSize: 12, color: '#475569', margin: 0, maxWidth: 280 },
   viewerFooter: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '8px 16px', flexShrink: 0,
-    borderTop: '1px solid rgba(148,163,184,0.08)', background: 'rgba(255,255,255,0.02)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '6px 16px',
+    flexShrink: 0,
+    borderTop: '1px solid rgba(148,163,184,0.08)',
+    background: 'rgba(255,255,255,0.02)',
   },
 };
