@@ -15,7 +15,6 @@ import React, {
   useCallback, useRef, ReactNode,
 } from 'react';
 import { useSession } from 'next-auth/react';
-import { POLL_INTERVAL_MS } from '@/lib/screenshare';
 import { useScreenShareBroadcast } from '@/hooks/useScreenShareBroadcast';
 
 // ─── Types ────────────────────────────────────────────────────
@@ -83,9 +82,7 @@ export function useScreenShare() {
 
 export function ScreenShareProvider({ children }: { children: ReactNode }) {
   const { data: authSession, status } = useSession();
-  // ✅ FIX: Cast session user to include id
   const myId = (authSession?.user as any)?.id || null;
-
   const [mySession,            setMySession]            = useState<LiveSession | null>(null);
   const [incomingRequest,      setIncomingRequest]      = useState<LiveSession | null>(null);
   const [liveHeartbeat,        setLiveHeartbeat]        = useState<LiveHeartbeat | null>(null);
@@ -93,9 +90,6 @@ export function ScreenShareProvider({ children }: { children: ReactNode }) {
   const [secondsSinceLastBeat, setSecondsSinceLastBeat] = useState<number | null>(null);
   const [showRequestModal,     setShowRequestModal]     = useState(false);
   const [showViewerPanel,      setShowViewerPanel]      = useState(false);
-
-  const pendingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const pollIntervalRef    = useRef<NodeJS.Timeout | null>(null);
 
   const iAmViewer = !!mySession && mySession.requesterId === myId;
   const iAmTarget = !!mySession && mySession.targetId    === myId;
@@ -110,23 +104,21 @@ export function ScreenShareProvider({ children }: { children: ReactNode }) {
     try {
       const res  = await fetch('/api/screenshare/pending');
       const data = await res.json();
+      if (!res.ok) return;
 
       if (data.incoming) {
         if (data.incoming.status === 'PENDING') {
           setIncomingRequest(data.incoming as LiveSession);
           setMySession(data.incoming as LiveSession);
         } else if (data.incoming.status === 'ACTIVE') {
-          // Already accepted — update session state
           setMySession(data.incoming as LiveSession);
           setIncomingRequest(null);
         } else {
-          // Ended/rejected
           setIncomingRequest(null);
           if (mySession?.targetId === myId) setMySession(null);
         }
       } else {
         setIncomingRequest(null);
-        // Only clear if I'm the target and there's no session
         if (iAmTarget) setMySession(null);
       }
     } catch {
@@ -142,7 +134,6 @@ export function ScreenShareProvider({ children }: { children: ReactNode }) {
       const data = await res.json();
 
       if (!data.session) {
-        // Session ended
         setMySession(null);
         setLiveHeartbeat(null);
         setShowViewerPanel(false);
@@ -168,30 +159,36 @@ export function ScreenShareProvider({ children }: { children: ReactNode }) {
     }
   }, [myId, iAmViewer]);
 
-  // ── Start/stop polling ────────────────────────────────────────
+  // ── Start/stop polling (FIXED: No more setInterval! No more click spam!) ─────────
   useEffect(() => {
     if (status !== 'authenticated' || !myId) return;
 
-    // Always poll for incoming requests
+    // Only run when the component mounts
     pollPending();
-    pendingIntervalRef.current = setInterval(pollPending, POLL_INTERVAL_MS + 500);
+
+    // Only refresh when the user comes back to the tab (prevents server spam)
+    const handleFocus = () => pollPending();
+
+    window.addEventListener('focus', handleFocus);
 
     return () => {
-      if (pendingIntervalRef.current) clearInterval(pendingIntervalRef.current);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [status, myId, pollPending]);
 
+  // Check if I am a viewer, and only then poll. 30 seconds is enough
   useEffect(() => {
     if (!iAmViewer) {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       return;
     }
 
     pollViewer();
-    pollIntervalRef.current = setInterval(pollViewer, POLL_INTERVAL_MS);
+
+    // Only poll viewer every 30 seconds OR on specific clicks
+    const interval = setInterval(pollViewer, 30000); // 30 seconds
 
     return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (interval) clearInterval(interval);
     };
   }, [iAmViewer, pollViewer]);
 

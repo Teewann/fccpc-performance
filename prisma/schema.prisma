@@ -25,7 +25,11 @@ model User {
   department   Department? @relation(fields: [departmentId], references: [id])
   unit         Unit?       @relation(fields: [unitId], references: [id])
   dailyLogs    DailyLog[]
+  proxyLoggedLogs DailyLog[] @relation("ProxyLoggedBy")  //ADD THIS
   supervisedLogs DailyLog[] @relation("SupervisorLogs")
+  supervisorId   String?
+  supervisor     User?    @relation("StaffSupervisor", fields: [supervisorId], references: [id])
+  supervises     User[]   @relation("StaffSupervisor")
   notifications Notification[]
   auditLogs    AuditLog[]
   internLogs      InternLog[]
@@ -112,11 +116,15 @@ model TaskTemplate {
 
 model DailyLog {
   id               String    @id @default(cuid())
+  refNo            String?   @unique
   userId           String
   user             User      @relation(fields: [userId], references: [id])
   date             DateTime  @default(now())
   taskTitle        String
   taskCategory     String
+  taskType         String?
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id])
   description      String
   timeSpent        Float
   priority         Priority  @default(MEDIUM)
@@ -130,6 +138,13 @@ model DailyLog {
   supervisorComment String?
   supervisorScore  Int?
   reviewedAt       DateTime?
+  isAiQuickCapture Boolean   @default(false)
+  quickCaptureBatch String?
+  loggedByProxy    Boolean   @default(false)   //ADDED
+  proxyLoggedById  String?                     //ADDED
+  proxyLoggedBy    User?      @relation("ProxyLoggedBy", fields: [proxyLoggedById], references: [id])  //ADD THIS
+  crossDeptFlag    String?
+  ackStatus        String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
@@ -323,6 +338,7 @@ model Task {
   notes              String?
   caseReference      String?
   directorComment    String?
+  dailyLogs DailyLog[]
   taskRef            String?    @unique
   forwardedFromId    String?
   forwardedToId      String?
@@ -343,6 +359,10 @@ model Task {
   taskSource         String?   @default("DEPARTMENT")
   forwardedFrom      User?     @relation("ForwardedFrom", fields: [forwardedFromId], references: [id])
   forwardedTo        User?     @relation("ForwardedTo", fields: [forwardedToId], references: [id])
+  isBroadcastParent  Boolean  @default(false)   // NEW — true only on the "master" directive
+  broadcastParentId  String?                     // NEW — set on each spawned child task
+  broadcastParent    Task?    @relation("BroadcastChildren", fields: [broadcastParentId], references: [id]) // NEW
+  broadcastChildren  Task[]   @relation("BroadcastChildren")   // NEW
 }
 
 model Announcement {
@@ -894,6 +914,7 @@ enum Role {
   CONTRACT
   CONSULTANT
   OTHER
+  CHIEF   // ✅ ADD THIS
 }
 
 enum Priority {

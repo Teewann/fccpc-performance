@@ -1,12 +1,10 @@
 ﻿"use client";
-
 export const dynamic = "force-dynamic";
-
 import { useState, useEffect, useCallback } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
 import UserAvatar from "@/components/UserAvatar";
-
+import { useToast } from "@/components/ui/ToastProvider";
 // ─── Types ────────────────────────────────────────────────────────────
 type User = {
   id: string; name: string; email: string; phone: string | null;
@@ -219,15 +217,7 @@ export default function UsersPage() {
   const [form, setForm] = useState(emptyForm);
   const [editForm, setEditForm] = useState({ name: "", role: "STAFF", jobTitle: "", staffId: "", departmentId: "", unitId: "", phone: "", gradeLevel: "", newPassword: "", confirmPassword: "" });
   const [submitting, setSubmitting] = useState(false);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-
-  function showToast(text: string, ok = true) {
-    const id = ++_toastId;
-    setToasts((p) => [...p, { id, text, ok }]);
-    setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 4500);
-  }
-  function removeToast(id: number) { setToasts((p) => p.filter((t) => t.id !== id)); }
-
+  const { showToast } = useToast();
   useEffect(() => { setShowEdit(false); setShowCreate(false); }, []);
 
   const fetchUsers = useCallback(async () => {
@@ -306,7 +296,6 @@ export default function UsersPage() {
   return (
     <div className="flex min-h-screen" style={{ background: "var(--bg-page)" }}>
       <Sidebar />
-      <ToastContainer toasts={toasts} remove={removeToast} />
       <main className="flex-1 p-6 min-w-0">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <div>

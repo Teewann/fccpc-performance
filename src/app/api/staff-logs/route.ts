@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
+// ─── GET ─────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -89,6 +90,99 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error(error);
+    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  }
+}
+
+// ─── PATCH ───────────────────────────────────────────────────────────
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      include: { department: true }
+    });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const { logId, status, supervisorComment, supervisorScore } = body;
+
+    if (!logId) {
+      return NextResponse.json({ error: "logId required" }, { status: 400 });
+    }
+
+    // Get the log with user info
+    const log = await prisma.dailyLog.findUnique({
+      where: { id: logId },
+      include: { user: { include: { department: true } }, supervisor: true }
+    });
+    if (!log) {
+      return NextResponse.json({ error: "Log not found" }, { status: 404 });
+    }
+
+    // Check authorization
+    const isAuthorized = 
+      log.supervisorId === user.id ||
+      user.role === "DIRECTOR" ||
+      user.role === "ADMIN" ||
+      user.role === "HR" ||
+      user.role === "EXECUTIVE" ||
+      (user.role === "SUPERVISOR" && log.user.departmentId === user.departmentId);
+
+    if (!isAuthorized) {
+      return NextResponse.json({ error: "Not authorized to review this log" }, { status: 403 });
+    }
+
+    // Validate status
+    const allowedStatuses = ["APPROVED", "REJECTED", "QUERIED", "SUBMITTED"];
+    if (status && !allowedStatuses.includes(status)) {
+      return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+    }
+
+    // Update the log
+    const updated = await prisma.dailyLog.update({
+      where: { id: logId },
+      data: {
+        status: status || log.status,
+        supervisorComment: supervisorComment !== undefined ? supervisorComment : log.supervisorComment,
+        supervisorScore: supervisorScore !== undefined ? parseInt(supervisorScore) : log.supervisorScore,
+        reviewedAt: status ? new Date() : log.reviewedAt,
+        supervisorId: status ? user.id : log.supervisorId,
+      },
+    });
+
+    // Notify the staff member
+    if (status === "APPROVED" || status === "REJECTED") {
+      await prisma.notification.create({
+        data: {
+          userId: log.userId,
+          title: `Log ${status === "APPROVED" ? "✅ Approved" : "❌ Rejected"}`,
+          message: `Your log "${log.taskTitle}" was ${status === "APPROVED" ? "approved" : "rejected"} by ${user.name}.${supervisorComment ? ` Comment: ${supervisorComment}` : ""}`,
+          type: status === "APPROVED" ? "SUCCESS" : "WARNING",
+          link: "/staff-logs",
+        },
+      });
+    } else if (status === "QUERIED") {
+      await prisma.notification.create({
+        data: {
+          userId: log.userId,
+          title: "📋 Log Queried",
+          message: `${user.name} has queried your log "${log.taskTitle}".${supervisorComment ? ` Comment: ${supervisorComment}` : " Please review and respond."}`,
+          type: "INFO",
+          link: "/staff-logs",
+        },
+      });
+    }
+
+    return NextResponse.json({ success: true, log: updated });
+  } catch (error) {
+    console.error("PATCH /api/staff-logs error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

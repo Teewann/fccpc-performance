@@ -6,6 +6,7 @@ import AIAssistant from "@/components/layout/AIAssistant";
 import { ScreenShareProvider } from "@/components/screenshare/ScreenShareProvider";
 import { ScreenShareOrchestrator } from "@/components/screenshare/ScreenShareUI";
 import { ScreenShareWebRTCOrchestrator } from "@/components/screenshare/ScreenShareWebRTC";
+import { ToastProvider } from "@/components/ui/ToastProvider"; // ✅ ADDED
 
 export const metadata: Metadata = {
   title: "FCCPC Performance Intelligence System",
@@ -22,12 +23,15 @@ export default function RootLayout({
       <body>
         <Providers>
           <ThemeProvider>
-            <ScreenShareProvider>
-              {children}
-              <ScreenShareOrchestrator />
-              <ScreenShareWebRTCOrchestrator />
-              <AIAssistant />
-            </ScreenShareProvider>
+            {/* ✅ Wrap the entire app with ToastProvider */}
+            <ToastProvider>
+              <ScreenShareProvider>
+                {children}
+                <ScreenShareOrchestrator />
+                <ScreenShareWebRTCOrchestrator />
+                <AIAssistant />
+              </ScreenShareProvider>
+            </ToastProvider>
           </ThemeProvider>
         </Providers>
       </body>

@@ -91,12 +91,21 @@ export default function NotificationBell() {
     }
   }, [playSound]);
 
+  // ✅ FIXED: No more setInterval. Fetch once on mount and when window focuses.
   useEffect(() => {
+    // Fetch once when component loads
     fetchNotifs();
-    const id = setInterval(fetchNotifs, 30_000);
-    return () => clearInterval(id);
+    
+    // Fetch when the user comes back to the tab (e.g., from another window)
+    const handleFocus = () => fetchNotifs();
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [fetchNotifs]);
 
+  // ✅ FIXED: Only fetch when the user actually clicks the bell
   useEffect(() => {
     if (open) fetchNotifs();
   }, [open, fetchNotifs]);

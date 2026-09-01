@@ -2,11 +2,13 @@
 
 export const dynamic = "force-dynamic";
 
-
 import { useState, useEffect } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
 import { TASK_TYPE_GROUPS, getTaskTypeLabel, getTaskTypeIcon } from "@/config/taskTypes";
+import LogModeHub from "@/components/logging/LogModeHub";
+import PendingAcknowledgments from "@/components/PendingAcknowledgments";
+import TimeRangePicker from "@/components/TimeRangePicker";
 
 type TaskTemplate = {
   id: string;
@@ -67,6 +69,10 @@ const EMPTY: FormData = {
   taskType: "",
 };
 
+// Roles allowed to log on behalf of staff (Proxy mode). Adjust to taste —
+// this mirrors the "isPrivileged" pattern already used on your tasks page.
+const PROXY_CAPABLE_ROLES = ["DIRECTOR", "SUPERVISOR", "HR", "ADMIN", "EXECUTIVE"];
+
 export default function CheckInPage() {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [todayLogs, setTodayLogs] = useState<DailyLog[]>([]);
@@ -77,10 +83,15 @@ export default function CheckInPage() {
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [form, setForm] = useState<FormData>(EMPTY);
+  const [userRole, setUserRole] = useState("");
 
   useEffect(() => {
     fetchTemplates();
     fetchTodayLogs();
+    // Same pattern already used on your tasks page for role lookup.
+    fetch("/api/settings/account").then((r) => r.json()).then((d) => {
+      if (d.user) setUserRole(d.user.role);
+    });
   }, []);
 
   async function fetchTemplates() {
@@ -177,11 +188,147 @@ export default function CheckInPage() {
     marginBottom: 7,
   };
 
+  // ── The original manual form, now passed into LogModeHub as one of six
+  // modes instead of being the only option. Content unchanged, just no
+  // longer wrapped in its own card — LogModeHub supplies that wrapper now.
+  const manualFormContent = (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 14, borderBottom: "0.5px solid var(--border-soft)" }}>
+        <span style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Submit new work log</span>
+        <span style={{ fontSize: 12, background: "var(--accent-bg)", border: "0.5px solid var(--accent-border)", color: "var(--accent-text)", padding: "3px 10px", borderRadius: 8, fontWeight: 600 }}>
+          {new Date().toLocaleDateString("en-GB")}
+        </span>
+      </div>
+
+      {successMsg && <div style={{ background: "#052e16", border: "0.5px solid #14532d", color: "#4ade80", borderRadius: 10, padding: "12px 14px", fontSize: 14, marginBottom: 16 }}>{successMsg}</div>}
+      {errorMsg && <div style={{ background: "#1f0707", border: "0.5px solid #7f1d1d", color: "#f87171", borderRadius: 10, padding: "12px 14px", fontSize: 14, marginBottom: 16 }}>{errorMsg}</div>}
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={lbl}>Type of task <span style={{ color: "#f87171" }}>*</span></label>
+        <select name="taskType" value={form.taskType} onChange={handleChange} style={inp} required>
+          <option value="">: Select task type :</option>
+          {Object.entries(TASK_TYPE_GROUPS).map(([group, types]) => (
+            <optgroup key={group} label={group}>
+              {types.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.icon} {t.label}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={lbl}>Task template (category) <span style={{ color: "#f87171" }}>*</span></label>
+        {loading ? (
+          <div style={{ fontSize: 14, color: "var(--text-muted)", padding: "10px 0" }}>Loading task types...</div>
+        ) : (
+          <select style={inp} onChange={(e) => handleTemplateChange(e.target.value)} defaultValue="">
+            <option value="" disabled>Select a task type...</option>
+            {Object.entries(grouped).map(([cat, items]) => (
+              <optgroup key={cat} label={cat}>
+                {items.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={lbl}>Task title <span style={{ color: "#f87171" }}>*</span></label>
+        <input name="taskTitle" value={form.taskTitle} onChange={handleChange} placeholder="Brief title of what you did" style={inp} />
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={lbl}>Full description <span style={{ color: "#f87171" }}>*</span></label>
+        <textarea name="description" value={form.description} onChange={handleChange} rows={4}
+          placeholder="Describe in detail what you worked on, what was achieved, and any challenges..."
+          style={{ ...inp, resize: "none" } as any} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+        <div style={{ gridColumn: "1/-1" }}>
+          <label style={lbl}>Time spent <span style={{ color: "#f87171" }}>*</span></label>
+          <TimeRangePicker onChange={(hours) => setForm((p) => ({ ...p, timeSpent: String(hours) }))} />
+        </div>
+        <div>
+          <label style={lbl}>Status</label>
+          <select name="status" value={form.status} onChange={handleChange} style={inp}>
+            <option value="SUBMITTED">Completed</option>
+            <option value="DRAFT">In progress</option>
+          </select>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <label style={lbl}>Priority level</label>
+        <div style={{ display: "flex", gap: 8 }}>
+          {PRIORITY.map((p) => (
+            <button key={p.value} onClick={() => setForm((prev) => ({ ...prev, priority: p.value as any }))}
+              style={{
+                flex: 1, padding: "9px 8px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                background: p.style.bg, color: p.style.color, border: `0.5px solid ${p.style.border}`,
+                opacity: form.priority === p.value ? 1 : 0.5, transition: "opacity 0.15s",
+              }}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selectedTemplate?.requiresCaseRef && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ background: "#0c1a2e", border: "0.5px solid #1e3a5f", borderRadius: 10, padding: "10px 14px", fontSize: 14, color: "#60a5fa", marginBottom: 10 }}>
+            This task type requires a case or reference number
+          </div>
+          <label style={lbl}>Case / ticket reference</label>
+          <input name="caseReference" value={form.caseReference} onChange={handleChange} placeholder="e.g. S&I-2026-0142" style={inp} />
+        </div>
+      )}
+
+      {selectedTemplate?.requiresAmount && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={lbl}>Amount involved (₦)</label>
+          <input name="amountInvolved" value={form.amountInvolved} onChange={handleChange} type="number" placeholder="e.g. 500000" style={inp} />
+        </div>
+      )}
+
+      {selectedTemplate?.requiresEvidence && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={lbl}>Evidence upload</label>
+          <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: "18px", textAlign: "center", cursor: "pointer" }}>
+            <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Click to upload evidence file</div>
+            <div style={{ fontSize: 12, color: "var(--text-hint)", marginTop: 4 }}>PDF, Word, Excel, images : max 10MB</div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 20 }}>
+        <label style={lbl}>Additional notes (optional)</label>
+        <textarea name="notes" value={form.notes} onChange={handleChange} rows={2}
+          placeholder="Any notes or context for your supervisor..."
+          style={{ ...inp, resize: "none" } as any} />
+      </div>
+
+      <div style={{ display: "flex", gap: 12, paddingTop: 16, borderTop: "0.5px solid var(--border-soft)" }}>
+        <button onClick={() => handleSubmit("DRAFT")} disabled={submitLoading}
+          style={{ padding: "11px 20px", borderRadius: 10, fontSize: 14, color: "var(--text-muted)", border: "0.5px solid var(--border)", background: "var(--bg-input)", cursor: "pointer" }}>
+          Save as draft
+        </button>
+        <div style={{ flex: 1 }} />
+        <button onClick={() => handleSubmit("SUBMITTED")} disabled={submitLoading}
+          style={{ padding: "11px 28px", borderRadius: 10, fontSize: 14, fontWeight: 600, color: "#4ade80", border: "1.5px solid #22c55e", background: "#052e16", cursor: "pointer" }}>
+          {submitLoading ? "Submitting..." : "Submit daily log"}
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen" style={{ background: "var(--bg-page)" }}>
       <Sidebar />
       <main className="flex-1 p-6 min-w-0">
-        {/* Topbar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
           <div>
             <h1 style={{ fontSize: 26, fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
@@ -198,7 +345,6 @@ export default function CheckInPage() {
           </div>
         </div>
 
-        {/* Stats */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 22 }}>
           {[
             { label: "Logged today", value: todayLogs.length, color: "var(--text-primary)" },
@@ -214,152 +360,16 @@ export default function CheckInPage() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 20 }}>
-          {/* Form */}
-          <div className="card-bg" style={{ borderRadius: 14, padding: 26 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 14, borderBottom: "0.5px solid var(--border-soft)" }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Submit new work log</span>
-              <span style={{ fontSize: 12, background: "var(--accent-bg)", border: "0.5px solid var(--accent-border)", color: "var(--accent-text)", padding: "3px 10px", borderRadius: 8, fontWeight: 600 }}>
-                {new Date().toLocaleDateString("en-GB")}
-              </span>
-            </div>
+          {/* Left: the mode switcher replaces the old single form */}
+          <LogModeHub
+            canProxyLog={PROXY_CAPABLE_ROLES.includes(userRole)}
+            ManualForm={manualFormContent}
+            onSubmitted={fetchTodayLogs}
+          />
 
-            {successMsg && <div style={{ background: "#052e16", border: "0.5px solid #14532d", color: "#4ade80", borderRadius: 10, padding: "12px 14px", fontSize: 14, marginBottom: 16 }}>{successMsg}</div>}
-            {errorMsg && <div style={{ background: "#1f0707", border: "0.5px solid #7f1d1d", color: "#f87171", borderRadius: 10, padding: "12px 14px", fontSize: 14, marginBottom: 16 }}>{errorMsg}</div>}
-
-            {/* NEW: Generic Task Type dropdown */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Type of task <span style={{ color: "#f87171" }}>*</span></label>
-              <select name="taskType" value={form.taskType} onChange={handleChange} style={inp} required>
-                <option value="">: Select task type :</option>
-                {Object.entries(TASK_TYPE_GROUPS).map(([group, types]) => (
-                  <optgroup key={group} label={group}>
-                    {types.map((t) => (
-                      <option key={t.value} value={t.value}>
-                        {t.icon} {t.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-
-            {/* Existing template dropdown */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Task template (category) <span style={{ color: "#f87171" }}>*</span></label>
-              {loading ? (
-                <div style={{ fontSize: 14, color: "var(--text-muted)", padding: "10px 0" }}>Loading task types...</div>
-              ) : (
-                <select style={inp} onChange={(e) => handleTemplateChange(e.target.value)} defaultValue="">
-                  <option value="" disabled>Select a task type...</option>
-                  {Object.entries(grouped).map(([cat, items]) => (
-                    <optgroup key={cat} label={cat}>
-                      {items.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
-                    </optgroup>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            {/* Title */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Task title <span style={{ color: "#f87171" }}>*</span></label>
-              <input name="taskTitle" value={form.taskTitle} onChange={handleChange} placeholder="Brief title of what you did" style={inp} />
-            </div>
-
-            {/* Description */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Full description <span style={{ color: "#f87171" }}>*</span></label>
-              <textarea name="description" value={form.description} onChange={handleChange} rows={4}
-                placeholder="Describe in detail what you worked on, what was achieved, and any challenges..."
-                style={{ ...inp, resize: "none" } as any} />
-            </div>
-
-            {/* Time + Status */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
-              <div>
-                <label style={lbl}>Time spent (hours) <span style={{ color: "#f87171" }}>*</span></label>
-                <input name="timeSpent" value={form.timeSpent} onChange={handleChange} type="number" step="0.5" min="0.5" max="12" placeholder="e.g. 2.5" style={inp} />
-              </div>
-              <div>
-                <label style={lbl}>Status</label>
-                <select name="status" value={form.status} onChange={handleChange} style={inp}>
-                  <option value="SUBMITTED">Completed</option>
-                  <option value="DRAFT">In progress</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Priority */}
-            <div style={{ marginBottom: 16 }}>
-              <label style={lbl}>Priority level</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                {PRIORITY.map((p) => (
-                  <button key={p.value} onClick={() => setForm((prev) => ({ ...prev, priority: p.value as any }))}
-                    style={{
-                      flex: 1, padding: "9px 8px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                      background: p.style.bg, color: p.style.color, border: `0.5px solid ${p.style.border}`,
-                      opacity: form.priority === p.value ? 1 : 0.5, transition: "opacity 0.15s",
-                    }}>
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Conditional: case ref */}
-            {selectedTemplate?.requiresCaseRef && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ background: "#0c1a2e", border: "0.5px solid #1e3a5f", borderRadius: 10, padding: "10px 14px", fontSize: 14, color: "#60a5fa", marginBottom: 10 }}>
-                  This task type requires a case or reference number
-                </div>
-                <label style={lbl}>Case / ticket reference</label>
-                <input name="caseReference" value={form.caseReference} onChange={handleChange} placeholder="e.g. S&I-2026-0142" style={inp} />
-              </div>
-            )}
-
-            {/* Conditional: amount */}
-            {selectedTemplate?.requiresAmount && (
-              <div style={{ marginBottom: 16 }}>
-                <label style={lbl}>Amount involved (₦)</label>
-                <input name="amountInvolved" value={form.amountInvolved} onChange={handleChange} type="number" placeholder="e.g. 500000" style={inp} />
-              </div>
-            )}
-
-            {/* Conditional: evidence */}
-            {selectedTemplate?.requiresEvidence && (
-              <div style={{ marginBottom: 16 }}>
-                <label style={lbl}>Evidence upload</label>
-                <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: "18px", textAlign: "center", cursor: "pointer" }}>
-                  <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Click to upload evidence file</div>
-                  <div style={{ fontSize: 12, color: "var(--text-hint)", marginTop: 4 }}>PDF, Word, Excel, images : max 10MB</div>
-                </div>
-              </div>
-            )}
-
-            {/* Notes */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={lbl}>Additional notes (optional)</label>
-              <textarea name="notes" value={form.notes} onChange={handleChange} rows={2}
-                placeholder="Any notes or context for your supervisor..."
-                style={{ ...inp, resize: "none" } as any} />
-            </div>
-
-            {/* Buttons */}
-            <div style={{ display: "flex", gap: 12, paddingTop: 16, borderTop: "0.5px solid var(--border-soft)" }}>
-              <button onClick={() => handleSubmit("DRAFT")} disabled={submitLoading}
-                style={{ padding: "11px 20px", borderRadius: 10, fontSize: 14, color: "var(--text-muted)", border: "0.5px solid var(--border)", background: "var(--bg-input)", cursor: "pointer" }}>
-                Save as draft
-              </button>
-              <div style={{ flex: 1 }} />
-              <button onClick={() => handleSubmit("SUBMITTED")} disabled={submitLoading}
-                style={{ padding: "11px 28px", borderRadius: 10, fontSize: 14, fontWeight: 600, color: "#4ade80", border: "1.5px solid #22c55e", background: "#052e16", cursor: "pointer" }}>
-                {submitLoading ? "Submitting..." : "Submit daily log"}
-              </button>
-            </div>
-          </div>
-
-          {/* Right panel */}
+          {/* Right panel — unchanged, plus pending confirmations at top */}
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <PendingAcknowledgments />
             <div className="card-bg" style={{ borderRadius: 14, padding: 20 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14, paddingBottom: 10, borderBottom: "0.5px solid var(--border-soft)" }}>
                 Today's submitted logs
@@ -397,11 +407,10 @@ export default function CheckInPage() {
             <div className="card-bg" style={{ borderRadius: 14, padding: 20 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14 }}>Submission guide</div>
               {[
-                "Select the type of task (Documents, Field, etc.)",
-                "Choose a task template (category) that matches your work",
-                "Give a clear title and full description of what you did",
+                "Pick whichever mode is fastest for you — Quick capture, Timer, Repeat, Bulk entry, or the full Manual form",
+                "Give a clear title and enough detail that a reviewer understands what happened",
                 "Enter honest time spent : this feeds your KPI score",
-                "Attach evidence if required by your task type",
+                "Cross-department work gets flagged for acknowledgment from that department",
                 "Submit before end of day : late submissions are flagged",
               ].map((tip, i) => (
                 <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10 }}>

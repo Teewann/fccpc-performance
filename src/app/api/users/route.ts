@@ -95,6 +95,9 @@ export async function GET(request: NextRequest) {
     const isActive = searchParams.get("isActive") === "true";
     const departmentId = searchParams.get("deptId") || null;
     const directory = searchParams.get("directory") === "true";
+    
+    // ✅ NEW: Check for supervisedBy param
+    const supervisedBy = searchParams.get("supervisedBy");
 
     // ✅ PAGINATION
     const page = parseInt(searchParams.get("page") || "1");
@@ -116,17 +119,21 @@ export async function GET(request: NextRequest) {
     if (isActive) where.isActive = true;
     if (departmentId) where.departmentId = departmentId;
 
-    // Permission filtering
-    if (currentUser.role === "ADMIN" || currentUser.role === "EXECUTIVE") {
-      // Admins and Executives see all
-    } else if (currentUser.role === "DIRECTOR") {
-      if (!currentUser.departmentId) {
-        return NextResponse.json({ error: "Director not assigned to a department" }, { status: 400 });
-      }
-      where.departmentId = currentUser.departmentId;
-    } else {
-      where.id = currentUser.id;
-    }
+    // ✅ NEW: Modified Permission filtering with supervisedBy
+    // ✅ CORRECTED: Permissions with supervisedBy
+if (currentUser.role === "ADMIN" || currentUser.role === "EXECUTIVE") {
+  // Admins and Executives see all — search param narrows further if sent
+} else if (currentUser.role === "DIRECTOR") {
+  if (!currentUser.departmentId) {
+    return NextResponse.json({ error: "Director not assigned to a department" }, { status: 400 });
+  }
+  where.departmentId = currentUser.departmentId;
+} else if (supervisedBy === "me") {
+  // Plain supervisors only see their designated direct reports
+  where.supervisorId = currentUser.id;
+} else {
+  where.id = currentUser.id;
+}
 
     // ✅ Everything independent — fire all 4 queries at the same time
     const [users, total, departments, units] = await Promise.all([
@@ -138,6 +145,7 @@ export async function GET(request: NextRequest) {
           userIdRef: true,
           photo: true,
           gradeLevel: true,
+          supervisorId: true,   // ✅ NEW: Added supervisorId to select
           department: { select: { id: true, name: true, shortCode: true } },
           unit: { select: { id: true, name: true } },
         },
@@ -178,7 +186,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const { name, email, password, role, staffId, departmentId, unitId, jobTitle, phone, gradeLevel } = body;
+    // ✅ NEW: Added supervisorId to destructured body
+    const { name, email, password, role, staffId, departmentId, unitId, jobTitle, phone, gradeLevel, supervisorId } = body;
 
     if (!name?.trim() || !email?.trim() || !password || !role) {
       return NextResponse.json({ error: "Name, email, password and role are required" }, { status: 400 });
@@ -207,6 +216,7 @@ export async function POST(request: NextRequest) {
         unitId:       unitId             || null,
         phone:        phone?.trim()      || null,
         gradeLevel:   gradeLevel?.trim() || null,
+        supervisorId: supervisorId       || null, // ✅ NEW: Added to data object
         isActive:     true,
         userIdRef,
       },
@@ -242,7 +252,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const { userId, name, role, staffId, departmentId, unitId, jobTitle, phone, gradeLevel, newPassword, sendResetEmail } = body;
+    // ✅ NEW: Added supervisorId to destructured body
+    const { userId, name, role, staffId, departmentId, unitId, jobTitle, phone, gradeLevel, newPassword, sendResetEmail, supervisorId } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "userId is required" }, { status: 400 });
@@ -263,6 +274,8 @@ export async function PATCH(request: NextRequest) {
     if (jobTitle !== undefined) updateData.jobTitle    = jobTitle?.trim() || null;
     if (phone !== undefined)   updateData.phone        = phone?.trim() || null;
     if (gradeLevel !== undefined) updateData.gradeLevel = gradeLevel?.trim() || null;
+    // ✅ NEW: Added supervisorId assignment
+    if (supervisorId !== undefined) updateData.supervisorId = supervisorId || null;
 
     if (newPassword) {
       if (newPassword.length < 8) {

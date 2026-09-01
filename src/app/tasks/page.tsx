@@ -3,24 +3,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
-
-type Toast = { id: number; text: string; ok: boolean };
-let _toastId = 0;
-
-function ToastContainer({ toasts, remove }: { toasts: Toast[]; remove: (id: number) => void }) {
-  return (
-    <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, display: "flex", flexDirection: "column", gap: 10, pointerEvents: "none" }}>
-      {toasts.map((t) => (
-        <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", borderRadius: 12, minWidth: 300, maxWidth: 420, background: t.ok ? "#052e16" : "#1f0707", border: `1px solid ${t.ok ? "#14532d" : "#7f1d1d"}`, color: t.ok ? "#4ade80" : "#f87171", fontSize: 14, fontWeight: 500, boxShadow: "0 8px 32px rgba(0,0,0,0.4)", pointerEvents: "all", animation: "slideIn 0.2s ease" }}>
-          <span style={{ fontSize: 18, flexShrink: 0 }}>{t.ok ? "✓" : "✕"}</span>
-          <span style={{ flex: 1 }}>{t.text}</span>
-          <button onClick={() => remove(t.id)} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 16, opacity: 0.7, padding: 0 }}>✕</button>
-        </div>
-      ))}
-      <style>{`@keyframes slideIn { from { opacity:0; transform:translateX(40px); } to { opacity:1; transform:translateX(0); } }`}</style>
-    </div>
-  );
-}
+import { useToast } from "@/components/ui/ToastProvider";
 
 type Task = {
   id: string; taskRef: string | null; title: string; description: string;
@@ -198,14 +181,7 @@ function TasksContent() {
   const [transferToId, setTransferToId] = useState("");
   const [transferNote, setTransferNote] = useState("");
 
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  function showToast(text: string, ok = true) {
-    const id = ++_toastId;
-    setToasts(p => [...p, { id, text, ok }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 4500);
-  }
-  function removeToast(id: number) { setToasts(p => p.filter(t => t.id !== id)); }
-
+  const { showToast } = useToast();
   const isPrivileged  = ["DIRECTOR","SUPERVISOR","HR","ADMIN","EXECUTIVE"].includes(userRole);
   const isAdminOrEVC  = ["ADMIN","EXECUTIVE"].includes(userRole);
   const canAssign     = ["DIRECTOR","ADMIN","EXECUTIVE"].includes(userRole);
@@ -458,7 +434,6 @@ function TasksContent() {
   return (
     <div className="flex min-h-screen" style={{ background:"var(--bg-page)" }}>
       <Sidebar />
-      <ToastContainer toasts={toasts} remove={removeToast} />
 
       {docViewer && (
         <DocumentViewer documentName={docViewer.name} documentData={docViewer.data} documentType={docViewer.type} onClose={() => setDocViewer(null)} />
