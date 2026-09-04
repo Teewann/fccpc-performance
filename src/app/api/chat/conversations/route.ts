@@ -1,119 +1,178 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+import { cache } from "@/lib/cache";
 
-// GET - list my conversations
-export async function GET(request: NextRequest) {
+// ── GET: list my conversations ──────────────────────────────────────
+// ── GET: list my conversations ──────────────────────────────────────
+export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = (session.user as any).id as string;
 
-  // Independent queries — run together instead of one after another
-  const [conversations, myParticipantRows] = await Promise.all([
-    prisma.chatConversation.findMany({
-      where: {
-        participants: { some: { userId } },
-      },
-      include: {
-        participants: {
-          include: { user: { select: { id: true, name: true, photo: true, lastSeen: true } } },
-        },
-        messages: {
-          take: 1,
-          orderBy: { createdAt: "desc" },
-          select: { content: true, fileUrl: true, createdAt: true, senderId: true },
-        },
-      },
-      orderBy: { updatedAt: "desc" },
-    }),
-    prisma.chatParticipant.findMany({
-      where: { userId },
-      select: { conversationId: true, lastReadAt: true },
-    }),
-  ]);
+  const cacheKey = `convs:${userId}`;
+  const cached = cache.get<object[]>(cacheKey);
+  if (cached) return NextResponse.json({ conversations: cached });
 
-  const myReadMap = new Map(myParticipantRows.map((p) => [p.conversationId, p.lastReadAt]));
+  const convs = await prisma.chatConversation.findMany({
+    where:   { participants: { some: { userId } } },
+    select: {
+      id: true, name: true, isGroup: true, updatedAt: true,
+      // REMOVED: avatarUrl: true,  ← This field doesn't exist
+      participants: {
+        select: {
+          userId: true, lastReadAt: true,
+          user: { select: { id: true, name: true, photo: true, lastSeen: true, role: true } },
+        },
+      },
+      messages: {
+        take: 1, orderBy: { createdAt: "desc" },
+        select: { content: true, fileUrl: true, createdAt: true, senderId: true },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
 
-  // Consider someone "online" if seen in the last 2 minutes
-  const ONLINE_THRESHOLD_MS = 2 * 60 * 1000;
   const now = Date.now();
-
-  const result = conversations.map((c) => {
-    const others = c.participants.filter((p) => p.userId !== userId);
-    const otherUser = others[0]?.user;
-    const isOnline = otherUser?.lastSeen
-      ? now - new Date(otherUser.lastSeen).getTime() < ONLINE_THRESHOLD_MS
+  const result = convs.map(c => {
+    const me    = c.participants.find(p => p.userId === userId);
+    const others = c.participants.filter(p => p.userId !== userId);
+    const last  = c.messages[0];
+    const isOnline = !c.isGroup && others[0]?.user?.lastSeen
+      ? now - new Date(others[0].user.lastSeen).getTime() < 120_000
       : false;
-
-    const lastMsg = c.messages[0];
-    const myLastRead = myReadMap.get(c.id);
-    const hasUnread = lastMsg
-      ? lastMsg.senderId !== userId && (!myLastRead || new Date(lastMsg.createdAt) > new Date(myLastRead))
-      : false;
+    const hasUnread = !!last &&
+      last.senderId !== userId &&
+      (!me?.lastReadAt || new Date(last.createdAt) > new Date(me.lastReadAt));
 
     return {
       id: c.id,
-      name: c.isGroup ? c.name : otherUser?.name || "Unknown",
+      name: c.isGroup ? c.name : (others[0]?.user?.name ?? "Unknown"),
       isGroup: c.isGroup,
-      participants: c.participants.map((p) => ({
-        id: p.user.id,
-        name: p.user.name,
-        photo: p.user.photo,
-        lastSeen: p.user.lastSeen,
+      // REMOVED: avatarUrl: c.avatarUrl ?? null,
+      participants: c.participants.map(p => ({
+        id: p.user.id, name: p.user.name,
+        photo: p.user.photo, lastSeen: p.user.lastSeen?.toISOString() ?? null,
+        role: p.user.role,
       })),
-      lastMessage: lastMsg?.content || (lastMsg?.fileUrl ? "📎 File" : ""),
-      lastTime: lastMsg?.createdAt || c.createdAt,
-      isOnline: c.isGroup ? undefined : isOnline,
-      hasUnread,
+      lastMessage: last?.content ?? (last?.fileUrl ? "📎 File" : ""),
+      lastTime: (last?.createdAt ?? c.updatedAt).toISOString(),
+      isOnline, hasUnread,
     };
   });
 
+  cache.set(cacheKey, result, 10_000); // 10-second cache
   return NextResponse.json({ conversations: result });
 }
 
-// POST - create a new conversation (direct or group)
-export async function POST(request: NextRequest) {
+// ── POST: create conversation ────────────────────────────────────────
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const currentUserId = (session.user as any).id as string;
+  const myId   = (session.user as any).id as string;
+  const myRole = (session.user as any).role as string;
 
-  const body = await request.json();
-  const { participantIds, isGroup, name } = body;
-
-  if (!participantIds || !Array.isArray(participantIds) || participantIds.length === 0) {
+  const { participantIds, isGroup, name } = await req.json();
+  if (!Array.isArray(participantIds) || participantIds.length === 0)
     return NextResponse.json({ error: "At least one participant required" }, { status: 400 });
-  }
 
-  if (!isGroup && participantIds.length === 1) {
-    const otherId = participantIds[0];
-    const existingConv = await prisma.chatConversation.findFirst({
-      where: {
-        isGroup: false,
-        AND: [
-          { participants: { some: { userId: currentUserId } } },
-          { participants: { some: { userId: otherId } } },
-        ],
-      },
+  // ── EVC permission gate ────────────────────────────────────────────
+  // Staff cannot initiate a conversation with EVC
+  const EXEC_ROLES = ["EXECUTIVE", "DIRECTOR", "ADMIN", "HR"];
+  if (!EXEC_ROLES.includes(myRole) && !isGroup) {
+    const targetUser = await prisma.user.findUnique({
+      where: { id: participantIds[0] },
+      select: { role: true },
     });
-    if (existingConv) {
-      return NextResponse.json({ conversation: existingConv });
+    if (targetUser?.role === "EXECUTIVE") {
+      return NextResponse.json(
+        { error: "You cannot initiate a chat with the EVC. The EVC will contact you if needed." },
+        { status: 403 }
+      );
     }
   }
 
-  const userIds = [currentUserId, ...participantIds];
+  // ── Existing DM check ──────────────────────────────────────────────
+  if (!isGroup && participantIds.length === 1) {
+    const existing = await prisma.chatConversation.findFirst({
+      where: {
+        isGroup: false,
+        AND: [
+          { participants: { some: { userId: myId } } },
+          { participants: { some: { userId: participantIds[0] } } },
+        ],
+      },
+      select: { id: true, name: true, isGroup: true },
+    });
+    if (existing) {
+      cache.del(`convs:${myId}`);
+      return NextResponse.json({ conversation: existing });
+    }
+  }
+
+  const allIds = [...new Set([myId, ...participantIds])];
+
   const conversation = await prisma.chatConversation.create({
     data: {
-      name: isGroup ? name : null,
-      isGroup: isGroup || false,
-      participants: {
-        create: userIds.map((id) => ({ userId: id })),
-      },
+      name:    isGroup ? (name || "Group Chat") : null,
+      isGroup: !!isGroup,
+      participants: { create: allIds.map(id => ({ userId: id })) },
     },
-    include: {
-      participants: { include: { user: { select: { id: true, name: true, photo: true } } } },
-    },
+    select: { id: true, name: true, isGroup: true },
   });
 
+  // Bust caches for all participants
+  allIds.forEach(id => cache.del(`convs:${id}`));
+
   return NextResponse.json({ conversation });
+}
+
+// ── PATCH: update group (name / avatar) ────────────────────────────
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = (session.user as any).id as string;
+
+  const { conversationId, name, avatarUrl, addMemberIds } = await req.json();
+  if (!conversationId) return NextResponse.json({ error: "conversationId required" }, { status: 400 });
+
+  const member = await prisma.chatParticipant.findFirst({
+    where: { conversationId, userId },
+    select: { id: true },
+  });
+  if (!member) return NextResponse.json({ error: "Not a participant" }, { status: 403 });
+
+  // Update name / avatar
+  const updated = await prisma.chatConversation.update({
+    where: { id: conversationId },
+    data: {
+      ...(name !== undefined      ? { name }      : {}),
+      ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+    },
+    select: { id: true, name: true, isGroup: true, avatarUrl: true },
+  });
+
+  // Add new members
+  if (Array.isArray(addMemberIds) && addMemberIds.length > 0) {
+    const existingIds = (await prisma.chatParticipant.findMany({
+      where: { conversationId }, select: { userId: true },
+    })).map(p => p.userId);
+    const newIds = addMemberIds.filter((id: string) => !existingIds.includes(id));
+    if (newIds.length > 0) {
+      await prisma.chatParticipant.createMany({
+        data: newIds.map((id: string) => ({ conversationId, userId: id })),
+        skipDuplicates: true,
+      });
+      newIds.forEach((id: string) => cache.del(`convs:${id}`));
+    }
+  }
+
+  // Bust caches
+  const allMembers = await prisma.chatParticipant.findMany({
+    where: { conversationId }, select: { userId: true },
+  });
+  allMembers.forEach(p => cache.del(`convs:${p.userId}`));
+
+  return NextResponse.json({ conversation: updated });
 }

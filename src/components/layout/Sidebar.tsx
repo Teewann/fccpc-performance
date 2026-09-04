@@ -142,9 +142,11 @@ function getNavItems(role: string): NavSection[] {
       section: "Core",
       links: [
         makeLink("Dashboard", "/dashboard"),
-        ...(!isIntern ? [makeLink("Staff Logs", "/staff-logs")] : []),
+        ...(!isIntern ? [makeLink("Staff Logs", "/supervisor")] : []),
         ...(isRegularStaff ? [
           makeLink("Daily Work Log", "/daily-log"),
+          makeLink("Performance", "/performance"),
+          makeLink("Incentives", "/incentives"),
           makeLink("Attendance",     "/check-in" ),
           makeLink("ID Card",        "/id-card"  ),
         ] : []),

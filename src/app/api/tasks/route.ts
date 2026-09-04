@@ -54,6 +54,39 @@ async function getFinanceDirector() {
   });
 }
 
+// Computes the visibility condition for a given view + user, reusing the
+// exact same permission logic for every caller — including the new
+// all-tabs-at-once counts below, so those counts can never drift out of
+// sync with what a tab's own fetch would actually return.
+function buildViewCondition(view: string, user: { id: string; role: string; departmentId: string | null }) {
+  const isAdmin = user.role === "ADMIN";
+  const isExecutive = user.role === "EXECUTIVE";
+  const isDirector = user.role === "DIRECTOR";
+  const isSupervisor = user.role === "SUPERVISOR";
+
+  if (view === "assigned") {
+    return { OR: [{ assignedToId: user.id }, { forwardedToId: user.id }] };
+  }
+  if (view === "created") {
+    return { createdById: user.id };
+  }
+  if (view === "department") {
+    if (!user.departmentId) return { id: "__none__" }; // no department = no results, not an error here
+    if (isDirector || isSupervisor) return { departmentId: user.departmentId };
+    return { OR: [{ assignedToId: user.id }, { createdById: user.id }] };
+  }
+  if (view === "all") {
+    if (isAdmin || isExecutive) return {};
+    if (isDirector || isSupervisor) {
+      return user.departmentId ? { departmentId: user.departmentId } : { createdById: user.id };
+    }
+    return {
+      OR: [{ assignedToId: user.id }, { forwardedToId: user.id }, { createdById: user.id }],
+    };
+  }
+  return { OR: [{ assignedToId: user.id }, { createdById: user.id }, { forwardedToId: user.id }] };
+}
+
 // ─── GET ─────────────────────────────────────────────────────────────
 export async function GET(request: NextRequest) {
   try {
@@ -217,9 +250,23 @@ export async function GET(request: NextRequest) {
       treated, completed, escalated, forwarded, overdue, myLoad,
     };
 
+    // NEW — real counts for all four view tabs at once, using the exact
+    // same permission logic as the main query, so the tab badges always
+    // show accurate numbers regardless of which tab is currently active
+    // (previously the inactive tabs just showed "-" because the app had
+    // no way to know their counts without a separate fetch).
+    const [assignedCount, createdCount, departmentCount, allCount] = await Promise.all([
+      prisma.task.count({ where: buildViewCondition("assigned", user) }),
+      prisma.task.count({ where: buildViewCondition("created", user) }),
+      prisma.task.count({ where: buildViewCondition("department", user) }),
+      prisma.task.count({ where: buildViewCondition("all", user) }),
+    ]);
+    const viewCounts = { assigned: assignedCount, created: createdCount, department: departmentCount, all: allCount };
+
     return NextResponse.json({
       tasks: sortedTasks,
       counts,
+      viewCounts,
       loadWarning,
       total,
       page,

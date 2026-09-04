@@ -22,7 +22,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useToast } from "@/components/ui/ToastProvider";
 
 type Department = { id: string; name: string };
@@ -44,6 +44,8 @@ export default function BroadcastDirectiveForm({
   const [departmentId, setDepartmentId] = useState(defaultDepartmentId || "");
   const [priority, setPriority] = useState("MEDIUM");
   const [dueDate, setDueDate] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -62,10 +64,17 @@ export default function BroadcastDirectiveForm({
     }
     setSubmitting(true);
     try {
+      const fd = new FormData();
+      fd.append("title", title);
+      fd.append("description", description);
+      fd.append("departmentId", departmentId);
+      fd.append("priority", priority);
+      if (dueDate) fd.append("dueDate", dueDate);
+      if (file) fd.append("document", file);
+
       const res = await fetch("/api/tasks/broadcast", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, description, departmentId, priority, dueDate: dueDate || null }),
+        body: fd,
       });
       const data = await res.json();
       if (!res.ok) {
@@ -73,6 +82,7 @@ export default function BroadcastDirectiveForm({
         return;
       }
       showToast(`Sent to ${data.spawnedCount} staff members.`);
+      if (fileRef.current) fileRef.current.value = "";
       onSuccess();
     } catch {
       setError("Connection issue — try again in a moment.");
@@ -126,6 +136,20 @@ export default function BroadcastDirectiveForm({
             <input type="date" style={inp} value={dueDate} min={new Date().toISOString().split("T")[0]} onChange={(e) => setDueDate(e.target.value)} />
           </div>
         </div>
+
+        <label style={lbl}>Attach document (optional)</label>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
+          style={{ ...inp, padding: "10px 14px" }}
+        />
+        {file && (
+          <div style={{ fontSize: 12, color: "#4ade80", marginTop: -10, marginBottom: 14 }}>
+            📎 {file.name} — every staff member in this broadcast gets a copy on their own task
+          </div>
+        )}
 
         <div style={{ display: "flex", gap: 12, paddingTop: 8 }}>
           <button onClick={onClose} style={{ padding: "11px 20px", borderRadius: 10, border: "0.5px solid var(--border)", background: "var(--bg-input)", color: "var(--text-muted)", cursor: "pointer" }}>

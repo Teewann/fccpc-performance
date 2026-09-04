@@ -102,7 +102,7 @@ export async function embeddingFromImageData(imageData: string): Promise<Float32
   });
 
   const detection = await faceapi
-    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions())
+    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.3 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
 

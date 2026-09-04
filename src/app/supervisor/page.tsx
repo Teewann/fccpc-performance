@@ -125,7 +125,7 @@ export default function SupervisorPage() {
     setLoading(true);
     try {
       const [logsRes, tasksRes, meRes, usersRes] = await Promise.all([
-        fetch("/api/staff-logs"),
+        fetch("/api/staff-logs?limit=500"),
         fetch("/api/tasks?view=department"),
         fetch("/api/settings/account"),
         fetch("/api/users?limit=500&isActive=true"),

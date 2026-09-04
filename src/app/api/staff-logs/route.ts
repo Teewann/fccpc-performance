@@ -95,6 +95,15 @@ export async function GET(request: NextRequest) {
 }
 
 // ─── PATCH ───────────────────────────────────────────────────────────
+// Add ONLY this function to your EXISTING src/app/api/staff-logs/route.ts
+// — do not duplicate the import lines, your file already has them.
+//
+// This replaces the version at supervisor/logs/route.ts (which had no
+// authorization check at all — any logged-in staff member could approve
+// or score any log, including their own). Delete supervisor/logs/route.ts
+// once this is in place, or it'll sit there as an unused, insecure
+// duplicate.
+
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -102,83 +111,74 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { department: true }
-    });
-    if (!user) {
+    const reviewer = await prisma.user.findUnique({ where: { email: session.user.email } });
+    if (!reviewer) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     const body = await request.json();
-    const { logId, status, supervisorComment, supervisorScore } = body;
+    const { logId, status, score, comment } = body; // matches supervisor/page.tsx exactly
 
-    if (!logId) {
-      return NextResponse.json({ error: "logId required" }, { status: 400 });
+    if (!logId || !["APPROVED", "REJECTED", "QUERIED"].includes(status)) {
+      return NextResponse.json({ error: "logId and a valid status are required" }, { status: 400 });
     }
 
-    // Get the log with user info
     const log = await prisma.dailyLog.findUnique({
       where: { id: logId },
-      include: { user: { include: { department: true } }, supervisor: true }
+      include: { user: { select: { id: true, name: true, departmentId: true, supervisorId: true } } },
     });
     if (!log) {
       return NextResponse.json({ error: "Log not found" }, { status: 404 });
     }
-
-    // Check authorization
-    const isAuthorized = 
-      log.supervisorId === user.id ||
-      user.role === "DIRECTOR" ||
-      user.role === "ADMIN" ||
-      user.role === "HR" ||
-      user.role === "EXECUTIVE" ||
-      (user.role === "SUPERVISOR" && log.user.departmentId === user.departmentId);
-
-    if (!isAuthorized) {
-      return NextResponse.json({ error: "Not authorized to review this log" }, { status: 403 });
+    if (log.status !== "SUBMITTED") {
+      return NextResponse.json({ error: "This log has already been reviewed" }, { status: 400 });
     }
 
-    // Validate status
-    const allowedStatuses = ["APPROVED", "REJECTED", "QUERIED", "SUBMITTED"];
-    if (status && !allowedStatuses.includes(status)) {
-      return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+    // FIX: the previous version had no authorization check whatsoever.
+    const isDesignatedSupervisor = log.user.supervisorId === reviewer.id;
+    const isDeptLeadership =
+      ["DIRECTOR", "SUPERVISOR"].includes(reviewer.role) &&
+      log.user.departmentId === reviewer.departmentId;
+    const isOrgWide = ["HR", "ADMIN", "EXECUTIVE"].includes(reviewer.role);
+
+    if (!isDesignatedSupervisor && !isDeptLeadership && !isOrgWide) {
+      return NextResponse.json({ error: "You're not authorized to review this log" }, { status: 403 });
     }
 
-    // Update the log
+    // Score is 0-100, matching the slider already built in supervisor/page.tsx.
+    const numericScore = score != null ? parseInt(score, 10) : null;
+    if (status === "APPROVED" && (numericScore == null || numericScore < 0 || numericScore > 100)) {
+      return NextResponse.json({ error: "A score from 0 to 100 is required to approve" }, { status: 400 });
+    }
+
     const updated = await prisma.dailyLog.update({
       where: { id: logId },
       data: {
-        status: status || log.status,
-        supervisorComment: supervisorComment !== undefined ? supervisorComment : log.supervisorComment,
-        supervisorScore: supervisorScore !== undefined ? parseInt(supervisorScore) : log.supervisorScore,
-        reviewedAt: status ? new Date() : log.reviewedAt,
-        supervisorId: status ? user.id : log.supervisorId,
+        status,
+        supervisorId: reviewer.id,
+        supervisorScore: status === "APPROVED" ? numericScore : null,
+        supervisorComment: comment || null,
+        reviewedAt: new Date(),
       },
     });
 
-    // Notify the staff member
-    if (status === "APPROVED" || status === "REJECTED") {
-      await prisma.notification.create({
-        data: {
-          userId: log.userId,
-          title: `Log ${status === "APPROVED" ? "✅ Approved" : "❌ Rejected"}`,
-          message: `Your log "${log.taskTitle}" was ${status === "APPROVED" ? "approved" : "rejected"} by ${user.name}.${supervisorComment ? ` Comment: ${supervisorComment}` : ""}`,
-          type: status === "APPROVED" ? "SUCCESS" : "WARNING",
-          link: "/staff-logs",
-        },
-      });
-    } else if (status === "QUERIED") {
-      await prisma.notification.create({
-        data: {
-          userId: log.userId,
-          title: "📋 Log Queried",
-          message: `${user.name} has queried your log "${log.taskTitle}".${supervisorComment ? ` Comment: ${supervisorComment}` : " Please review and respond."}`,
-          type: "INFO",
-          link: "/staff-logs",
-        },
-      });
-    }
+    await prisma.notification.create({
+      data: {
+        userId: log.user.id,
+        title: `Log ${status.toLowerCase()}`,
+        message: `Your log "${log.taskTitle}" was ${status.toLowerCase()} by ${reviewer.name}.${comment ? ` Comment: ${comment}` : ""}`,
+        type: status === "APPROVED" ? "SUCCESS" : status === "REJECTED" ? "WARNING" : "INFO",
+        link: "/daily-log",
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        userId: reviewer.id,
+        action: `LOG_${status}`,
+        detail: `Log ${logId} (${log.taskTitle}) — ${comment || "no comment"}`,
+      },
+    });
 
     return NextResponse.json({ success: true, log: updated });
   } catch (error) {

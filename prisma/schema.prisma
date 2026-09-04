@@ -71,6 +71,7 @@ model User {
   otpCodes            OtpCode[]
   screenShareRequests  ScreenShareSession[] @relation("ScreenShareRequests")
   screenShareTargets   ScreenShareSession[] @relation("ScreenShareTargets")
+  incentiveRecommendations IncentiveRecommendation[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 }
@@ -411,6 +412,7 @@ model ChatMessage {
   replyToId      String?
   replyTo        ChatMessage?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies        ChatMessage[]    @relation("MessageReplies")
+  pinned  Boolean  @default(false)   // ← ADD THIS
   reactions      ChatReaction[]
   createdAt      DateTime         @default(now())
 }
@@ -822,6 +824,25 @@ model ScreenShareSignal {
   session     ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   @@index([sessionId, toUserId, consumed])
   @@index([createdAt])
+}
+
+model IncentiveRecommendation {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  month            String    // "2026-08" format
+  segment          String    // FRONTLINE | SUPERVISORY | LEADERSHIP
+  rank             Int
+  performanceIndex Float
+  taskCount        Int
+  avgScore         Float?
+  status           String    @default("PENDING") // PENDING | ACKNOWLEDGED | ACTIONED | DISMISSED
+  hrNote           String?
+  actionedById     String?
+  actionedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@unique([userId, month])
 }
 
 enum TransferType {

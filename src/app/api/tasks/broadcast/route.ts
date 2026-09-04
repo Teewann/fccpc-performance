@@ -29,16 +29,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "You don't have permission to broadcast a directive" }, { status: 403 });
     }
 
-    const body = await request.json();
+    let body: any = {};
+    let file: File | null = null;
+    const ct = request.headers.get("content-type") || "";
+    if (ct.includes("multipart/form-data")) {
+      const fd = await request.formData();
+      for (const [k, v] of fd.entries()) {
+        if (k === "document" && v instanceof File) file = v;
+        else body[k] = v;
+      }
+    } else {
+      body = await request.json();
+    }
     const { title, description, departmentId, priority, dueDate, caseReference, notes } = body;
 
     if (!title || !description || !departmentId) {
       return NextResponse.json({ error: "Title, description, and department are required" }, { status: 400 });
     }
-
     // Directors can only broadcast to their own department — Admin/Executive/HR can target any.
     if (requester.role === "DIRECTOR" && requester.departmentId !== departmentId) {
       return NextResponse.json({ error: "You can only broadcast to your own department" }, { status: 403 });
+    }
+
+    let documentData: string | null = null;
+    let documentName: string | null = null;
+    let documentType: string | null = null;
+    let documentSize: number | null = null;
+    if (file && file.size > 0) {
+      const bytes = await file.arrayBuffer();
+      documentData = Buffer.from(bytes).toString("base64");
+      documentName = file.name;
+      documentType = file.type;
+      documentSize = file.size;
     }
 
     const staff = await prisma.user.findMany({
@@ -64,10 +86,17 @@ export async function POST(request: NextRequest) {
         taskRef: parentRef,
         isBroadcastParent: true,
         taskSource: "DEPARTMENT_BROADCAST",
+        documentData,
+        documentName,
+        documentType,
+        documentSize,
       },
     });
 
-    // Spawn one real, individually-owned task per staff member.
+    // Spawn one real, individually-owned task per staff member. Every
+    // child gets its own copy of the attachment (same base64 data) so
+    // each staff member can open it directly from their own task without
+    // needing to track down the parent record.
     const children = await Promise.all(
       staff.map(async (s) => {
         const childRef = await generateRefNo("TASK");
@@ -85,6 +114,10 @@ export async function POST(request: NextRequest) {
             taskRef: childRef,
             broadcastParentId: parent.id,
             taskSource: "DEPARTMENT_BROADCAST",
+            documentData,
+            documentName,
+            documentType,
+            documentSize,
           },
         });
       })

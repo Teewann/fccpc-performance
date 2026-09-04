@@ -79,6 +79,10 @@ export default function QuickCaptureLog({
       });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 429) {
+          setError(data.error || MESSAGES.quickCapture.parseError);
+          return;
+        }
         setError(data.error || MESSAGES.quickCapture.parseError);
         return;
       }

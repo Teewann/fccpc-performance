@@ -1,153 +1,174 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+import { broadcastToConv } from "@/lib/broadcaster";
+import { cache } from "@/lib/cache";
 
-// GET - fetch messages for a conversation
-export async function GET(request: NextRequest) {
+const MSG_SELECT = {
+  id: true, conversationId: true,
+  content: true, fileUrl: true, fileName: true, fileType: true,
+  edited: true, pinned: true, createdAt: true,
+  sender: { select: { id: true, name: true, photo: true } },
+  replyTo: { select: { id: true, content: true, fileName: true, sender: { select: { name: true } } } },
+  reactions: { select: { id: true, emoji: true, userId: true, user: { select: { name: true } } } },
+} as const;
+
+// ── GET: paginated messages ─────────────────────────────────────────
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = (session.user as any).id as string;
 
-  const { searchParams } = new URL(request.url);
-  const conversationId = searchParams.get("conversationId");
-  if (!conversationId) return NextResponse.json({ error: "conversationId required" }, { status: 400 });
+  const convId  = req.nextUrl.searchParams.get("conversationId");
+  const cursor  = req.nextUrl.searchParams.get("cursor"); // ISO timestamp for load-more
+  const limit   = 60; // messages per page - fast and enough
 
-  const participant = await prisma.chatParticipant.findFirst({
-    where: { conversationId, userId },
+  if (!convId) return NextResponse.json({ error: "conversationId required" }, { status: 400 });
+
+  // Single indexed lookup — very fast
+  const member = await prisma.chatParticipant.findFirst({
+    where: { conversationId: convId, userId },
+    select: { id: true },
   });
-  if (!participant) return NextResponse.json({ error: "Not a participant" }, { status: 403 });
+  if (!member) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // Heartbeat + mark-as-read + fetch messages + fetch other participants — all at once
-  const [, , messages, participants] = await Promise.all([
-    prisma.user.update({ where: { id: userId }, data: { lastSeen: new Date() } }).catch(() => {}),
-    prisma.chatParticipant.update({ where: { id: participant.id }, data: { lastReadAt: new Date() } }).catch(() => {}),
+  // Parallel: mark read + fetch messages + fetch participants
+  const [messages, participants] = await Promise.all([
     prisma.chatMessage.findMany({
-      where: { conversationId },
-      include: {
-        sender: { select: { id: true, name: true, photo: true } },
-        replyTo: {
-          select: {
-            id: true,
-            content: true,
-            fileName: true,
-            sender: { select: { name: true } },
-          },
-        },
-        reactions: {
-          select: { id: true, emoji: true, userId: true, user: { select: { name: true } } },
-        },
+      where: {
+        conversationId: convId,
+        ...(cursor ? { createdAt: { lt: new Date(cursor) } } : {}),
       },
-      orderBy: { createdAt: "asc" },
-      take: 100,
+      select: MSG_SELECT,
+      orderBy: { createdAt: "desc" },
+      take: limit,
     }),
     prisma.chatParticipant.findMany({
-      where: { conversationId, userId: { not: userId } },
+      where: { conversationId: convId, userId: { not: userId } },
       select: { userId: true, lastReadAt: true, user: { select: { name: true, lastSeen: true } } },
     }),
+    // Mark as read — fire and forget
+    prisma.chatParticipant.update({
+      where: { id: member.id }, data: { lastReadAt: new Date() },
+    }).catch(() => {}),
+    // Update lastSeen — fire and forget
+    prisma.user.update({
+      where: { id: userId }, data: { lastSeen: new Date() },
+    }).catch(() => {}),
   ]);
 
-  return NextResponse.json({ messages, participants });
+  return NextResponse.json({
+    messages: messages.reverse(), // oldest first
+    participants,
+    hasMore: messages.length === limit,
+  });
 }
 
-// POST - send a message (now supports replyToId)
-export async function POST(request: NextRequest) {
+// ── POST: send message ──────────────────────────────────────────────
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const senderId = (session.user as any).id as string;
 
-  const body = await request.json();
-  const { conversationId, content, fileUrl, fileName, fileType, replyToId } = body;
-
+  const { conversationId, content, fileUrl, fileName, fileType, replyToId } = await req.json();
   if (!conversationId) return NextResponse.json({ error: "conversationId required" }, { status: 400 });
   if (!content && !fileUrl) return NextResponse.json({ error: "Nothing to send" }, { status: 400 });
 
-  // Participant check and reply-target validation are independent — run together
-  const [participant, replyTarget] = await Promise.all([
-    prisma.chatParticipant.findFirst({ where: { conversationId, userId: senderId } }),
-    replyToId
-      ? prisma.chatMessage.findFirst({ where: { id: replyToId, conversationId }, select: { id: true } })
-      : Promise.resolve(null),
-  ]);
-  if (!participant) return NextResponse.json({ error: "Not a participant" }, { status: 403 });
+  const member = await prisma.chatParticipant.findFirst({
+    where: { conversationId, userId: senderId },
+    select: { id: true },
+  });
+  if (!member) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const validReplyToId = replyTarget?.id || null;
+  // Validate replyTo exists in this conversation
+  const validReplyId = replyToId
+    ? (await prisma.chatMessage.findFirst({
+        where: { id: replyToId, conversationId }, select: { id: true },
+      }))?.id ?? null
+    : null;
 
   const message = await prisma.chatMessage.create({
     data: {
-      conversationId,
-      senderId,
-      content: content || null,
-      fileUrl: fileUrl || null,
-      fileName: fileName || null,
-      fileType: fileType || null,
-      replyToId: validReplyToId,
+      conversationId, senderId,
+      content: content ?? null, fileUrl: fileUrl ?? null,
+      fileName: fileName ?? null, fileType: fileType ?? null,
+      replyToId: validReplyId,
     },
-    include: {
-      sender: { select: { id: true, name: true, photo: true } },
-      replyTo: {
-        select: {
-          id: true,
-          content: true,
-          fileName: true,
-          sender: { select: { name: true } },
-        },
-      },
-      reactions: true,
-    },
+    select: MSG_SELECT,
   });
 
-  // Sender's read marker + conversation's updatedAt — independent, run together
-  await Promise.all([
-    prisma.chatParticipant.update({ where: { id: participant.id }, data: { lastReadAt: new Date() } }).catch(() => {}),
+  // Update conversation + mark sender read — parallel, fire and forget
+  Promise.all([
     prisma.chatConversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }),
-  ]);
+    prisma.chatParticipant.update({ where: { id: member.id }, data: { lastReadAt: new Date() } }),
+  ]).catch(() => {});
+
+  // Bust conversation list caches for all participants
+  const allMembers = await prisma.chatParticipant.findMany({
+    where: { conversationId }, select: { userId: true },
+  });
+  allMembers.forEach(p => cache.del(`convs:${p.userId}`));
+
+  // Broadcast to all SSE subscribers — instant delivery
+  broadcastToConv(conversationId, { type: "new_message", message });
 
   return NextResponse.json({ message });
 }
 
-// PATCH - edit a message (only the sender can edit) - marks `edited: true`
-export async function PATCH(request: NextRequest) {
+// ── PATCH: edit message ─────────────────────────────────────────────
+export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const senderId = (session.user as any).id as string;
+  const userId = (session.user as any).id as string;
 
-  const body = await request.json();
-  const { messageId, content } = body;
-  if (!messageId || !content?.trim()) return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+  const { messageId, content, pinned } = await req.json();
+  if (!messageId) return NextResponse.json({ error: "messageId required" }, { status: 400 });
 
-  const message = await prisma.chatMessage.findUnique({ where: { id: messageId } });
-  if (!message) return NextResponse.json({ error: "Message not found" }, { status: 404 });
-  if (message.senderId !== senderId) return NextResponse.json({ error: "Not your message" }, { status: 403 });
+  const msg = await prisma.chatMessage.findUnique({
+    where: { id: messageId },
+    select: { senderId: true, conversationId: true },
+  });
+  if (!msg) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Only sender can edit content; any participant can pin
+  if (content !== undefined && msg.senderId !== userId)
+    return NextResponse.json({ error: "Not yours" }, { status: 403 });
 
   const updated = await prisma.chatMessage.update({
     where: { id: messageId },
-    data: { content, edited: true },
-    include: {
-      sender: { select: { id: true, name: true, photo: true } },
-      replyTo: { select: { id: true, content: true, fileName: true, sender: { select: { name: true } } } },
-      reactions: true,
+    data: {
+      ...(content !== undefined ? { content, edited: true } : {}),
+      ...(pinned  !== undefined ? { pinned } : {}),
     },
+    select: MSG_SELECT,
   });
+
+  const eventType = content !== undefined ? "message_edited" : "pin_update";
+  broadcastToConv(msg.conversationId, { type: eventType, message: updated });
 
   return NextResponse.json({ message: updated });
 }
 
-// DELETE - delete a message (only the sender can delete)
-export async function DELETE(request: NextRequest) {
+// ── DELETE: delete message ──────────────────────────────────────────
+export async function DELETE(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const senderId = (session.user as any).id as string;
+  const userId = (session.user as any).id as string;
 
-  const { searchParams } = new URL(request.url);
-  const messageId = searchParams.get("messageId");
+  const messageId = req.nextUrl.searchParams.get("messageId");
   if (!messageId) return NextResponse.json({ error: "messageId required" }, { status: 400 });
 
-  const message = await prisma.chatMessage.findUnique({ where: { id: messageId } });
-  if (!message) return NextResponse.json({ error: "Message not found" }, { status: 404 });
-  if (message.senderId !== senderId) return NextResponse.json({ error: "Not your message" }, { status: 403 });
+  const msg = await prisma.chatMessage.findUnique({
+    where: { id: messageId },
+    select: { senderId: true, conversationId: true },
+  });
+  if (!msg) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (msg.senderId !== userId) return NextResponse.json({ error: "Not yours" }, { status: 403 });
 
   await prisma.chatMessage.delete({ where: { id: messageId } });
+
+  broadcastToConv(msg.conversationId, { type: "message_deleted", messageId });
 
   return NextResponse.json({ success: true });
 }

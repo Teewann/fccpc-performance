@@ -134,7 +134,7 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
         if (brightness < 50) {
           if (mountedRef.current) { setState("too_dark"); goodSinceRef.current = null; }
         } else {
-          const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224 }));
+          const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 }));
 
           if (!mountedRef.current) return;
 

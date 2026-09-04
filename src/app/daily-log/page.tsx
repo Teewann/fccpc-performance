@@ -407,7 +407,7 @@ export default function CheckInPage() {
             <div className="card-bg" style={{ borderRadius: 14, padding: 20 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14 }}>Submission guide</div>
               {[
-                "Pick whichever mode is fastest for you — Quick capture, Timer, Repeat, Bulk entry, or the full Manual form",
+                "Pick whichever mode is fastest for you ; Quick capture, Timer, Repeat, Bulk entry, or the full Manual form",
                 "Give a clear title and enough detail that a reviewer understands what happened",
                 "Enter honest time spent : this feeds your KPI score",
                 "Cross-department work gets flagged for acknowledgment from that department",

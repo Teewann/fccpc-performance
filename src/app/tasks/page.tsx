@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
 import { useToast } from "@/components/ui/ToastProvider";
+import BroadcastDirectiveForm from "@/components/tasks/BroadcastDirectiveForm";
 
 type Task = {
   id: string; taskRef: string | null; title: string; description: string;
@@ -30,26 +31,13 @@ type FinanceStaffMember = {
   id: string; name: string; role: string;
 };
 
+type Department = { id: string; name: string };
+
 type Counts = {
   total: number; pending: number; underTreatment: number; awaitingResponse: number;
   treated: number; completed: number; escalated: number; forwarded: number;
   overdue: number; myLoad: number;
 };
-
-function computePerformanceRating(counts: Counts): { label: string; color: string; bg: string; border: string; icon: string } {
-  const total = counts.total || 1;
-  const completionRate = counts.completed / total;
-  const overdueRate    = counts.overdue / total;
-  if (completionRate >= 0.8 && overdueRate < 0.1)
-    return { label: "Elite",      color: "#fbbf24", bg: "#1c0a00", border: "#92400e", icon: "🏆" };
-  if (completionRate >= 0.6)
-    return { label: "High",       color: "#4ade80", bg: "#052e16", border: "#14532d", icon: "⭐" };
-  if (completionRate >= 0.4)
-    return { label: "Standard",   color: "#60a5fa", bg: "#0c1a2e", border: "#1e3a5f", icon: "✔" };
-  if (completionRate >= 0.2)
-    return { label: "Developing", color: "#f59e0b", bg: "#1c1107", border: "#78350f", icon: "📈" };
-  return   { label: "Building",   color: "#94a3b8", bg: "#1e293b", border: "#334155", icon: "🌱" };
-}
 
 const STATUS_CONFIG: Record<string, { bg: string; color: string; border: string; label: string; icon: string }> = {
   PENDING:           { bg: "#0c1a2e", color: "#60a5fa", border: "#1e3a5f", label: "Pending",           icon: "⏳" },
@@ -135,25 +123,30 @@ function DocumentViewer({ documentName, documentData, documentType, onClose }: {
   );
 }
 
-// ── Main page ──────────────────────────────────────────────────────────
 function TasksContent() {
-    const searchParams = useSearchParams();
+  const searchParams = useSearchParams();
   const router       = useRouter();
 
   const [tasks,      setTasks]      = useState<Task[]>([]);
   const [counts,     setCounts]     = useState<Counts>({ total:0,pending:0,underTreatment:0,awaitingResponse:0,treated:0,completed:0,escalated:0,forwarded:0,overdue:0,myLoad:0 });
   const [prevCounts, setPrevCounts] = useState<Counts | null>(null);
-  
-  // ✅ LAZY LOAD - staff list starts empty, only fetched when needed
+  const [viewCounts, setViewCounts] = useState<{ assigned: number; created: number; department: number; all: number }>({ assigned: 0, created: 0, department: 0, all: 0 });
+
+  const [page,  setPage]  = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
+
   const [staffList,  setStaffList]  = useState<StaffMember[]>([]);
   const [staffLoaded, setStaffLoaded] = useState(false);
   const [staffLoading, setStaffLoading] = useState(false);
-  
-  // ✅ LAZY LOAD - finance staff starts empty, only fetched when needed
+
   const [financeStaff,      setFinanceStaff]      = useState<FinanceStaffMember[]>([]);
   const [financeStaffLoaded, setFinanceStaffLoaded] = useState(false);
   const [financeStaffLoading, setFinanceStaffLoading] = useState(false);
-  
+
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [showBroadcast, setShowBroadcast] = useState(false);
+
   const [loading,    setLoading]    = useState(true);
   const [userRole,   setUserRole]   = useState("");
   const [userId,     setUserId]     = useState("");
@@ -182,10 +175,9 @@ function TasksContent() {
   const [transferNote, setTransferNote] = useState("");
 
   const { showToast } = useToast();
-  const isPrivileged  = ["DIRECTOR","SUPERVISOR","HR","ADMIN","EXECUTIVE"].includes(userRole);
-  const isAdminOrEVC  = ["ADMIN","EXECUTIVE"].includes(userRole);
-  const canAssign     = ["DIRECTOR","ADMIN","EXECUTIVE"].includes(userRole);
-  const canUseBalancer= ["DIRECTOR","ADMIN","EXECUTIVE","HR","SUPERVISOR"].includes(userRole);
+  const canAssign      = ["DIRECTOR","ADMIN","EXECUTIVE"].includes(userRole);
+  const canUseBalancer = ["DIRECTOR","ADMIN","EXECUTIVE","HR","SUPERVISOR"].includes(userRole);
+  const canBroadcast   = ["DIRECTOR","ADMIN","EXECUTIVE","HR"].includes(userRole);
 
   const viewTabs = [
     { key: "assigned",   label: "Assigned to me", hint: "Tasks assigned to you or transferred to you" },
@@ -194,17 +186,10 @@ function TasksContent() {
     { key: "all",        label: "All",             hint: "Assigned to me + Created by me + Department tasks" },
   ];
 
-  const tabCounts: Record<string, number> = {
-    assigned:   counts.myLoad,
-    created:    counts.total,
-    department: counts.total,
-    all:        counts.total,
-  };
-
   const fetchTasks = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ view });
+      const params = new URLSearchParams({ view, page: String(page), limit: "20" });
       if (searchTerm) params.set("search", searchTerm);
       const res  = await fetch(`/api/tasks?${params}`);
       const data = await res.json();
@@ -213,13 +198,15 @@ function TasksContent() {
         setCounts(data.counts || {});
         setPrevCounts(data.counts || null);
         setLoadWarning(data.loadWarning || "");
+        setTotal(data.total || 0);
+        setPages(data.pages || 1);
+        setViewCounts(data.viewCounts || { assigned: 0, created: 0, department: 0, all: 0 });
       } else {
         showToast(data.error || "Failed to load tasks", false);
       }
     } finally { setLoading(false); }
-  }, [view, searchTerm]);
+  }, [view, searchTerm, page]);
 
-  // ✅ LAZY LOAD: Only fetch staff when user opens the create form
   const loadStaffList = useCallback(async () => {
     if (staffLoaded || staffLoading) return;
     setStaffLoading(true);
@@ -234,7 +221,6 @@ function TasksContent() {
     finally { setStaffLoading(false); }
   }, [staffLoaded, staffLoading]);
 
-  // ✅ LAZY LOAD: Only fetch Finance staff when user opens payment form
   const loadFinanceStaff = useCallback(async () => {
     if (financeStaffLoaded || financeStaffLoading) return;
     setFinanceStaffLoading(true);
@@ -249,13 +235,11 @@ function TasksContent() {
     finally { setFinanceStaffLoading(false); }
   }, [financeStaffLoaded, financeStaffLoading]);
 
-  // ✅ When user clicks "Create Task" button, load staff list lazily
   const handleOpenCreateForm = useCallback(() => {
     setShowForm(true);
     loadStaffList();
   }, [loadStaffList]);
 
-  // ✅ When user toggles payment request, load finance staff lazily
   const handlePaymentToggle = useCallback((checked: boolean) => {
     setForm(prev => ({ ...prev, isPaymentRequest: checked, assignedToId: "" }));
     if (checked) {
@@ -271,13 +255,14 @@ function TasksContent() {
         setUserDeptId(d.user.departmentId || null);
       }
     });
+    fetch("/api/departments").then(r => r.json()).then(d => {
+      setDepartments(d.departments || d || []);
+    });
   }, []);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
+  useEffect(() => { setPage(1); }, [view, searchTerm]);
 
-  // ✅ DO NOT auto-fetch staff on page load - removed useEffect that called fetchStaff()
-
-  // Handle ?taskId= URL param
   useEffect(() => {
     const id = searchParams.get("taskId");
     if (id && tasks.length > 0) {
@@ -295,7 +280,6 @@ function TasksContent() {
     return task.status === filter;
   });
 
-  // ── Handlers ──────────────────────────────────────────────────────────
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title || !form.description) { showToast("Title and description are required.", false); return; }
@@ -395,9 +379,7 @@ function TasksContent() {
 
   const today     = new Date().toLocaleDateString("en-GB", { weekday:"long",year:"numeric",month:"long",day:"numeric" });
   const loadColor = displayCounts.myLoad >= 10 ? "#f87171" : displayCounts.myLoad >= 6 ? "#f59e0b" : "#4ade80";
-  const perf      = computePerformanceRating(displayCounts);
 
-  // ── Grouped staff dropdown helper ──────────────────────────────────
   function staffGroups(excludeSelf = false, filterFn?: (s: StaffMember) => boolean) {
     let list = excludeSelf ? staffList.filter(s => s.id !== userId) : staffList;
     if (filterFn) list = list.filter(filterFn);
@@ -430,6 +412,10 @@ function TasksContent() {
     outline:"none", boxSizing:"border-box", marginBottom:14,
   };
   const lbl: React.CSSProperties = { display:"block", fontSize:14, fontWeight:600, color:"var(--text-muted)", marginBottom:7 };
+  const pageBtn: React.CSSProperties = {
+    background:"var(--bg-input)", border:"0.5px solid var(--border)", borderRadius:9,
+    padding:"8px 16px", cursor:"pointer", fontSize:13, color:"var(--text-muted)",
+  };
 
   return (
     <div className="flex min-h-screen" style={{ background:"var(--bg-page)" }}>
@@ -439,36 +425,34 @@ function TasksContent() {
         <DocumentViewer documentName={docViewer.name} documentData={docViewer.data} documentType={docViewer.type} onClose={() => setDocViewer(null)} />
       )}
 
+      {showBroadcast && (
+        <BroadcastDirectiveForm
+          departments={departments}
+          defaultDepartmentId={userDeptId}
+          onClose={() => setShowBroadcast(false)}
+          onSuccess={() => { setShowBroadcast(false); fetchTasks(); }}
+        />
+      )}
+
       <main className="flex-1 p-6 min-w-0">
 
-        {/* PAGE HEADER */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div>
             <h1 style={{ fontSize:26, fontWeight:700, color:"var(--text-primary)", letterSpacing:"-0.02em" }}>Tasks</h1>
             <p style={{ fontSize:14, color:"var(--text-muted)", marginTop:4 }}>{today}</p>
           </div>
-          <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-           
-            {/* ── Performance rating badge ── */}
-            {displayCounts.total > 0 && (
-              <div title={`Performance: ${displayCounts.completed} completed of ${displayCounts.total} total tasks`}
-                style={{ padding:"8px 14px", borderRadius:10, background:perf.bg, border:`1px solid ${perf.border}`, display:"flex", alignItems:"center", gap:6, cursor:"default" }}>
-                <span style={{ fontSize:14 }}>{perf.icon}</span>
-                <div>
-                  <div style={{ fontSize:10, color:"var(--text-muted)", fontWeight:600, letterSpacing:"0.06em", textTransform:"uppercase", lineHeight:1 }}>Performance:</div>
-                  <div style={{ fontSize:13, fontWeight:700, color:perf.color, lineHeight:1.4 }}>{perf.label}</div>
-                </div>
-              </div>
-            )}
+          <div style={{ display:"flex", gap:10, alignItems:"center", flexWrap: "wrap" }}>
 
-             {/* My load indicator */}
+            <button onClick={() => router.push("/performance")}
+              style={{ padding:"8px 16px", borderRadius:10, border:"0.5px solid #92400e", background:"#1c0a00", color:"#fbbf24", fontSize:13, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+              🏆 Leaderboard
+            </button>
+
             <div style={{ padding:"8px 16px", borderRadius:10, background:"var(--bg-card)", border:`0.5px solid ${loadColor}`, display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:13, color:"var(--text-muted)" }}>My load</span>
               <span style={{ fontSize:18, fontWeight:700, color:loadColor }}>{displayCounts.myLoad}</span>
             </div>
 
-
-            {/* History link */}
             <button
               onClick={() => router.push("/task-history")}
               style={{ padding:"10px 18px", borderRadius:10, border:"1.5px solid #a78bfa", background:"#1a0a2e", color:"#a78bfa", fontSize:14, fontWeight:600, cursor:"pointer" }}
@@ -481,7 +465,11 @@ function TasksContent() {
                 ⚖ Load Balancer
               </button>
             )}
-            {/* ✅ LAZY LOAD: onClick loads staff list only when needed */}
+            {canBroadcast && (
+              <button onClick={() => setShowBroadcast(true)} style={{ padding:"10px 22px", borderRadius:10, border:"1.5px solid #a78bfa", background:"#1a0a2e", color:"#a78bfa", fontSize:14, fontWeight:600, cursor:"pointer" }}>
+                📣 Broadcast to department
+              </button>
+            )}
             <button onClick={handleOpenCreateForm} style={{ padding:"10px 22px", borderRadius:10, border:"1.5px solid #22c55e", background:"#052e16", color:"#4ade80", fontSize:14, fontWeight:600, cursor:"pointer" }}>
               {showForm ? "Cancel" : canAssign ? "+ Assign task" : "+ Create task"}
             </button>
@@ -495,11 +483,10 @@ function TasksContent() {
           </div>
         )}
 
-        {/* ── VIEW TABS ── */}
         <div style={{ display:"flex", gap:6, marginBottom:16, flexWrap:"wrap" }}>
           {viewTabs.map(v => {
             const active = view === v.key;
-            const cnt = v.key === "assigned" ? displayCounts.myLoad : displayCounts.total;
+            const cnt = viewCounts[v.key as keyof typeof viewCounts] ?? 0;
             return (
               <button key={v.key}
                 onClick={() => { setView(v.key); setFilter("ALL"); setSelected(null); }}
@@ -517,14 +504,13 @@ function TasksContent() {
                   color: active ? "#60a5fa" : "var(--text-muted)",
                   border:`0.5px solid ${active ? "#60a5fa44" : "var(--border)"}`,
                 }}>
-                  {active ? cnt : "-"}
+                  {cnt}
                 </span>
               </button>
             );
           })}
         </div>
 
-        {/* STATS ROW */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:16 }}>
           {[
             { label:"Total",          value:displayCounts.total,            color:"var(--text-primary)" },
@@ -540,14 +526,12 @@ function TasksContent() {
           ))}
         </div>
 
-        {/* SEARCH */}
         <div style={{ marginBottom:12 }}>
           <input type="text" placeholder="🔍  Search by Task ID, title, description, case ref, or staff name…"
             value={searchTerm} onChange={e => setSearchTerm(e.target.value)} style={{ ...inp, marginBottom:0 }} />
         </div>
 
-        {/* STATUS FILTER TABS */}
-        <div style={{ display:"flex", gap:6, marginBottom:20, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:6, marginBottom:8, flexWrap:"wrap" }}>
           {STATUS_FILTERS.map(f => {
             const count  = displayCounts[f.countKey as keyof Counts] ?? 0;
             const active = filter === f.key;
@@ -579,8 +563,10 @@ function TasksContent() {
             );
           })}
         </div>
+        <div style={{ fontSize: 12, color: "var(--text-hint)", marginBottom: 20 }}>
+          Filter counts are totals across every page — use Previous/Next below the list to see them all, not just this page.
+        </div>
 
-        {/* CREATE / ASSIGN FORM */}
         {showForm && (
           <div className="card-bg" style={{ borderRadius:14, padding:28, marginBottom:22 }}>
             <h2 style={{ fontSize:18, fontWeight:700, color:"var(--text-primary)", marginBottom:20 }}>
@@ -599,7 +585,6 @@ function TasksContent() {
                   <textarea style={{...inp,resize:"none",minHeight:90} as any} value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="Full details of what needs to be done…" required />
                 </div>
 
-                {/* Payment request toggle - ✅ LAZY LOAD finance staff when toggled */}
                 <div style={{ gridColumn:"1/-1" }}>
                   <div style={{ padding:"12px 16px", background:"var(--bg-input)", borderRadius:10, border:`1.5px solid ${form.isPaymentRequest ? "#22c55e" : "var(--border)"}`, display:"flex", alignItems:"center", gap:12, cursor:"pointer" }}
                     onClick={() => handlePaymentToggle(!form.isPaymentRequest)}>
@@ -624,7 +609,6 @@ function TasksContent() {
                       <select style={inp} value={form.paymentRouting} onChange={e => {
                         setForm({...form,paymentRouting:e.target.value,paymentRecipientId:""});
                         setSelectedFinanceStaff([]);
-                        // ✅ Lazy load finance staff if not loaded
                         if (!financeStaffLoaded) loadFinanceStaff();
                       }}>
                         <option value="DIRECTOR">Head of Finance (Director only)</option>
@@ -634,7 +618,6 @@ function TasksContent() {
                       </select>
                     </div>
 
-                    {/* ── Finance staff loading state ── */}
                     {financeStaffLoading && (
                       <div style={{ gridColumn:"1/-1", fontSize:13, color:"var(--text-muted)", padding:"10px 14px", background:"var(--bg-input)", borderRadius:9 }}>
                         Loading Finance staff…
@@ -725,7 +708,6 @@ function TasksContent() {
                     <select style={inp} value={form.assignedToId} onChange={e => setForm({...form,assignedToId:e.target.value})}>
                       <option value="">Select person…</option>
                       <option value="SELF">👤 Assign to myself (self task)</option>
-                      {/* ✅ STAFF LIST - already loaded lazily when form opened */}
                       {staffLoaded ? staffGroups(false) : (
                         <option value="" disabled>Loading staff list…</option>
                       )}
@@ -799,10 +781,8 @@ function TasksContent() {
           </div>
         )}
 
-        {/* TASK LIST + DETAIL PANEL */}
         <div style={{ display:"grid", gridTemplateColumns:selected?"1fr 420px":"1fr", gap:16 }}>
 
-          {/* Task list */}
           <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {loading ? (
               <div style={{ textAlign:"center", padding:48, color:"var(--text-muted)", fontSize:15 }}>Loading tasks…</div>
@@ -811,7 +791,7 @@ function TasksContent() {
                 <div style={{ fontSize:44, marginBottom:16 }}>📋</div>
                 <div style={{ fontSize:18, fontWeight:500, color:"var(--text-primary)", marginBottom:8 }}>No tasks found</div>
                 <div style={{ fontSize:14, color:"var(--text-muted)" }}>
-                  {filter !== "ALL" ? `No ${filter.replace(/_/g," ").toLowerCase()} tasks in this view` : "No tasks match the current filter"}
+                  {filter !== "ALL" ? `No ${filter.replace(/_/g," ").toLowerCase()} tasks on this page — try Previous/Next below, or a different filter` : "No tasks match the current filter"}
                 </div>
               </div>
             ) : (
@@ -893,9 +873,20 @@ function TasksContent() {
                 );
               })
             )}
+
+            {pages > 1 && (
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 4px" }}>
+                <div style={{ fontSize:13, color:"var(--text-muted)" }}>
+                  Page {page} of {pages} · {total} tasks total
+                </div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={pageBtn}>Previous</button>
+                  <button onClick={() => setPage(p => Math.min(pages, p + 1))} disabled={page === pages} style={pageBtn}>Next</button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* DETAIL PANEL */}
           {selected && (
             <div className="card-bg" style={{ borderRadius:14, padding:24, position:"sticky", top:24, alignSelf:"start", maxHeight:"calc(100vh - 120px)", overflowY:"auto" }}>
 
@@ -920,13 +911,11 @@ function TasksContent() {
                 </div>
               </div>
 
-              {/* DETAIL TAB */}
               {panel === "detail" && (
                 <div>
                   <div style={{ fontSize:18, fontWeight:700, color:"var(--text-primary)", marginBottom:6 }}>{selected.title}</div>
                   {selected.taskRef && <div style={{ fontSize:13, color:"#f59e0b", fontFamily:"monospace", marginBottom:14, fontWeight:600 }}>ID: {selected.taskRef}</div>}
 
-                  {/* Document section */}
                   {selected.documentName && (
                     <div style={{ marginBottom:16, padding:"12px 14px", background:"var(--bg-input)", borderRadius:10, border:"0.5px solid var(--border)" }}>
                       <div style={{ fontSize:12, fontWeight:600, color:"var(--text-muted)", marginBottom:8, textTransform:"uppercase", letterSpacing:"0.06em" }}>Attached document</div>
@@ -961,12 +950,10 @@ function TasksContent() {
                     </div>
                   )}
 
-                  {/* Description */}
                   <div style={{ background:"var(--bg-input)", border:"0.5px solid var(--border)", borderRadius:10, padding:"14px 16px", marginBottom:16 }}>
                     <div style={{ fontSize:14, color:"var(--text-secondary)", lineHeight:1.7 }}>{selected.description}</div>
                   </div>
 
-                  {/* Metadata */}
                   {(() => {
                     const sc = STATUS_CONFIG[selected.status]||STATUS_CONFIG.PENDING;
                     const rows = [
@@ -1000,7 +987,6 @@ function TasksContent() {
                     ));
                   })()}
 
-                  {/* Director comment */}
                   {selected.directorComment && (
                     <div style={{ marginTop:14, padding:"14px 16px", background:"var(--accent-bg)", border:"0.5px solid var(--accent-border)", borderRadius:10 }}>
                       <div style={{ fontSize:11, fontWeight:700, color:"var(--accent-text)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.07em" }}>Director comment</div>
@@ -1008,7 +994,6 @@ function TasksContent() {
                     </div>
                   )}
 
-                  {/* Treatment status actions */}
                   {!["COMPLETED","CANCELLED"].includes(selected.status) && (
                     <div style={{ marginTop:18, paddingTop:14, borderTop:"0.5px solid var(--border-soft)" }}>
                       <div style={{ fontSize:12, fontWeight:700, color:"var(--text-muted)", marginBottom:12, textTransform:"uppercase", letterSpacing:"0.06em" }}>Update treatment status</div>
@@ -1047,7 +1032,6 @@ function TasksContent() {
                 </div>
               )}
 
-              {/* FORWARD TAB */}
               {panel === "forward" && (
                 <div>
                   <div style={{ fontSize:17, fontWeight:700, color:"var(--text-primary)", marginBottom:6 }}>Forward task</div>
@@ -1071,7 +1055,6 @@ function TasksContent() {
                 </div>
               )}
 
-              {/* ESCALATE TAB */}
               {panel === "escalate" && (
                 <div>
                   <div style={{ fontSize:17, fontWeight:700, color:"var(--text-primary)", marginBottom:6 }}>Escalate task</div>
@@ -1090,7 +1073,6 @@ function TasksContent() {
                 </div>
               )}
 
-              {/* COMMENT TAB */}
               {panel === "comment" && (
                 <div>
                   <div style={{ fontSize:17, fontWeight:700, color:"var(--text-primary)", marginBottom:6 }}>Add comment</div>
@@ -1105,7 +1087,6 @@ function TasksContent() {
                 </div>
               )}
 
-              {/* TRANSFER TAB */}
               {panel === "transfer" && (
                 <div>
                   <div style={{ fontSize:17, fontWeight:700, color:"var(--text-primary)", marginBottom:6 }}>Transfer task (handover)</div>
@@ -1145,6 +1126,3 @@ export default function TasksPage() {
     </Suspense>
   );
 }
-
-
-

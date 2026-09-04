@@ -67,8 +67,9 @@ export async function GET(request: NextRequest) {
       const avgScore = stats.scoreCount > 0 ? stats.scoreSum / stats.scoreCount : null;
       // No score yet defaults to a neutral 0.7 multiplier rather than 0 or 1 —
       // unscored work shouldn't be punished OR fully rewarded before a
-      // supervisor has actually reviewed it.
-      const multiplier = avgScore != null ? avgScore / 10 : 0.7;
+      // supervisor has actually reviewed it. Scores are 0-100 (matching the
+      // slider in the supervisor review panel), so divide by 100, not 10.
+      const multiplier = avgScore != null ? avgScore / 100 : 0.7;
       const performanceIndex = Math.round(stats.count * multiplier * 10) / 10;
 
       let segment = "FRONTLINE";
