@@ -150,9 +150,9 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
             const offCenterY = Math.abs(faceCenterY - vh / 2) / vh;
             const faceSizeRatio = box.width / vw;
 
-            if (faceSizeRatio < 0.28) {
+            if (faceSizeRatio < 0.20) {
               setState("too_far"); goodSinceRef.current = null;
-            } else if (offCenterX > 0.18 || offCenterY > 0.18) {
+            } else if (offCenterX > 0.30 || offCenterY > 0.32) {
               setState("off_center"); goodSinceRef.current = null;
             } else {
               setState("good");
