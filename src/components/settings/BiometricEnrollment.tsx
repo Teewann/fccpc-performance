@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { checkActivationCode, enrollDevice, listMyDevices, removeDevice } from "@/lib/webauthn-client";
 import { hasFaceEnrolled, removeFaceEnrollment, embeddingFromImageData } from "@/lib/biometric/face-client";
-import FaceCaptureModal from "@/components/biometric/FaceCaptureModal";
+import GuidedFaceEnrollment from "@/components/biometric/GuidedFaceEnrollment";
 
 type Device = { id: string; deviceLabel: string; createdAt: string };
 
@@ -18,7 +18,6 @@ export function BiometricEnrollment() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState({ text: "", ok: true });
 
-  // Face capture modal state
   const [showFaceCapture, setShowFaceCapture] = useState(false);
   const [pendingFaceCode, setPendingFaceCode] = useState<string | undefined>();
 
@@ -32,13 +31,11 @@ export function BiometricEnrollment() {
 
   useEffect(() => { refresh(); }, []);
 
-  // True once the person has set up AT LEAST ONE method, ever.
   const alreadyProven = devices.length > 0 || faceEnrolled;
 
   function startAction(action: "device" | "face") {
     setMsg({ text: "", ok: true });
     if (alreadyProven) {
-      // Already vetted once — no code needed for the other method.
       runAction(action);
     } else {
       setUnlockedForAction(action);
@@ -79,58 +76,54 @@ export function BiometricEnrollment() {
       }
       setBusy(false);
     } else {
-      // Face enrollment - open the face capture modal
       setPendingFaceCode(usedCode);
       setShowFaceCapture(true);
       setBusy(false);
     }
   }
 
-  // ─── Handle face capture from modal ──────────────────────────────────
   async function handleFaceCapture(imageData: string) {
-  setShowFaceCapture(false);
-  setBusy(true);
-  setMsg({ text: "", ok: true });
+    setShowFaceCapture(false);
+    setBusy(true);
+    setMsg({ text: "", ok: true });
 
-  try {
-    const descriptor = await embeddingFromImageData(imageData);
+    try {
+      const descriptor = await embeddingFromImageData(imageData);
 
-    const res = await fetch("/api/face", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "enroll",
-        embedding: Array.from(descriptor),
-        code: pendingFaceCode || code,
-      }),
-    });
+      const res = await fetch("/api/face", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "enroll",
+          embedding: Array.from(descriptor),
+          code: pendingFaceCode || code,
+        }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (res.ok) {
-      setMsg({ text: "Face enrolled successfully!", ok: true });
-      setCode("");
-      refresh();
-    } else {
-      setMsg({ text: data.error || "Face enrollment failed.", ok: false });
+      if (res.ok) {
+        setMsg({ text: "Face enrolled successfully!", ok: true });
+        setCode("");
+        refresh();
+      } else {
+        setMsg({ text: data.error || "Face enrollment failed.", ok: false });
+      }
+    } catch (err: any) {
+      console.error("Face enrollment error:", err);
+      setMsg({ text: err?.message || "Face enrollment failed. Please try again.", ok: false });
     }
-  } catch (err: any) {
-    console.error("Face enrollment error:", err);
-    setMsg({ text: err?.message || "Face enrollment failed. Please try again.", ok: false });
+
+    setBusy(false);
+    setPendingFaceCode(undefined);
   }
 
-  setBusy(false);
-  setPendingFaceCode(undefined);
-}
-
-  // ─── Handle remove device ────────────────────────────────────────────
   async function handleRemoveDevice(id: string) {
     if (!confirm("Remove this device? A new IT code will be needed only if this was your last enrolled method.")) return;
     const ok = await removeDevice(id);
     if (ok) refresh();
   }
 
-  // ─── Handle remove face ──────────────────────────────────────────────
   async function handleRemoveFace() {
     if (!confirm("Remove your enrolled face data?")) return;
     const ok = await removeFaceEnrollment();
@@ -187,7 +180,18 @@ export function BiometricEnrollment() {
           <button
             onClick={() => startAction("device")}
             disabled={busy}
-            style={{ padding: "9px 18px", borderRadius: 8, border: "1.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontWeight: 600, cursor: "pointer" }}
+            style={{ 
+              width: "100%", 
+              padding: "12px 0", 
+              borderRadius: 8, 
+              border: "1.5px solid #22c55e", 
+              background: "#052e16", 
+              color: "#4ade80", 
+              fontWeight: 600, 
+              fontSize: 14,
+              cursor: busy ? "not-allowed" : "pointer",
+              opacity: busy ? 0.6 : 1,
+            }}
           >
             Set up fingerprint/face unlock
           </button>
@@ -215,7 +219,18 @@ export function BiometricEnrollment() {
           <button
             onClick={() => startAction("face")}
             disabled={busy}
-            style={{ padding: "9px 18px", borderRadius: 8, border: "1.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontWeight: 600, cursor: "pointer" }}
+            style={{ 
+              width: "100%", 
+              padding: "12px 0", 
+              borderRadius: 8, 
+              border: "1.5px solid #22c55e", 
+              background: "#052e16", 
+              color: "#4ade80", 
+              fontWeight: 600, 
+              fontSize: 14,
+              cursor: busy ? "not-allowed" : "pointer",
+              opacity: busy ? 0.6 : 1,
+            }}
           >
             Set up face verification
           </button>
@@ -295,8 +310,8 @@ export function BiometricEnrollment() {
         </div>
       )}
 
-      {/* ── FACE CAPTURE MODAL ── */}
-      <FaceCaptureModal
+      {/* ── GUIDED FACE ENROLLMENT ── */}
+      <GuidedFaceEnrollment
         isOpen={showFaceCapture}
         onCapture={handleFaceCapture}
         onCancel={() => {
