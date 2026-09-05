@@ -9,79 +9,86 @@ datasource db {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  name         String
-  email        String     @unique
-  userIdRef    String?    @unique
-  password     String
-  phone        String?
-  photo        String?    
-  jobTitle     String?
-  gradeLevel   String?
-  role         Role       @default(STAFF)
-  staffId      String?    @unique
-  departmentId String?
-  unitId       String?
-  department   Department? @relation(fields: [departmentId], references: [id])
-  unit         Unit?       @relation(fields: [unitId], references: [id])
-  dailyLogs    DailyLog[]
-  supervisedLogs DailyLog[] @relation("SupervisorLogs")
-  notifications Notification[]
-  auditLogs    AuditLog[]
-  internLogs      InternLog[]
-  leaveRequests LeaveRequest[]
-  examAttempts  ExamAttempt[]
-  isActive     Boolean     @default(true)
-  assignedTasks   Task[]  @relation("AssignedTasks")
-  createdTasks    Task[]  @relation("CreatedTasks")
-  checkIns     CheckIn[]
-  announcements Announcement[]
-  chatParticipants ChatParticipant[]
-  chatMessages     ChatMessage[]
-  lastSeen         DateTime?
-  chatPin          String?
-  chatReactions    ChatReaction[]
-  memos          Memo[]
-  receivedMemos  MemoRecipient[]
-  submittedRevenue  RevenueItem[]  @relation("SubmittedRevenue")
-  reviewedRevenue   RevenueItem[]  @relation("ReviewedRevenue")
-  evcAnnotations    EVCAnnotation[]  @relation("EVCAnnotations")
-  evcVaultFiles     EVCVaultFile[]   @relation("EVCVault")
-  evcTasksAssigned  EVCTask[]        @relation("EVCAssignedTasks")
-  evcTasksCreated   EVCTask[]        @relation("EVCCreatedTasks")
-  raisedPayments    PaymentWorkflow[] @relation("RaisedPayments")
-  confirmedPayments PaymentWorkflow[] @relation("ConfirmedPayments")
-  initiatedTransfers CaseTransfer[] @relation("InitiatedTransfers")
-  acceptedTransfers  CaseTransfer[] @relation("AcceptedTransfers")
-  targetTransfers    CaseTransfer[] @relation("TargetTransfers")
-  forwardedFromTasks Task[] @relation("ForwardedFrom")
-  forwardedToTasks   Task[] @relation("ForwardedTo")
-  webAuthnCredentials   WebAuthnCredential[]
-  biometricActivations  BiometricActivationCode[] @relation("UserActivations")
-  biometricCodesCreated BiometricActivationCode[] @relation("CreatedActivations")
-  consentRecords        ConsentRecord[]
-  faceData    FaceData?  
-  biometricAttempts   BiometricAttempt[]
-  hrApprovalsReceived HRCheckInApproval[] @relation("StaffHRApprovals")
-  hrApprovalsGiven    HRCheckInApproval[] @relation("HRApprovers")
-  otpCodes            OtpCode[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id                                                      String                    @id @default(cuid())
+  name                                                    String
+  email                                                   String                    @unique
+  password                                                String
+  role                                                    Role                      @default(STAFF)
+  staffId                                                 String?                   @unique
+  departmentId                                            String?
+  unitId                                                  String?
+  createdAt                                               DateTime                  @default(now())
+  updatedAt                                               DateTime                  @updatedAt
+  isActive                                                Boolean                   @default(true)
+  gradeLevel                                              String?
+  jobTitle                                                String?
+  phone                                                   String?
+  photo                                                   String?
+  userIdRef                                               String?                   @unique
+  chatPin                                                 String?
+  lastSeen                                                DateTime?
+  supervisorId                                            String?
+  announcements                                           Announcement[]
+  auditLogs                                               AuditLog[]
+  biometricCodesCreated                                   BiometricActivationCode[] @relation("CreatedActivations")
+  biometricActivations                                    BiometricActivationCode[] @relation("UserActivations")
+  biometricAttempts                                       BiometricAttempt[]
+  acceptedTransfers                                       CaseTransfer[]            @relation("AcceptedTransfers")
+  initiatedTransfers                                      CaseTransfer[]            @relation("InitiatedTransfers")
+  targetTransfers                                         CaseTransfer[]            @relation("TargetTransfers")
+  chatMessages                                            ChatMessage[]
+  chatParticipants                                        ChatParticipant[]
+  chatReactions                                           ChatReaction[]
+  checkIns                                                CheckIn[]
+  consentRecords                                          ConsentRecord[]
+  DailyLog_DailyLog_proxyLoggedByIdToUser                 DailyLog[]                @relation("DailyLog_proxyLoggedByIdToUser")
+  supervisedLogs                                          DailyLog[]                @relation("SupervisorLogs")
+  dailyLogs                                               DailyLog[]
+  evcAnnotations                                          EVCAnnotation[]           @relation("EVCAnnotations")
+  evcTasksAssigned                                        EVCTask[]                 @relation("EVCAssignedTasks")
+  evcTasksCreated                                         EVCTask[]                 @relation("EVCCreatedTasks")
+  evcVaultFiles                                           EVCVaultFile[]            @relation("EVCVault")
+  examAttempts                                            ExamAttempt[]
+  faceData                                                FaceData?
+  hrApprovalsGiven                                        HRCheckInApproval[]       @relation("HRApprovers")
+  hrApprovalsReceived                                     HRCheckInApproval[]       @relation("StaffHRApprovals")
+  IncentiveRecommendation                                 IncentiveRecommendation[]
+  internLogs                                              InternLog[]
+  leaveRequests                                           LeaveRequest[]
+  memos                                                   Memo[]
+  receivedMemos                                           MemoRecipient[]
+  notifications                                           Notification[]
+  otpCodes                                                OtpCode[]
+  confirmedPayments                                       PaymentWorkflow[]         @relation("ConfirmedPayments")
+  raisedPayments                                          PaymentWorkflow[]         @relation("RaisedPayments")
+  reviewedRevenue                                         RevenueItem[]             @relation("ReviewedRevenue")
+  submittedRevenue                                        RevenueItem[]             @relation("SubmittedRevenue")
+  ScreenShareSession_ScreenShareSession_requesterIdToUser ScreenShareSession[]      @relation("ScreenShareSession_requesterIdToUser")
+  ScreenShareSession_ScreenShareSession_targetIdToUser    ScreenShareSession[]      @relation("ScreenShareSession_targetIdToUser")
+  assignedTasks                                           Task[]                    @relation("AssignedTasks")
+  createdTasks                                            Task[]                    @relation("CreatedTasks")
+  forwardedFromTasks                                      Task[]                    @relation("ForwardedFrom")
+  forwardedToTasks                                        Task[]                    @relation("ForwardedTo")
+  department                                              Department?               @relation(fields: [departmentId], references: [id])
+  User                                                    User?                     @relation("UserToUser", fields: [supervisorId], references: [id])
+  other_User                                              User[]                    @relation("UserToUser")
+  unit                                                    Unit?                     @relation(fields: [unitId], references: [id])
+  webAuthnCredentials                                     WebAuthnCredential[]
 }
 
 model Department {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  shortCode   String   @unique
-  category    DeptCategory
-  description String?
-  headId      String?
-  units       Unit[]
-  users       User[]
-  kpis        KPI[]
+  id            String         @id @default(cuid())
+  name          String         @unique
+  shortCode     String         @unique
+  category      DeptCategory
+  description   String?
+  headId        String?
+  createdAt     DateTime       @default(now())
+  kpis          KPI[]
+  tasks         Task[]
   taskTemplates TaskTemplate[]
-  tasks           Task[]
-  createdAt   DateTime @default(now())
+  units         Unit[]
+  users         User[]
 }
 
 model Unit {
@@ -89,109 +96,125 @@ model Unit {
   name         String
   shortCode    String
   departmentId String
+  createdAt    DateTime   @default(now())
   department   Department @relation(fields: [departmentId], references: [id])
   users        User[]
-  createdAt    DateTime   @default(now())
+
   @@unique([departmentId, shortCode])
 }
 
 model TaskTemplate {
-  id           String     @id @default(cuid())
-  departmentId String
-  department   Department @relation(fields: [departmentId], references: [id])
-  title        String
-  description  String?
-  requiresEvidence Boolean @default(false)
-  requiresCaseRef  Boolean @default(false)
-  requiresAmount   Boolean @default(false)
-  category     String
-  createdAt    DateTime   @default(now())
+  id               String     @id @default(cuid())
+  departmentId     String
+  title            String
+  description      String?
+  requiresEvidence Boolean    @default(false)
+  requiresCaseRef  Boolean    @default(false)
+  requiresAmount   Boolean    @default(false)
+  category         String
+  createdAt        DateTime   @default(now())
+  department       Department @relation(fields: [departmentId], references: [id])
 }
 
 model DailyLog {
-  id               String    @id @default(cuid())
-  userId           String
-  user             User      @relation(fields: [userId], references: [id])
-  date             DateTime  @default(now())
-  taskTitle        String
-  taskCategory     String
-  description      String
-  timeSpent        Float
-  priority         Priority  @default(MEDIUM)
-  status           LogStatus @default(SUBMITTED)
-  caseReference    String?
-  amountInvolved   Float?
-  evidence         String?
-  notes            String?
-  supervisorId     String?
-  supervisor       User?     @relation("SupervisorLogs", fields: [supervisorId], references: [id])
-  supervisorComment String?
-  supervisorScore  Int?
-  reviewedAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                                  String    @id @default(cuid())
+  userId                              String
+  date                                DateTime  @default(now())
+  taskTitle                           String
+  taskCategory                        String
+  description                         String
+  timeSpent                           Float
+  priority                            Priority  @default(MEDIUM)
+  status                              LogStatus @default(SUBMITTED)
+  caseReference                       String?
+  amountInvolved                      Float?
+  evidence                            String?
+  notes                               String?
+  supervisorId                        String?
+  supervisorComment                   String?
+  supervisorScore                     Int?
+  reviewedAt                          DateTime?
+  createdAt                           DateTime  @default(now())
+  updatedAt                           DateTime  @updatedAt
+  ackStatus                           String?
+  crossDeptFlag                       String?
+  isAiQuickCapture                    Boolean   @default(false)
+  quickCaptureBatch                   String?
+  refNo                               String?   @unique
+  taskType                            String?
+  loggedByProxy                       Boolean   @default(false)
+  proxyLoggedById                     String?
+  taskId                              String?
+  User_DailyLog_proxyLoggedByIdToUser User?     @relation("DailyLog_proxyLoggedByIdToUser", fields: [proxyLoggedById], references: [id])
+  supervisor                          User?     @relation("SupervisorLogs", fields: [supervisorId], references: [id])
+  Task                                Task?     @relation(fields: [taskId], references: [id])
+  user                                User      @relation(fields: [userId], references: [id])
 }
 
 model KPI {
-  id           String     @id @default(cuid())
+  id           String        @id @default(cuid())
   title        String
   description  String?
   target       Float
-  current      Float      @default(0)
+  current      Float         @default(0)
   unit         String
   departmentId String
-  department   Department @relation(fields: [departmentId], references: [id])
-  period       Period     @default(MONTHLY)
+  period       Period        @default(MONTHLY)
   startDate    DateTime
   endDate      DateTime
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime      @default(now())
+  goalId       String?
+  sourceType   String        @default("MANUAL")
+  department   Department    @relation(fields: [departmentId], references: [id])
+  OrgGoal      OrgGoal?      @relation(fields: [goalId], references: [id])
+  KPISnapshot  KPISnapshot[]
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
   title     String
   message   String
-  type      NotificationType @default(INFO)
-  read      Boolean  @default(false)
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
   actionUrl String?
   metadata  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())   // ← ADDED @default(now())
+  updatedAt DateTime  @updatedAt
+  link      String?
+  type      NotifType @default(INFO)
+  user      User      @relation(fields: [userId], references: [id])
 }
 
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
   action    String
   detail    String?
   ipAddress String?
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model InternLog {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  date            DateTime  @default(now())
-  taskTitle       String
-  description     String
-  skillsLearned   String?
-  supervisorName  String?
-  hoursSpent      Float
-  status          LogStatus @default(SUBMITTED)
+  id                String    @id @default(cuid())
+  userId            String
+  date              DateTime  @default(now())
+  taskTitle         String
+  description       String
+  skillsLearned     String?
+  supervisorName    String?
+  hoursSpent        Float
+  status            LogStatus @default(SUBMITTED)
   supervisorComment String?
-  evidence        String?
-  weekNumber      Int?
-  createdAt       DateTime  @default(now())
+  evidence          String?
+  weekNumber        Int?
+  createdAt         DateTime  @default(now())
+  user              User      @relation(fields: [userId], references: [id])
 }
 
 model LeaveRequest {
   id              String      @id @default(cuid())
   userId          String
-  user            User        @relation(fields: [userId], references: [id])
   type            LeaveType
   startDate       DateTime
   endDate         DateTime
@@ -201,55 +224,54 @@ model LeaveRequest {
   approvedById    String?
   approverComment String?
   createdAt       DateTime    @default(now())
+  user            User        @relation(fields: [userId], references: [id])
 }
 
 model CheckIn {
-  id              String    @id @default(cuid())
-  userId          String
-  user            User      @relation(fields: [userId], references: [id])
-  date            DateTime
-  checkInAt       DateTime
-  checkOutAt      DateTime?
-  hoursWorked     Float?
-  status          String    @default("PRESENT")
-  note            String?
-  ipAddress       String?
-  checkOutIsOnPremises   Boolean?
+  id                     String    @id @default(cuid())
+  userId                 String
+  date                   DateTime
+  checkInAt              DateTime
+  checkOutAt             DateTime?
+  hoursWorked            Float?
+  note                   String?
+  ipAddress              String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  isOnPremises           Boolean   @default(false)
+  gpsLat                 Float?
+  gpsLng                 Float?
+  locationMethod         String?
+  status                 String    @default("PRESENT")
   checkOutGpsLat         Float?
   checkOutGpsLng         Float?
+  checkOutIsOnPremises   Boolean?
   checkOutLocationMethod String?
-  isOnPremises    Boolean   @default(false)
-  gpsLat          Float?
-  gpsLng          Float?
-  locationMethod  String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  verificationMethod String?   // "FACE" | "FINGERPRINT" | "MANUAL_HR" | "OTP" | "UNVERIFIED"
+  verificationMethod     String?
+  user                   User      @relation(fields: [userId], references: [id])
 
   @@unique([userId, date])
   @@index([date])
-
 }
 
 model Exam {
   id          String        @id @default(cuid())
   title       String
   description String?
-  targetRole  String
-  gradeLevel  String?
   duration    Int
   passMark    Int           @default(60)
   isActive    Boolean       @default(false)
-  questions   Question[]
-  attempts    ExamAttempt[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+  gradeLevel  String?
+  targetRole  String
+  attempts    ExamAttempt[]
+  questions   Question[]
 }
 
 model Question {
   id            String   @id @default(cuid())
   examId        String
-  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
   text          String
   optionA       String
   optionB       String
@@ -259,20 +281,22 @@ model Question {
   marks         Int      @default(1)
   order         Int      @default(0)
   createdAt     DateTime @default(now())
+  exam          Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
 }
 
 model ExamAttempt {
   id          String    @id @default(cuid())
   examId      String
   userId      String
-  exam        Exam      @relation(fields: [examId], references: [id])
-  user        User      @relation(fields: [userId], references: [id])
   answers     Json
   score       Int       @default(0)
   percentage  Int       @default(0)
   passed      Boolean   @default(false)
   completedAt DateTime?
   createdAt   DateTime  @default(now())
+  exam        Exam      @relation(fields: [examId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+
   @@unique([examId, userId])
 }
 
@@ -281,38 +305,43 @@ model Task {
   title              String
   description        String
   departmentId       String
-  department         Department @relation(fields: [departmentId], references: [id])
-  assignedToId       String?
   createdById        String
-  assignedTo         User?      @relation("AssignedTasks", fields: [assignedToId], references: [id])
-  createdBy          User       @relation("CreatedTasks",  fields: [createdById],  references: [id])
+  assignedToId       String?
   priority           Priority   @default(MEDIUM)
   status             TaskStatus @default(PENDING)
   dueDate            DateTime?
   completedAt        DateTime?
-  notes              String?
   caseReference      String?
+  notes              String?
   directorComment    String?
-  taskRef            String?    @unique
-  forwardedFromId    String?
-  forwardedToId      String?
-  treatmentStatus    String?    @default("PENDING")
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
   documentData       String?
   documentName       String?
-  documentType       String?
   documentSize       Int?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  office             String?
-  forwardNote        String?
-  escalationReason   String?
+  documentType       String?
   escalatedAt        DateTime?
-  isPaymentRequest   Boolean   @default(false)
-  paymentRouting     String?
+  escalationReason   String?
+  forwardNote        String?
+  forwardedFromId    String?
+  forwardedToId      String?
+  isPaymentRequest   Boolean    @default(false)
+  office             String?
   paymentRecipientId String?
-  taskSource         String?   @default("DEPARTMENT")
-  forwardedFrom      User?     @relation("ForwardedFrom", fields: [forwardedFromId], references: [id])
-  forwardedTo        User?     @relation("ForwardedTo", fields: [forwardedToId], references: [id])
+  paymentRouting     String?
+  taskRef            String?    @unique
+  taskSource         String?    @default("DEPARTMENT")
+  treatmentStatus    String?    @default("PENDING")
+  broadcastParentId  String?
+  isBroadcastParent  Boolean    @default(false)
+  DailyLog           DailyLog[]
+  assignedTo         User?      @relation("AssignedTasks", fields: [assignedToId], references: [id])
+  Task               Task?      @relation("TaskToTask", fields: [broadcastParentId], references: [id])
+  other_Task         Task[]     @relation("TaskToTask")
+  createdBy          User       @relation("CreatedTasks", fields: [createdById], references: [id])
+  department         Department @relation(fields: [departmentId], references: [id])
+  forwardedFrom      User?      @relation("ForwardedFrom", fields: [forwardedFromId], references: [id])
+  forwardedTo        User?      @relation("ForwardedTo", fields: [forwardedToId], references: [id])
 }
 
 model Announcement {
@@ -320,85 +349,87 @@ model Announcement {
   title        String
   body         String
   authorId     String
-  author       User     @relation(fields: [authorId], references: [id])
   targetDeptId String?
   isPinned     Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  author       User     @relation(fields: [authorId], references: [id])
 }
 
 model ChatConversation {
-  id           String          @id @default(cuid())
+  id           String            @id @default(cuid())
   name         String?
-  isGroup      Boolean         @default(false)
-  participants ChatParticipant[]
+  isGroup      Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
   messages     ChatMessage[]
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  participants ChatParticipant[]
 }
 
 model ChatParticipant {
   id             String           @id @default(cuid())
   conversationId String
-  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   userId         String
-  user           User             @relation(fields: [userId], references: [id])
-  lastReadAt     DateTime?
   createdAt      DateTime         @default(now())
+  lastReadAt     DateTime?
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id])
 }
 
 model ChatMessage {
   id             String           @id @default(cuid())
   conversationId String
-  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   senderId       String
-  sender         User             @relation(fields: [senderId], references: [id])
   content        String?
   fileUrl        String?
   fileName       String?
   fileType       String?
+  createdAt      DateTime         @default(now())
   edited         Boolean          @default(false)
   replyToId      String?
-  replyTo        ChatMessage?     @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  pinned         Boolean          @default(false)
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  replyTo        ChatMessage?     @relation("MessageReplies", fields: [replyToId], references: [id])
   replies        ChatMessage[]    @relation("MessageReplies")
+  sender         User             @relation(fields: [senderId], references: [id])
   reactions      ChatReaction[]
-  createdAt      DateTime         @default(now())
 }
 
 model ChatReaction {
   id        String      @id @default(cuid())
   messageId String
-  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
   userId    String
-  user      User        @relation(fields: [userId], references: [id])
   emoji     String
   createdAt DateTime    @default(now())
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id])
+
   @@unique([messageId, userId])
 }
 
 model Memo {
-  id          String          @id @default(cuid())
-  subject     String
-  body        String
-  senderId    String
-  sender      User            @relation(fields: [senderId], references: [id])
-  fileUrl     String?
-  fileName    String?
-  fileType    String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  recipients  MemoRecipient[]
+  id         String          @id @default(cuid())
+  subject    String
+  body       String
+  senderId   String
+  fileUrl    String?
+  fileName   String?
+  fileType   String?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  sender     User            @relation(fields: [senderId], references: [id])
+  recipients MemoRecipient[]
 }
 
 model MemoRecipient {
   id        String    @id @default(cuid())
   memoId    String
-  memo      Memo      @relation(fields: [memoId], references: [id], onDelete: Cascade)
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
   read      Boolean   @default(false)
   readAt    DateTime?
   createdAt DateTime  @default(now())
+  memo      Memo      @relation(fields: [memoId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id])
 }
 
 model RevenueItem {
@@ -409,33 +440,32 @@ model RevenueItem {
   reference     String?
   department    String?
   notes         String?
-  documentData  String?
-  documentName  String?
-  documentType  String?
   status        String    @default("PENDING_EVC_APPROVAL")
   evcComment    String?
   submittedById String
-  submittedBy   User      @relation("SubmittedRevenue", fields: [submittedById], references: [id])
   reviewedById  String?
-  reviewedBy    User?     @relation("ReviewedRevenue",  fields: [reviewedById],  references: [id])
   reviewedAt    DateTime?
   createdAt     DateTime  @default(now())
+  documentData  String?
+  documentName  String?
+  documentType  String?
+  reviewedBy    User?     @relation("ReviewedRevenue", fields: [reviewedById], references: [id])
+  submittedBy   User      @relation("SubmittedRevenue", fields: [submittedById], references: [id])
 }
 
 model EVCAnnotation {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation("EVCAnnotations", fields: [userId], references: [id])
   subject   String
   content   String
   priority  String   @default("NORMAL")
   createdAt DateTime @default(now())
+  user      User     @relation("EVCAnnotations", fields: [userId], references: [id])
 }
 
 model EVCVaultFile {
   id          String   @id @default(cuid())
   ownerId     String
-  owner       User     @relation("EVCVault", fields: [ownerId], references: [id])
   title       String
   description String?
   category    String
@@ -447,263 +477,372 @@ model EVCVaultFile {
   tags        String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  owner       User     @relation("EVCVault", fields: [ownerId], references: [id])
 }
 
 model EVCTask {
-  id              String    @id @default(cuid())
-  title           String
-  description     String
-  assignedToId    String
-  createdById     String
-  assignedTo      User      @relation("EVCAssignedTasks",  fields: [assignedToId], references: [id])
-  createdBy       User      @relation("EVCCreatedTasks",   fields: [createdById],  references: [id])
-  priority        String    @default("HIGH")
-  status          String    @default("PENDING")
-  category        String    @default("General")
-  isConfidential  Boolean   @default(false)
-  dueDate         DateTime?
-  completedAt     DateTime?
-  evcComment      String?
-  notes           String?
-  documentData    String?
-  documentName    String?
-  documentType    String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  title          String
+  description    String
+  assignedToId   String
+  createdById    String
+  priority       String    @default("HIGH")
+  status         String    @default("PENDING")
+  category       String    @default("General")
+  isConfidential Boolean   @default(false)
+  dueDate        DateTime?
+  completedAt    DateTime?
+  evcComment     String?
+  notes          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  documentData   String?
+  documentName   String?
+  documentType   String?
+  assignedTo     User      @relation("EVCAssignedTasks", fields: [assignedToId], references: [id])
+  createdBy      User      @relation("EVCCreatedTasks", fields: [createdById], references: [id])
 }
 
 model RegisteredBusiness {
-  id              String    @id @default(cuid())
-  businessName    String
-  rcNumber        String    @unique
-  tin             String?   @unique
-  sector          String
-  email           String    @unique
-  phone           String
-  address         String
-  state           String
-  contactPerson   String
-  contactRole     String
-  password        String
-  status          BizStatus @default(PENDING_VERIFICATION)
-  registrationFee Float     @default(50000)
-  feePaid         Boolean   @default(false)
-  feeReference    String?
-  verifiedAt      DateTime?
-  verifiedById    String?
-  notes           String?
-  complianceScore Int       @default(0)
-  complianceReports ComplianceReport[]
-  fines             ComplianceFine[]
-  payments          BizPayment[]
+  id                String             @id @default(cuid())
+  businessName      String
+  rcNumber          String             @unique
+  tin               String?            @unique
+  sector            String
+  email             String             @unique
+  phone             String
+  address           String
+  state             String
+  contactPerson     String
+  contactRole       String
+  password          String
+  status            BizStatus          @default(PENDING_VERIFICATION)
+  registrationFee   Float              @default(50000)
+  feePaid           Boolean            @default(false)
+  feeReference      String?
+  verifiedAt        DateTime?
+  verifiedById      String?
+  notes             String?
+  complianceScore   Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   auditLogs         BizAuditLog[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  payments          BizPayment[]
+  fines             ComplianceFine[]
+  complianceReports ComplianceReport[]
 }
 
 model ComplianceReport {
-  id             String    @id @default(cuid())
-  businessId     String
-  business       RegisteredBusiness @relation(fields: [businessId], references: [id])
-  reportType     String
-  title          String
-  description    String
-  period         String
-  attachmentUrl  String?
-  status         ReportStatus @default(SUBMITTED)
-  reviewedById   String?
-  reviewNote     String?
-  reviewedAt     DateTime?
-  submittedAt    DateTime  @default(now())
-  dueDate        DateTime?
-  createdAt      DateTime  @default(now())
+  id            String             @id @default(cuid())
+  businessId    String
+  reportType    String
+  title         String
+  description   String
+  period        String
+  attachmentUrl String?
+  status        ReportStatus       @default(SUBMITTED)
+  reviewedById  String?
+  reviewNote    String?
+  reviewedAt    DateTime?
+  submittedAt   DateTime           @default(now())
+  dueDate       DateTime?
+  createdAt     DateTime           @default(now())
+  business      RegisteredBusiness @relation(fields: [businessId], references: [id])
 }
 
 model ComplianceFine {
-  id             String    @id @default(cuid())
-  businessId     String
-  business       RegisteredBusiness @relation(fields: [businessId], references: [id])
-  reason         String
-  amount         Float
-  paid           Boolean   @default(false)
-  paidAt         DateTime?
-  paidReference  String?
-  issuedById     String?
-  dueDate        DateTime
-  status         FineStatus @default(UNPAID)
-  notes          String?
-  payments       BizPayment[]
-  createdAt      DateTime  @default(now())
+  id            String             @id @default(cuid())
+  businessId    String
+  reason        String
+  amount        Float
+  paid          Boolean            @default(false)
+  paidAt        DateTime?
+  paidReference String?
+  issuedById    String?
+  dueDate       DateTime
+  status        FineStatus         @default(UNPAID)
+  notes         String?
+  createdAt     DateTime           @default(now())
+  payments      BizPayment[]
+  business      RegisteredBusiness @relation(fields: [businessId], references: [id])
 }
 
 model BizPayment {
-  id           String    @id @default(cuid())
-  businessId   String
-  business     RegisteredBusiness @relation(fields: [businessId], references: [id])
-  fineId       String?
-  fine         ComplianceFine? @relation(fields: [fineId], references: [id])
-  amount       Float
-  type         PaymentType
-  reference    String    @unique
-  status       PaymentStatus @default(PENDING)
-  confirmedAt  DateTime?
+  id            String             @id @default(cuid())
+  businessId    String
+  fineId        String?
+  amount        Float
+  type          PaymentType
+  reference     String             @unique
+  status        PaymentStatus      @default(PENDING)
+  confirmedAt   DateTime?
   confirmedById String?
-  notes        String?
-  createdAt    DateTime  @default(now())
+  notes         String?
+  createdAt     DateTime           @default(now())
+  business      RegisteredBusiness @relation(fields: [businessId], references: [id])
+  fine          ComplianceFine?    @relation(fields: [fineId], references: [id])
 }
 
 model BizAuditLog {
-  id         String   @id @default(cuid())
+  id         String             @id @default(cuid())
   businessId String
-  business   RegisteredBusiness @relation(fields: [businessId], references: [id])
   action     String
   detail     String?
   doneById   String?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime           @default(now())
+  business   RegisteredBusiness @relation(fields: [businessId], references: [id])
 }
 
 model PaymentWorkflow {
-  id              String   @id @default(cuid())
+  id              String                @id @default(cuid())
   caseReference   String
   caseType        String
   companyName     String
   expectedAmount  Float
   actualAmount    Float?
-  currency        String   @default("NGN")
+  currency        String                @default("NGN")
   notes           String?
   status          PaymentWorkflowStatus @default(PENDING_CONFIRMATION)
   raisedById      String
-  raisedBy        User     @relation("RaisedPayments", fields: [raisedById], references: [id])
   confirmedById   String?
-  confirmedBy     User?    @relation("ConfirmedPayments", fields: [confirmedById], references: [id])
   bankReference   String?
   paymentDate     DateTime?
   financeNotes    String?
   documentUrl     String?
   documentName    String?
   rejectionReason String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  confirmedBy     User?                 @relation("ConfirmedPayments", fields: [confirmedById], references: [id])
+  raisedBy        User                  @relation("RaisedPayments", fields: [raisedById], references: [id])
 }
 
 model CaseTransfer {
-  id              String         @id @default(cuid())
-  caseRef         String
-  caseTitle       String
-  caseType        String
-  description     String
-  fromOffice      String
-  toOffice        String
-  transferType    TransferType
-  priority        Priority       @default(MEDIUM)
-  status          TransferStatus @default(PENDING_ACCEPTANCE)
-  transferNote    String
-  attachmentUrl   String?
-  attachmentName  String?
-  initiatedById   String
-  initiatedBy     User           @relation("InitiatedTransfers", fields: [initiatedById], references: [id])
-  acceptedById    String?
-  acceptedBy      User?          @relation("AcceptedTransfers", fields: [acceptedById], references: [id])
-  rejectedReason  String?
-  completedNote   String?
-  targetUserId    String?
-  targetUser      User?          @relation("TargetTransfers", fields: [targetUserId], references: [id])
-  dueDate         DateTime?
-  acceptedAt      DateTime?
-  completedAt     DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  caseRef        String
+  caseTitle      String
+  caseType       String
+  description    String
+  fromOffice     String
+  toOffice       String
+  transferType   TransferType
+  priority       Priority       @default(MEDIUM)
+  status         TransferStatus @default(PENDING_ACCEPTANCE)
+  transferNote   String
+  attachmentUrl  String?
+  attachmentName String?
+  initiatedById  String
+  acceptedById   String?
+  rejectedReason String?
+  completedNote  String?
+  targetUserId   String?
+  dueDate        DateTime?
+  acceptedAt     DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  acceptedBy     User?          @relation("AcceptedTransfers", fields: [acceptedById], references: [id])
+  initiatedBy    User           @relation("InitiatedTransfers", fields: [initiatedById], references: [id])
+  targetUser     User?          @relation("TargetTransfers", fields: [targetUserId], references: [id])
 }
 
 model WebAuthnCredential {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
-  credentialId String   @unique
-  publicKey    String   @db.Text
-  counter      Int      @default(0)
+  credentialId String    @unique
+  publicKey    String
+  counter      Int       @default(0)
   deviceLabel  String?
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   lastUsedAt   DateTime?
+  user         User      @relation(fields: [userId], references: [id])
 }
 
 model BiometricActivationCode {
   id          String    @id @default(cuid())
   code        String    @unique
   userId      String
-  user        User      @relation("UserActivations", fields: [userId], references: [id])
   createdById String
-  createdBy   User      @relation("CreatedActivations", fields: [createdById], references: [id])
   used        Boolean   @default(false)
   usedAt      DateTime?
   expiresAt   DateTime
   createdAt   DateTime  @default(now())
+  createdBy   User      @relation("CreatedActivations", fields: [createdById], references: [id])
+  user        User      @relation("UserActivations", fields: [userId], references: [id])
 }
 
 model ConsentRecord {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   userId      String
-  user        User      @relation(fields: [userId], references: [id])
-  version     String    @default("v1")
+  version     String   @default("v1")
   ip          String?
   userAgent   String?
-  consentedAt DateTime  @default(now())
+  consentedAt DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
 }
 
 model FaceData {
   id         String   @id @default(cuid())
   userId     String   @unique
-  user       User     @relation(fields: [userId], references: [id])
-  embedding  String   @db.Text   // AES-256-GCM encrypted JSON array of numbers — face shape, not a photo
-  algorithm  String   @default("face-api-ssd-128d")
   enrolledAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  algorithm  String   @default("face-api-ssd-128d")
+  embedding  String
+  user       User     @relation(fields: [userId], references: [id])
 }
 
 model BiometricAttempt {
   id              String   @id @default(cuid())
   userId          String
-  user            User     @relation(fields: [userId], references: [id])
-  method          String            // "FACE" | "FINGERPRINT" | "MANUAL_HR" | "OTP"
+  method          String
   success         Boolean
-  similarityScore Float?            // for face matches — how close it was, 0 to 1
+  similarityScore Float?
   deviceLabel     String?
   ipAddress       String?
   createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id])
 }
 
 model HRCheckInApproval {
   id           String   @id @default(cuid())
   staffId      String
-  staff        User     @relation("StaffHRApprovals", fields: [staffId], references: [id])
   approvedById String
-  approvedBy   User     @relation("HRApprovers", fields: [approvedById], references: [id])
-  reason       String            // e.g. "New phone, not yet enrolled"
+  reason       String
   checkInId    String?  @unique
   createdAt    DateTime @default(now())
+  approvedBy   User     @relation("HRApprovers", fields: [approvedById], references: [id])
+  staff        User     @relation("StaffHRApprovals", fields: [staffId], references: [id])
 }
 
 model OtpCode {
   id        String   @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
   code      String
   purpose   String   @default("CHECKIN_FALLBACK")
   used      Boolean  @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model AccountActivationCode {
   id          String    @id @default(cuid())
   code        String    @unique
-  email       String            // the account doesn't exist yet, so we key this by email, not userId
+  email       String
   role        Role      @default(STAFF)
-  createdById String?           // null only for the one-time bootstrap admin
+  createdById String?
   used        Boolean   @default(false)
   usedAt      DateTime?
   expiresAt   DateTime
   createdAt   DateTime  @default(now())
+}
+
+model IncentiveRecommendation {
+  id               String    @id
+  userId           String
+  month            String
+  segment          String
+  rank             Int
+  performanceIndex Float
+  taskCount        Int
+  avgScore         Float?
+  status           String    @default("PENDING")
+  hrNote           String?
+  actionedById     String?
+  actionedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  User             User      @relation(fields: [userId], references: [id])
+
+  @@unique([userId, month])
+}
+
+model KPISnapshot {
+  id          String   @id
+  kpiId       String
+  value       Float
+  recordedAt  DateTime @default(now())
+  note        String?
+  updatedById String?
+  KPI         KPI      @relation(fields: [kpiId], references: [id])
+
+  @@index([kpiId])
+  @@index([recordedAt])
+}
+
+model OrgGoal {
+  id          String   @id
+  title       String
+  description String?
+  totalTarget Float
+  unit        String
+  year        Int
+  startDate   DateTime
+  endDate     DateTime
+  createdAt   DateTime @default(now())
+  KPI         KPI[]
+}
+
+model ScreenShareAuditLog {
+  id                 String             @id
+  sessionId          String
+  action             String
+  actorId            String
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  ScreenShareSession ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([actorId])
+  @@index([sessionId])
+}
+
+model ScreenShareHeartbeat {
+  id                 String             @id
+  sessionId          String
+  currentUrl         String
+  pageTitle          String?
+  clickEvent         Json?
+  actionEvent        Json?
+  inputEvent         Json?
+  scrollY            Int?
+  timestamp          DateTime           @default(now())
+  ScreenShareSession ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, timestamp])
+}
+
+model ScreenShareSession {
+  id                                        String                 @id
+  requesterId                               String
+  targetId                                  String
+  status                                    ScreenShareStatus      @default(PENDING)
+  startedAt                                 DateTime?
+  endedAt                                   DateTime?
+  createdAt                                 DateTime               @default(now())
+  updatedAt                                 DateTime
+  ScreenShareAuditLog                       ScreenShareAuditLog[]
+  ScreenShareHeartbeat                      ScreenShareHeartbeat[]
+  User_ScreenShareSession_requesterIdToUser User                   @relation("ScreenShareSession_requesterIdToUser", fields: [requesterId], references: [id], onDelete: Cascade)
+  User_ScreenShareSession_targetIdToUser    User                   @relation("ScreenShareSession_targetIdToUser", fields: [targetId], references: [id], onDelete: Cascade)
+  ScreenShareSignal                         ScreenShareSignal[]
+
+  @@index([requesterId])
+  @@index([status])
+  @@index([targetId])
+}
+
+model ScreenShareSignal {
+  id                 String             @id
+  sessionId          String
+  fromUserId         String
+  toUserId           String
+  type               String
+  payload            Json
+  consumed           Boolean            @default(false)
+  createdAt          DateTime           @default(now())
+  ScreenShareSession ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([sessionId, toUserId, consumed])
 }
 
 enum TransferType {
@@ -796,6 +935,7 @@ enum Role {
   CONTRACT
   CONSULTANT
   OTHER
+  CHIEF
 }
 
 enum Priority {
@@ -854,4 +994,20 @@ enum NotificationType {
   WARNING
   ALERT
   SUCCESS
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum ScreenShareStatus {
+  PENDING
+  ACTIVE
+  ENDED
+  REJECTED
+  EXPIRED
 }

@@ -3,6 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import Providers from "@/components/provider";
 import AIAssistant from "@/components/layout/AIAssistant";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 
 export const metadata: Metadata = {
   title: "FCCPC Performance Intelligence System",
@@ -19,8 +20,10 @@ export default function RootLayout({
       <body>
         <Providers>
           <ThemeProvider>
-            {children}
-            <AIAssistant />
+            <ToastProvider>
+              {children}
+              <AIAssistant />
+            </ToastProvider>
           </ThemeProvider>
         </Providers>
       </body>
