@@ -154,12 +154,15 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
               setState("too_far"); goodSinceRef.current = null;
             } else if (offCenterX > 0.30 || offCenterY > 0.32) {
               setState("off_center"); goodSinceRef.current = null;
+            } else if (detection.score < 0.55) {
+              // A weak/partial detection (hand, side profile, obscured face) — treat as "no real face yet"
+              setState("searching"); goodSinceRef.current = null;
             } else {
               setState("good");
               if (!goodSinceRef.current) goodSinceRef.current = Date.now();
               if (Date.now() - goodSinceRef.current > HOLD_MS) {
                 processingRef.current = false;
-                capture();
+                confirmAndCapture(video);
                 return;
               }
             }
@@ -174,6 +177,43 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
     };
     loopRef.current = requestAnimationFrame(tick);
   }
+
+  async function confirmAndCapture(video: HTMLVideoElement) {
+  try {
+    const check = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+      .withFaceLandmarks();
+
+    if (!check || check.detection.score < 0.6) {
+      goodSinceRef.current = null;
+      setState("searching");
+      loopRef.current = requestAnimationFrame(runDetectionLoop as any);
+      return;
+    }
+
+    // Sanity-check the eyes are a plausible distance apart relative to face width —
+    // catches a covered/occluded/side-on face that still weakly resembled "a face."
+    const left = check.landmarks.getLeftEye();
+    const right = check.landmarks.getRightEye();
+    const leftCenter = { x: (left[0].x + left[3].x) / 2, y: (left[0].y + left[3].y) / 2 };
+    const rightCenter = { x: (right[0].x + right[3].x) / 2, y: (right[0].y + right[3].y) / 2 };
+    const eyeDist = Math.hypot(leftCenter.x - rightCenter.x, leftCenter.y - rightCenter.y);
+    const eyeRatio = eyeDist / check.detection.box.width;
+
+    if (eyeRatio < 0.25 || eyeRatio > 0.6) {
+      goodSinceRef.current = null;
+      setState("searching");
+      loopRef.current = requestAnimationFrame(runDetectionLoop as any);
+      return;
+    }
+
+    capture();
+  } catch {
+    goodSinceRef.current = null;
+    setState("searching");
+    loopRef.current = requestAnimationFrame(runDetectionLoop as any);
+  }
+}
 
   function capture() {
     if (!mountedRef.current) return;
