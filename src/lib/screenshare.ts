@@ -4,8 +4,7 @@
 // Import these in your API routes and components.
 // ============================================================
 
-import { prisma } from '@/lib/prisma'; // adjust to your prisma client path
-
+import prisma from '@/lib/prisma';
 // How long (ms) before a PENDING request auto-expires
 export const REQUEST_TIMEOUT_MS = 60_000; // 60 seconds
 
