@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/layout/ThemeProvider";
@@ -9,6 +9,7 @@ import UserAvatar from "@/components/UserAvatar";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import NotificationBell from "@/components/layout/NotificationBell";
+import { ScreenShareButton } from "@/components/screenshare/ScreenShareUI";
 
 type NavLink = {
   label: string;
@@ -52,6 +53,10 @@ const NAV_LINKS: Record<string, { icon: string; color: string }> = {
   "/audit-trail":      { icon: "🔍", color: "#f87171" },
   "/settings":         { icon: "⚙",  color: "#94a3b8" },
   "/vc9k2":            { icon: "⚡", color: "#fbbf24" },
+  "/performance":      { icon: "🏆", color: "#fbbf24" },
+  "/incentives":       { icon: "🎯", color: "#f472b6" },
+  "/hr-oversight":     { icon: "👁",  color: "#c084fc" },
+  "/admin/account-activation": { icon: "🔑", color: "#f472b6" },
 };
 
 function makeLink(label: string, href: string, extra?: Partial<NavLink>): NavLink {
@@ -82,6 +87,7 @@ function getNavItems(role: string): NavSection[] {
   const canSeeExams      = isHR || isAdmin || isExecutive || isStaff || isSupervisor || isDirector;
   const canSeeUsers      = isAdmin;
   const canSeeAudit      = isAdmin;
+  const canSeePerformance = !isIntern;
 
   if (isAdmin) {
     return [
@@ -89,7 +95,7 @@ function getNavItems(role: string): NavSection[] {
         section: "Core",
         links: [
           makeLink("Dashboard",      "/dashboard" ),
-          makeLink("Staff Logs",     "/staff-logs"),
+          makeLink("Staff Logs", "/supervisor"),          
           makeLink("Daily Work Log", "/daily-log" ),
           makeLink("Attendance",     "/check-in"  ),
           makeLink("ID Card",        "/id-card"   ),
@@ -118,6 +124,9 @@ function getNavItems(role: string): NavSection[] {
           makeLink("Communications",  "/announcements"  ),
           makeLink("Promotion Exams", "/exams"          ),
           makeLink("Staff Directory", "/staff-directory"),
+          makeLink("Performance", "/performance"),
+          makeLink("Incentives", "/incentives", { badge: "HR", badgeGreen: true }),
+          makeLink("HR Oversight", "/hr-oversight"),
         ],
       },
       {
@@ -128,6 +137,7 @@ function getNavItems(role: string): NavSection[] {
           makeLink("Audit Trail", "/audit-trail"),
           makeLink("Settings",    "/settings"   ),
           makeLink("EVC Suite",   "/vc9k2"      ),
+          makeLink("Account Activation", "/admin/account-activation", { badge: "Admin", badgeGreen: true }),
         ],
       },
     ];
@@ -171,6 +181,9 @@ function getNavItems(role: string): NavSection[] {
         makeLink("Communications",  "/announcements"  ),
         ...(canSeeExams   ? [makeLink("Promotion Exams", "/exams"          )] : []),
         ...(!isIntern     ? [makeLink("Staff Directory", "/staff-directory")] : []),
+        ...(canSeePerformance ? [makeLink("Performance", "/performance")] : []),
+        ...(canSeeAI ? [makeLink("Incentives", "/incentives", { badge: "HR", badgeGreen: true })] : []),
+        ...(canSeeAI ? [makeLink("HR Oversight", "/hr-oversight")] : []),
       ],
     },
     {
@@ -181,6 +194,7 @@ function getNavItems(role: string): NavSection[] {
         ...(canSeeAudit ? [makeLink("Audit Trail", "/audit-trail")] : []),
         makeLink("Settings", "/settings"),
         ...(isExecutive ? [makeLink("EVC Suite", "/vc9k2")] : []),
+        ...(canSeeUsers ? [makeLink("Account Activation", "/admin/account-activation", { badge: "Admin", badgeGreen: true })] : []),
       ],
     },
   ].filter((s) => s.links.length > 0);
@@ -200,7 +214,6 @@ const SECTION_COLORS: Record<string, string> = {
   System:       "#34d399",
 };
 
-// Persist collapsed sections in sessionStorage so they survive navigation
 const STORAGE_KEY = "sidebar_closed_sections";
 
 function loadClosedSections(): Set<string> {
@@ -232,18 +245,31 @@ export default function Sidebar() {
   );
   const [userIdRef,      setUserIdRef]      = useState<string>("");
   const [collapsed,      setCollapsed]      = useState(false);
-  const [expandedWidth, setExpandedWidth] = useState<number>(() => {
-  if (typeof window === "undefined") return 232;
-  try {
-    const raw = sessionStorage.getItem("sidebar_width");
-    return raw ? Number(raw) : 232;
-  } catch {
-    return 232;
-  }
-});
-const isResizing = useRef(false);
+  const [expandedWidth, setExpandedWidth] = useState<number>(232);
+  const [isClient, setIsClient] = useState(false);
+  const isResizing = useRef(false);
 
-  // Load from sessionStorage on mount so state persists across navigation
+  useEffect(() => {
+    setIsClient(true);
+    try {
+      const raw = sessionStorage.getItem("sidebar_width");
+      if (raw) {
+        const width = Number(raw);
+        if (width >= 180 && width <= 400) {
+          setExpandedWidth(width);
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (isClient) {
+      try {
+        sessionStorage.setItem("sidebar_width", String(expandedWidth));
+      } catch {}
+    }
+  }, [expandedWidth, isClient]);
+
   const [closedSections, setClosedSections] = useState<Set<string>>(() => loadClosedSections());
 
   useEffect(() => {
@@ -269,62 +295,60 @@ const isResizing = useRef(false);
       return next;
     });
   }, []);
+
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
-  if (collapsed) return;
-  e.preventDefault();
-  isResizing.current = true;
-  document.body.style.cursor = "col-resize";
-  document.body.style.userSelect = "none";
-}, [collapsed]);
+    if (collapsed) return;
+    e.preventDefault();
+    isResizing.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [collapsed]);
 
-useEffect(() => {
-  function handleMouseMove(e: MouseEvent) {
-    if (!isResizing.current) return;
-    const newWidth = Math.min(400, Math.max(180, e.clientX));
-    setExpandedWidth(newWidth);
-  }
-  function handleMouseUp() {
-    if (isResizing.current) {
-      isResizing.current = false;
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      setExpandedWidth((w) => {
-        try { sessionStorage.setItem("sidebar_width", String(w)); } catch {}
-        return w;
-      });
+  useEffect(() => {
+    function handleMouseMove(e: MouseEvent) {
+      if (!isResizing.current) return;
+      const newWidth = Math.min(400, Math.max(180, e.clientX));
+      setExpandedWidth(newWidth);
     }
-  }
-  window.addEventListener("mousemove", handleMouseMove);
-  window.addEventListener("mouseup", handleMouseUp);
-  return () => {
-    window.removeEventListener("mousemove", handleMouseMove);
-    window.removeEventListener("mouseup", handleMouseUp);
-  };
-}, []);
+    function handleMouseUp() {
+      if (isResizing.current) {
+        isResizing.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+    }
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
 
-  const navItems     = getNavItems(role);
+  const navItems = getNavItems(role);
   const sidebarWidth = collapsed ? 62 : expandedWidth;
 
   return (
     <>
-      <aside style={{
-        width: sidebarWidth,
-        flexShrink: 0,
-        display: "flex",
-        flexDirection: "column",
-        // ── KEY: fixed height + no overflow so sidebar never scrolls with page ──
-        height: "100vh",
-        position: "sticky",
-        top: 0,
-        background: "var(--bg-sidebar)",
-        borderRight: "0.5px solid var(--border)",
-        transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
-        overflow: "hidden",
-        zIndex: 40,
-      }}>
-
+      <aside
+        suppressHydrationWarning
+        style={{
+          width: sidebarWidth,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          position: "sticky",
+          top: 0,
+          background: "var(--bg-sidebar)",
+          borderRight: "0.5px solid var(--border)",
+          transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
+          overflow: "hidden",
+          zIndex: 40,
+        }}
+      >
         {/* ══════════════════════════════════════
-            SECTION 1 — LOGO (never shrinks)
+            SECTION 1 — LOGO
         ══════════════════════════════════════ */}
         <div style={{
           flexShrink: 0,
@@ -333,7 +357,6 @@ useEffect(() => {
           transition: "padding 0.22s",
         }}>
           {collapsed ? (
-            /* Collapsed: logo only at very top */
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <div style={{
                 width: 38, height: 38, borderRadius: "50%", background: "#fff",
@@ -345,7 +368,6 @@ useEffect(() => {
               </div>
             </div>
           ) : (
-            /* Expanded: full logo + name, exactly as before */
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{
                 width: 52, height: 52, borderRadius: "50%", flexShrink: 0,
@@ -365,14 +387,14 @@ useEffect(() => {
                 </div>
                 <div style={{ fontSize: 15, color: "var(--text-muted)", marginTop: 3, whiteSpace: "normal", lineHeight: 1.35 }}>
                   {AGENCY.tagline}
-                  </div>
+                </div>
               </div>
             </div>
           )}
         </div>
 
         {/* ══════════════════════════════════════
-            SECTION 2 — ICON STRIP (below logo)
+            SECTION 2 — ICON STRIP
         ══════════════════════════════════════ */}
         <div style={{
           flexShrink: 0,
@@ -381,9 +403,7 @@ useEffect(() => {
           transition: "padding 0.22s",
         }}>
           {collapsed ? (
-            /* Collapsed icon strip: collapse arrow + bell stacked */
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              {/* Expand arrow */}
               <button
                 onClick={() => setCollapsed(false)}
                 title="Expand sidebar"
@@ -404,7 +424,6 @@ useEffect(() => {
               <NotificationBell />
             </div>
           ) : (
-            /* Expanded icon strip: collapse | bell | chat | evc | comms | tasks */
             <div style={{
               display: "flex", alignItems: "center",
               justifyContent: "space-between",
@@ -413,9 +432,8 @@ useEffect(() => {
               background: "var(--bg-input)",
               border: "0.5px solid var(--border)",
               gap: 2,
-              overflow: "hidden", // prevents tasks icon from sticking out
+              overflow: "hidden",
             }}>
-              {/* Collapse button */}
               <button
                 onClick={() => setCollapsed(true)}
                 title="Collapse sidebar"
@@ -434,15 +452,12 @@ useEffect(() => {
                 ◀
               </button>
 
-              {/* Divider */}
               <div style={{ width: 1, height: 20, background: "var(--border)", flexShrink: 0, opacity: 0.5 }} />
 
-              {/* Bell */}
               <div style={{ flexShrink: 0 }}>
                 <NotificationBell />
               </div>
 
-              {/* Quick-action icons */}
               {TOP_ICONS.map((item) => {
                 const isActive = pathname === item.href;
                 return (
@@ -478,7 +493,7 @@ useEffect(() => {
         </div>
 
         {/* ══════════════════════════════════════
-            SECTION 3 — NAV (scrollable)
+            SECTION 3 — NAV
         ══════════════════════════════════════ */}
         <nav style={{
           flex: 1,
@@ -486,10 +501,8 @@ useEffect(() => {
           overflowX: "hidden",
           paddingTop: 4,
           paddingBottom: 8,
-          // inhouse scroll — only this region scrolls
         }}>
           {collapsed ? (
-            /* Icon-only when collapsed */
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, paddingTop: 4 }}>
               {navItems.flatMap((s) => s.links).map((link) => {
                 const isActive = pathname === link.href;
@@ -520,7 +533,6 @@ useEffect(() => {
               })}
             </div>
           ) : (
-            /* Full nav */
             navItems.map((section) => {
               const isClosed = closedSections.has(section.section);
               const sColor   = SECTION_COLORS[section.section] || "#94a3b8";
@@ -599,7 +611,7 @@ useEffect(() => {
         </nav>
 
         {/* ══════════════════════════════════════
-            SECTION 4 — FOOTER (never scrolls)
+            SECTION 4 — FOOTER (Screen Share + Logout)
         ══════════════════════════════════════ */}
         <div style={{
           flexShrink: 0,
@@ -634,6 +646,12 @@ useEffect(() => {
                   </div>
                 </div>
               </div>
+
+              {/* ── Screen Share Button (above Logout) ── */}
+              <div style={{ marginBottom: 6 }}>
+                <ScreenShareButton sidebarMode={true} />
+              </div>
+
               <button onClick={toggleTheme} style={{
                 display: "flex", alignItems: "center", gap: 9, width: "100%",
                 padding: "8px 12px", borderRadius: 9, marginBottom: 7,
@@ -644,6 +662,7 @@ useEffect(() => {
                 <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span>
                 {dark ? "Light mode" : "Dark mode"}
               </button>
+
               <LogoutButton />
             </>
           )}
@@ -672,6 +691,14 @@ useEffect(() => {
         aside nav::-webkit-scrollbar { width: 3px; }
         aside nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
         aside nav::-webkit-scrollbar-track { background: transparent; }
+        @keyframes ssRecordPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.85); }
+        }
+        @keyframes ssSpin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
       `}</style>
     </>
   );

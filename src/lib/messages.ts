@@ -1,8 +1,44 @@
 // src/lib/messages.ts
+// Centralized copy / message strings for the FCCPC system.
 //
-// One place for every success/error/status message the daily-log system
-// shows a user. Keeps tone consistent and means nobody has to invent
-// wording on the spot when adding a new action later.
+// This file now exports TWO things:
+//   - MSG: your existing flat export, untouched — kept in case anything
+//     else in the project already imports from it.
+//   - MESSAGES: the nested structure the six daily-log components
+//     (QuickCaptureLog, TimerLog, RepeatLog, BulkGridLog, ProxyLog,
+//     PendingAcknowledgments) actually import. This was missing entirely,
+//     which is what caused the build error.
+
+export const MSG = {
+  // Auth
+  NOT_AUTHENTICATED:   'You must be logged in to perform this action.',
+  FORBIDDEN:           'You do not have permission to perform this action.',
+
+  // Daily logs
+  LOG_SUBMITTED:       'Your daily log has been submitted successfully.',
+  LOG_UPDATED:         'Log updated successfully.',
+  LOG_NOT_FOUND:       'Log entry not found.',
+  LOG_ALREADY_ACK:     'This log has already been acknowledged.',
+
+  // Acknowledgments
+  ACK_CONFIRMED:       'Log confirmed successfully.',
+  ACK_DISPUTED:        'Log disputed. HR has been notified.',
+
+  // Tasks
+  TASK_CREATED:        'Task created and assigned successfully.',
+  TASK_NOT_FOUND:      'Task not found.',
+  TASK_BROADCAST_SENT: 'Broadcast directive sent to all department members.',
+
+  // Case transfer
+  TRANSFER_INITIATED:  'Case transfer request submitted.',
+  TRANSFER_ACCEPTED:   'Case transfer accepted.',
+  TRANSFER_REJECTED:   'Case transfer rejected.',
+
+  // General
+  SERVER_ERROR:        'An unexpected error occurred. Please try again.',
+  VALIDATION_ERROR:    'Please check your input and try again.',
+  SUCCESS:             'Operation completed successfully.',
+} as const;
 
 export const MESSAGES = {
   dailyLog: {

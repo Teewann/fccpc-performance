@@ -1,7 +1,4 @@
 // src/app/api/screenshare/signal/route.ts
-// Stores a WebRTC signal (offer/answer/ICE candidate) in the DB.
-// Both peers poll /api/screenshare/signal/poll to receive signals.
-
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -39,13 +36,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Session not found or not authorized" }, { status: 403 });
     }
 
+    // ✅ FIXED: Don't use nested connect - just use sessionId directly
     await prisma.screenShareSignal.create({
       data: {
-        sessionId,
+        id: `sig_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        sessionId: sessionId,
         fromUserId: currentUser.id,
-        toUserId,
-        type,
-        payload,
+        toUserId: toUserId,
+        type: type,
+        payload: payload,
         consumed: false,
       },
     });
@@ -53,7 +52,7 @@ export async function POST(request: NextRequest) {
     // Clean up old consumed signals (older than 5 minutes)
     await prisma.screenShareSignal.deleteMany({
       where: {
-        sessionId,
+        sessionId: sessionId,
         consumed: true,
         createdAt: { lt: new Date(Date.now() - 5 * 60 * 1000) },
       },

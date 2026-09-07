@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -94,6 +94,10 @@ export async function GET(request: NextRequest) {
     const isActive = searchParams.get("isActive") === "true";
     const departmentId = searchParams.get("deptId") || null;
     const directory = searchParams.get("directory") === "true";
+    const supervisedBy = searchParams.get("supervisedBy"); // ← NEW
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "100");
+    const skip = (page - 1) * limit;
 
     const where: any = {};
 
@@ -111,7 +115,9 @@ export async function GET(request: NextRequest) {
     if (departmentId) where.departmentId = departmentId;
 
     // Permission filtering
-    if (currentUser.role === "ADMIN" || currentUser.role === "EXECUTIVE") {
+    if (supervisedBy === "me") {
+      where.supervisorId = currentUser.id; // ← NEW
+    } else if (currentUser.role === "ADMIN" || currentUser.role === "EXECUTIVE") {
       // Admins and Executives see all
     } else if (currentUser.role === "DIRECTOR") {
       if (!currentUser.departmentId) {
@@ -122,19 +128,25 @@ export async function GET(request: NextRequest) {
       where.id = currentUser.id;
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true, name: true, email: true, role: true, jobTitle: true,
-        staffId: true, isActive: true, createdAt: true, phone: true,
-        userIdRef: true,
-        photo: true,
-        gradeLevel: true,   // ← ADDED
-        department: { select: { id: true, name: true, shortCode: true } },
-        unit: { select: { id: true, name: true } },
-      },
-      orderBy: { name: "asc" },
-    });
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true, name: true, email: true, role: true, jobTitle: true,
+          staffId: true, isActive: true, createdAt: true, phone: true,
+          userIdRef: true,
+          photo: true,
+          gradeLevel: true,
+          supervisorId: true,   // ← NEW
+          department: { select: { id: true, name: true, shortCode: true } },
+          unit: { select: { id: true, name: true } },
+        },
+        orderBy: { name: "asc" },
+        skip,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ]);
 
     const departments = await prisma.department.findMany({
       orderBy: { name: "asc" },
@@ -143,9 +155,7 @@ export async function GET(request: NextRequest) {
       orderBy: { name: "asc" },
     });
 
-    const total = users.length;
-
-    return NextResponse.json({ users, departments, units, total });
+    return NextResponse.json({ users, departments, units, total, page, pages: Math.ceil(total / limit) });
   } catch (error) {
     console.error("[Users GET]", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -164,7 +174,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const { name, email, password, role, staffId, departmentId, unitId, jobTitle, phone, gradeLevel } = body;
+    const { name, email, password, role, staffId, departmentId, unitId, jobTitle, phone, gradeLevel, supervisorId } = body;
 
     if (!name?.trim() || !email?.trim() || !password || !role) {
       return NextResponse.json({ error: "Name, email, password and role are required" }, { status: 400 });
@@ -193,6 +203,7 @@ export async function POST(request: NextRequest) {
         unitId:       unitId             || null,
         phone:        phone?.trim()      || null,
         gradeLevel:   gradeLevel?.trim() || null,
+        supervisorId: supervisorId || null, // ← NEW
         isActive:     true,
         userIdRef,
       },
@@ -225,7 +236,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await request.json();
-    const { userId, name, role, staffId, departmentId, unitId, jobTitle, phone, gradeLevel, newPassword, sendResetEmail } = body;
+    const { userId, name, role, staffId, departmentId, unitId, jobTitle, phone, gradeLevel, newPassword, sendResetEmail, supervisorId } = body;
 
     if (!userId) {
       return NextResponse.json({ error: "userId is required" }, { status: 400 });
@@ -246,6 +257,7 @@ export async function PATCH(request: NextRequest) {
     if (jobTitle !== undefined) updateData.jobTitle    = jobTitle?.trim() || null;
     if (phone !== undefined)   updateData.phone        = phone?.trim() || null;
     if (gradeLevel !== undefined) updateData.gradeLevel = gradeLevel?.trim() || null;
+    if (supervisorId !== undefined) updateData.supervisorId = supervisorId || null; // ← NEW
 
     if (newPassword) {
       if (newPassword.length < 8) {

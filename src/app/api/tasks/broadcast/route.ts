@@ -1,4 +1,4 @@
-// src/app/api/tasks/broadcast/route.ts
+﻿// src/app/api/tasks/broadcast/route.ts
 //
 // A Director/HOD creates ONE directive for the whole department. This
 // spawns one real Task per active staff member in that department, each

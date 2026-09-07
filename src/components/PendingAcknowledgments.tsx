@@ -1,130 +1,60 @@
+'use client';
 // src/components/PendingAcknowledgments.tsx
-//
-// Drop this into the sidebar of daily-log/page.tsx (next to "Today's
-// submitted logs"). Only fetches when mounted, only returns what's
-// relevant to this specific user — no system-wide query.
+import React, { useEffect, useState } from 'react';
 
-"use client";
-
-import { useState, useEffect } from "react";
-import { useToast } from "@/components/ui/ToastProvider";
-import { MESSAGES } from "@/lib/messages";
-
-type ProxyItem = {
-  id: string;
-  taskTitle: string;
-  description: string;
-  timeSpent: number;
-  createdAt: string;
-  proxyLoggedBy: { name: string } | null;
-};
-
-type CrossDeptItem = {
-  id: string;
-  taskTitle: string;
-  description: string;
-  crossDeptFlag: string | null;
-  createdAt: string;
-  user: { name: string };
-};
+interface Log { id: string; description: string; createdAt: string; user: { name: string | null; email: string }; }
 
 export default function PendingAcknowledgments() {
-  const [proxyPending, setProxyPending] = useState<ProxyItem[]>([]);
-  const [crossDeptPending, setCrossDeptPending] = useState<CrossDeptItem[]>([]);
+  const [logs, setLogs]     = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actingOn, setActingOn] = useState<string | null>(null);
-  const { showToast } = useToast();
 
-  async function load() {
-    setLoading(true);
+  const fetchPending = async () => {
     try {
-      const res = await fetch("/api/daily-logs/pending-actions");
+      const res = await fetch('/api/daily-logs/pending-actions');
       const data = await res.json();
-      setProxyPending(data.proxyPending || []);
-      setCrossDeptPending(data.crossDeptPending || []);
-    } finally {
-      setLoading(false);
-    }
-  }
+      setLogs(data.pending || []);
+    } catch {} finally { setLoading(false); }
+  };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { fetchPending(); }, []);
 
-  async function act(id: string, action: "CONFIRM" | "DISPUTE") {
-    setActingOn(id);
-    try {
-      const res = await fetch(`/api/daily-logs/${id}/acknowledge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast(action === "CONFIRM" ? MESSAGES.acknowledge.confirmed : MESSAGES.acknowledge.disputed);
-        load();
-      } else {
-        showToast(data.error || MESSAGES.generic.serverError, false);
-      }
-    } catch {
-      showToast(MESSAGES.generic.networkError, false);
-    } finally {
-      setActingOn(null);
-    }
-  }
+  const respond = async (logId: string, action: 'CONFIRM' | 'DISPUTE') => {
+    const note = action === 'DISPUTE' ? prompt('Reason for dispute (optional):') : undefined;
+    await fetch(`/api/daily-logs/${logId}/acknowledge`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, note }),
+    });
+    fetchPending();
+  };
 
-  const total = proxyPending.length + crossDeptPending.length;
-  if (!loading && total === 0) return null; // nothing waiting — don't clutter the page
+  if (loading) return null;
+  if (logs.length === 0) return null;
 
   return (
-    <div className="card-bg" style={{ borderRadius: 14, padding: 20 }}>
-      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14, paddingBottom: 10, borderBottom: "0.5px solid var(--border-soft)" }}>
-        Needs your confirmation {total > 0 && `(${total})`}
+    <div style={{ marginBottom: 24, padding: 16, borderRadius: 12, border: '1px solid rgba(234,179,8,0.2)', background: 'rgba(234,179,8,0.04)' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#a16207', marginBottom: 12 }}>
+        ⏳ {logs.length} Log{logs.length > 1 ? 's' : ''} Pending Your Review
       </div>
-
-      {loading ? (
-        <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", padding: 16 }}>Checking…</div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {proxyPending.map((item) => (
-            <div key={item.id} style={{ padding: "12px 14px", background: "var(--bg-input)", border: "0.5px solid var(--border)", borderRadius: 10 }}>
-              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 4 }}>
-                {item.proxyLoggedBy?.name || "Someone"} logged this on your behalf:
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>{item.taskTitle}</div>
-              <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10 }}>{item.description}</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => act(item.id, "CONFIRM")} disabled={actingOn === item.id}
-                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "0.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  ✓ Confirm
-                </button>
-                <button onClick={() => act(item.id, "DISPUTE")} disabled={actingOn === item.id}
-                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "0.5px solid #7f1d1d", background: "#1f0707", color: "#f87171", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  ✕ Dispute
-                </button>
-              </div>
+      {logs.map(log => (
+        <div key={log.id} style={{ padding: '12px 14px', borderRadius: 8, background: 'var(--bg-card)', border: '1px solid var(--border)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 500 }}>{log.description}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              {log.user.name || log.user.email} · {new Date(log.createdAt).toLocaleDateString()}
             </div>
-          ))}
-
-          {crossDeptPending.map((item) => (
-            <div key={item.id} style={{ padding: "12px 14px", background: "var(--bg-input)", border: "0.5px solid var(--border)", borderRadius: 10 }}>
-              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 4 }}>
-                {item.user.name} says they did this involving your department:
-              </div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", marginBottom: 8 }}>{item.taskTitle}</div>
-              <div style={{ fontSize: 13, color: "var(--text-secondary)", marginBottom: 10 }}>{item.description}</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={() => act(item.id, "CONFIRM")} disabled={actingOn === item.id}
-                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "0.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  ✓ Confirm
-                </button>
-                <button onClick={() => act(item.id, "DISPUTE")} disabled={actingOn === item.id}
-                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "0.5px solid #7f1d1d", background: "#1f0707", color: "#f87171", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                  ✕ Dispute
-                </button>
-              </div>
-            </div>
-          ))}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => respond(log.id, 'CONFIRM')}
+              style={{ padding: '6px 14px', borderRadius: 6, border: 'none', background: '#22c55e', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              ✓ Confirm
+            </button>
+            <button onClick={() => respond(log.id, 'DISPUTE')}
+              style={{ padding: '6px 14px', borderRadius: 6, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.1)', color: '#f87171', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              ✗ Dispute
+            </button>
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

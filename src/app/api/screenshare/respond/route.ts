@@ -1,4 +1,5 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+﻿// src/app/api/screenshare/respond/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
@@ -42,13 +43,14 @@ export async function POST(request: NextRequest) {
       where: { id: sessionId },
       data: {
         status,
+        updatedAt: new Date(),
         ...(action === "ACCEPT" ? { startedAt: new Date() } : { endedAt: new Date() }),
       },
       include: {
-        requester: {
+        User_ScreenShareSession_requesterIdToUser: {
           select: { id: true, name: true, email: true, role: true },
         },
-        target: {
+        User_ScreenShareSession_targetIdToUser: {
           select: { id: true, name: true, email: true, role: true },
         },
       },
@@ -56,8 +58,8 @@ export async function POST(request: NextRequest) {
 
     const normalised = {
       ...updated,
-      requester: { ...updated.requester, image: null },
-      target:    { ...updated.target,    image: null },
+      requester: { ...updated.User_ScreenShareSession_requesterIdToUser, image: null },
+      target: { ...updated.User_ScreenShareSession_targetIdToUser, image: null },
     };
 
     return NextResponse.json({ session: normalised });

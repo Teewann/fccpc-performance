@@ -5,8 +5,7 @@
 //   <ScreenShareRequestModal> — password + user picker
 //   <ScreenShareIncomingModal>— accept/reject notification
 //   <ScreenShareActiveBadge>  — "being viewed" banner
-//   <ScreenShareViewerPanel>  — live view overlay
-//   <ScreenShareOrchestrator> — mounts all of the above (add to layout)
+//   <ScreenShareOrchestrator> — mounts all modals (add to layout)
 // ─────────────────────────────────────────────────────────────
 
 'use client';
@@ -18,45 +17,82 @@ import { useScreenShare, UserSummary } from '@/components/screenshare/ScreenShar
 // 1. TRIGGER BUTTON
 // ─────────────────────────────────────────────────────────────
 
-export function ScreenShareButton({ compact = false }: { compact?: boolean }) {
-  const { mySession, iAmTarget, isActive, setShowRequestModal, endSession, setShowViewerPanel, showViewerPanel } = useScreenShare();
+export function ScreenShareButton({ compact = false, sidebarMode = false }: { compact?: boolean; sidebarMode?: boolean }) {
+  const {
+    mySession, iAmTarget, isActive, setShowRequestModal,
+    endSession, setShowViewerPanel, showViewerPanel, activatePolling,
+  } = useScreenShare();
 
-  // If currently being viewed as target → show "Stop Sharing" button
+  // sidebarMode: styled like sign out button but with green accent
+  const sidebarBase: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+    padding: '8px 12px',
+    borderRadius: 9,
+    background: 'rgba(34, 197, 94, 0.08)',
+    border: '1.5px solid rgba(34, 197, 94, 0.25)',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 500,
+    color: '#4ade80',
+    transition: 'background 0.15s, color 0.15s, border 0.15s',
+    textAlign: 'left' as const,
+  };
+
+  // Stop sharing (I am the target being watched)
   if (iAmTarget && isActive) {
     return (
       <button
         onClick={endSession}
-        style={styles.btnDanger}
+        style={sidebarMode ? { ...sidebarBase, color: '#f87171', border: '1.5px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.08)' } : styles.btnDanger}
         title="Stop sharing your screen"
       >
-        <RecordDot /> {compact ? '' : 'Stop Sharing'}
+        <RecordDot />
+        {!compact && ' Stop Sharing'}
       </button>
     );
   }
 
-  // If I'm the viewer → toggle panel button
+  // I am the viewer — show the WebRTC viewer toggle
   if (mySession && !iAmTarget) {
     return (
       <button
         onClick={() => setShowViewerPanel(!showViewerPanel)}
-        style={{ ...styles.btnActive, ...(showViewerPanel ? styles.btnActiveOn : {}) }}
-        title="Toggle live view panel"
+        style={sidebarMode ? { ...sidebarBase, color: '#60a5fa', border: '1.5px solid rgba(59,130,246,0.3)', background: 'rgba(59,130,246,0.08)' } : { ...styles.btnActive, ...(showViewerPanel ? styles.btnActiveOn : {}) }}
+        title="Toggle live view"
       >
         <EyeIcon />
-        {compact ? '' : (showViewerPanel ? ' Hide View' : ' Show View')}
+        {!compact && (showViewerPanel ? ' Hide View' : ' View Screen')}
       </button>
     );
   }
 
-  // Default: open the request modal
+  // Default — open request modal
+  const handleClick = () => {
+    activatePolling();
+    setShowRequestModal(true);
+  };
+
   return (
     <button
-      onClick={() => setShowRequestModal(true)}
-      style={styles.btnDefault}
-      title="Request screen share with another user"
+      onClick={handleClick}
+      style={sidebarMode ? sidebarBase : styles.btnDefault}
+      title="Share your screen with another user"
+      onMouseEnter={sidebarMode ? (e) => {
+        e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
+        e.currentTarget.style.border = '1.5px solid rgba(34, 197, 94, 0.4)';
+        e.currentTarget.style.color = '#4ade80';
+      } : undefined}
+      onMouseLeave={sidebarMode ? (e) => {
+        e.currentTarget.style.background = 'rgba(34, 197, 94, 0.08)';
+        e.currentTarget.style.border = '1.5px solid rgba(34, 197, 94, 0.25)';
+        e.currentTarget.style.color = '#4ade80';
+      } : undefined}
     >
       <ScreenIcon />
-      {compact ? '' : ' Share Screen'}
+      {!compact && ' Share Screen'}
     </button>
   );
 }
@@ -327,126 +363,16 @@ export function ScreenShareActiveBadge() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 5. VIEWER PANEL (the live view)
-// ─────────────────────────────────────────────────────────────
-
-export function ScreenShareViewerPanel() {
-  const {
-    showViewerPanel, mySession, liveHeartbeat,
-    isStale, secondsSinceLastBeat, iAmViewer, isActive,
-    endSession, setShowViewerPanel,
-  } = useScreenShare();
-
-  if (!showViewerPanel || !iAmViewer || !mySession) return null;
-
-  const target = mySession.target;
-  const hb     = liveHeartbeat;
-
-  return (
-    <div style={styles.panel}>
-      {/* Panel Header */}
-      <div style={styles.panelHeader}>
-        <div style={styles.panelHeaderLeft}>
-          <EyeIcon />
-          <div>
-            <div style={styles.panelTitle}>
-              Live View — {target.name || target.email}
-            </div>
-            <div style={styles.panelSub}>{target.role} · {target.email}</div>
-          </div>
-        </div>
-        <div style={styles.panelHeaderRight}>
-          {isStale ? (
-            <span style={styles.statusStale}>⚠ Connection lost</span>
-          ) : isActive ? (
-            <span style={styles.statusLive}><RecordDot /> Live</span>
-          ) : (
-            <span style={styles.statusWaiting}>⏳ Waiting for target…</span>
-          )}
-          <button style={styles.panelMinimize} onClick={() => setShowViewerPanel(false)} title="Minimize">−</button>
-          <button style={styles.panelClose} onClick={endSession} title="End session">✕ End</button>
-        </div>
-      </div>
-
-      {/* Main content */}
-      {!isActive ? (
-        <div style={styles.panelWaiting}>
-          <div style={styles.waitingSpinner} />
-          <p>Waiting for {target.name || target.email} to accept…</p>
-          <button style={styles.btnSecondary} onClick={endSession}>Cancel Request</button>
-        </div>
-      ) : !hb ? (
-        <div style={styles.panelWaiting}>
-          <div style={styles.waitingSpinner} />
-          <p>Connecting to {target.name || target.email}'s session…</p>
-        </div>
-      ) : (
-        <div style={styles.panelContent}>
-          {/* Connection health */}
-          {secondsSinceLastBeat !== null && (
-            <div style={styles.healthBar}>
-              <span style={isStale ? styles.healthStale : styles.healthOk}>
-                {isStale ? `⚠ Last update ${secondsSinceLastBeat}s ago` : `✓ Updated ${secondsSinceLastBeat}s ago`}
-              </span>
-            </div>
-          )}
-
-          {/* Current Page */}
-          <Section title="📄 Current Page">
-            <DataRow label="URL"   value={hb.currentUrl} mono />
-            <DataRow label="Title" value={hb.pageTitle}  />
-            <DataRow label="Scroll" value={`${hb.scrollY}px from top`} />
-          </Section>
-
-          {/* Last Click */}
-          {hb.clickEvent && (
-            <Section title="🖱 Last Click">
-              <DataRow label="Element"  value={hb.clickEvent.selector} mono />
-              <DataRow label="Text"     value={hb.clickEvent.text || '(no text)'} />
-              <DataRow label="Position" value={`${hb.clickEvent.x}% × ${hb.clickEvent.y}% of viewport`} />
-              <DataRow label="When"     value={timeAgo(hb.clickEvent.timestamp)} />
-            </Section>
-          )}
-
-          {/* Last Action */}
-          {hb.actionEvent && (
-            <Section title="⚡ Last Action">
-              <DataRow label="Type"   value={hb.actionEvent.type.replace('_', ' ')} />
-              <DataRow label="Detail" value={hb.actionEvent.detail} />
-              <DataRow label="When"   value={timeAgo(hb.actionEvent.timestamp)} />
-            </Section>
-          )}
-
-          {/* Input Activity */}
-          {hb.inputEvent && (
-            <Section title="⌨ Typing Activity">
-              <DataRow label="Field" value={hb.inputEvent.field} />
-              <DataRow label="Value" value={hb.inputEvent.maskedValue} mono />
-              <DataRow label="When"  value={timeAgo(hb.inputEvent.timestamp)} />
-            </Section>
-          )}
-
-          {/* Last heartbeat timestamp */}
-          <div style={styles.panelTimestamp}>
-            Last heartbeat: {new Date(hb.timestamp).toLocaleTimeString()}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// 6. ORCHESTRATOR — add ONE of these to your root layout
+// 5. ORCHESTRATOR — mounts ALL modals
 // ─────────────────────────────────────────────────────────────
 
 export function ScreenShareOrchestrator() {
   return (
     <>
       <ScreenShareRequestModal />
-      {/* ScreenShareIncomingModal removed — WebRTC version handles this */}
-      {/* ScreenShareActiveBadge removed — WebRTC target badge handles this */}
-      {/* ScreenShareViewerPanel removed — WebRTC viewer handles this */}
+      <ScreenShareIncomingModal />
+      <ScreenShareActiveBadge />
+      {/* ❌ ScreenShareViewerPanel REMOVED - WebRTC handles the view now */}
     </>
   );
 }
@@ -546,22 +472,11 @@ function getRoleBadgeStyle(role: string) {
 const styles: Record<string, React.CSSProperties> = {
   // Buttons
   btnDefault: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    width: '100%',
-    padding: '8px 12px',
-    borderRadius: 8,
-    border: '1px solid rgba(34,197,94,0.25)',
-    background: 'rgba(34,197,94,0.08)',
-    color: '#4ade80',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    whiteSpace: 'nowrap',
-    boxSizing: 'border-box',
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.25)',
+    background: 'rgba(34,197,94,0.08)', color: '#4ade80',
+    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    transition: 'all 0.2s', whiteSpace: 'nowrap',
   },
   btnActive: {
     display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -748,7 +663,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginLeft: 6,
   },
 
-  // Viewer panel
+  // Panel styles (kept for potential future use, but not used)
   panel: {
     position: 'fixed', bottom: 24, right: 24,
     width: 360, maxHeight: '80vh',
@@ -821,6 +736,24 @@ const styles: Record<string, React.CSSProperties> = {
   dataLabel: { fontSize: 11, color: '#475569', width: 60, flexShrink: 0, paddingTop: 1 },
   dataValue: { fontSize: 12, color: '#94a3b8', flex: 1, wordBreak: 'break-all' },
   mono:      { fontFamily: 'monospace', fontSize: 11, color: '#4ade80' },
-
   panelTimestamp: { fontSize: 10, color: '#334155', textAlign: 'center', paddingTop: 4 },
 };
+
+// ─────────────────────────────────────────────────────────────
+// CSS Animations (injected via style tag)
+// ─────────────────────────────────────────────────────────────
+
+if (typeof document !== 'undefined') {
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    @keyframes ssRecordPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+    @keyframes ssSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  `;
+  document.head.appendChild(styleEl);
+}

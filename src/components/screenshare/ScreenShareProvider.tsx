@@ -1,14 +1,11 @@
-// components/screenshare/ScreenShareProvider.tsx
-// ─────────────────────────────────────────────────────────────
-// Wrap your root layout with this provider.
-// It runs three background jobs:
-//   1. Polls /api/screenshare/pending — "do I have an incoming request?"
-//   2. Polls /api/screenshare/poll   — "what is the target doing?" (viewer)
-//   3. Sends heartbeats              — "here's what I'm doing" (target)
-// All UI state for the feature lives here.
-// ─────────────────────────────────────────────────────────────
-
 'use client';
+// src/components/screenshare/ScreenShareProvider.tsx
+//
+// KEY BEHAVIOUR CHANGE:
+// - Background polling ALWAYS runs (every 15s) for ALL logged-in users
+// - This allows receivers to get incoming requests without clicking anything
+// - Fast polling (2s) only when session is active or button was clicked
+// - No more "click to start polling" requirement for receivers
 
 import React, {
   createContext, useContext, useState, useEffect,
@@ -17,57 +14,43 @@ import React, {
 import { useSession } from 'next-auth/react';
 import { useScreenShareBroadcast } from '@/hooks/useScreenShareBroadcast';
 
-// ─── Types ────────────────────────────────────────────────────
+// Polling intervals
+const IDLE_POLL_MS   = 15_000; // Background check every 15s - catches incoming requests cheaply
+const ACTIVE_POLL_MS = 2_000;  // When session active — fast poll
 
 export interface UserSummary {
   id: string; name: string | null; email: string; role: string; image?: string | null;
 }
 
 export interface LiveSession {
-  id: string;
-  requesterId: string;
-  targetId: string;
-  status: string;
-  startedAt: string | null;
-  createdAt: string;
-  requester: UserSummary;
-  target: UserSummary;
+  id: string; requesterId: string; targetId: string; status: string;
+  startedAt: string | null; createdAt: string;
+  requester: UserSummary; target: UserSummary;
 }
 
 export interface LiveHeartbeat {
-  currentUrl: string;
-  pageTitle: string;
-  clickEvent: { x: number; y: number; selector: string; text: string; timestamp: number } | null;
-  actionEvent: { type: string; detail: string; timestamp: number } | null;
-  inputEvent: { field: string; maskedValue: string; timestamp: number } | null;
-  scrollY: number;
-  timestamp: string;
+  currentUrl: string; pageTitle: string;
+  scrollY: number; timestamp: string;
 }
 
 interface ScreenShareContextValue {
-  // State
-  mySession:       LiveSession | null;   // any session I'm part of
-  incomingRequest: LiveSession | null;   // someone wants to view me (PENDING)
-  liveHeartbeat:   LiveHeartbeat | null; // latest data from target (when I'm viewer)
-  isStale:         boolean;              // connection timed out?
+  mySession:            LiveSession | null;
+  incomingRequest:      LiveSession | null;
+  liveHeartbeat:        LiveHeartbeat | null;
+  isStale:              boolean;
   secondsSinceLastBeat: number | null;
-
-  // Role flags
-  iAmViewer:   boolean; // I initiated the session (requester)
-  iAmTarget:   boolean; // I am being watched (target)
-  isActive:    boolean; // session status === 'ACTIVE'
-
-  // Actions
-  requestSession: (targetUserId: string) => Promise<void>;
-  respondToRequest: (sessionId: string, action: 'ACCEPT' | 'REJECT') => Promise<void>;
-  endSession: () => Promise<void>;
-  verifyPassword: (password: string) => Promise<boolean>;
-
-  // UI open/close
-  showRequestModal:  boolean;
-  setShowRequestModal: (v: boolean) => void;
-  showViewerPanel:   boolean;
-  setShowViewerPanel: (v: boolean) => void;
+  iAmViewer:            boolean;
+  iAmTarget:            boolean;
+  isActive:             boolean;
+  requestSession:       (targetUserId: string) => Promise<void>;
+  respondToRequest:     (sessionId: string, action: 'ACCEPT' | 'REJECT') => Promise<void>;
+  endSession:           () => Promise<void>;
+  verifyPassword:       (password: string) => Promise<boolean>;
+  showRequestModal:     boolean;
+  setShowRequestModal:  (v: boolean) => void;
+  showViewerPanel:      boolean;
+  setShowViewerPanel:   (v: boolean) => void;
+  activatePolling:      () => void;
 }
 
 const ScreenShareContext = createContext<ScreenShareContextValue | null>(null);
@@ -78,11 +61,10 @@ export function useScreenShare() {
   return ctx;
 }
 
-// ─── Provider ─────────────────────────────────────────────────
-
 export function ScreenShareProvider({ children }: { children: ReactNode }) {
   const { data: authSession, status } = useSession();
-  const myId = (authSession?.user as any)?.id || null;
+  const myId = (authSession?.user as any)?.id as string | undefined;
+
   const [mySession,            setMySession]            = useState<LiveSession | null>(null);
   const [incomingRequest,      setIncomingRequest]      = useState<LiveSession | null>(null);
   const [liveHeartbeat,        setLiveHeartbeat]        = useState<LiveHeartbeat | null>(null);
@@ -90,124 +72,129 @@ export function ScreenShareProvider({ children }: { children: ReactNode }) {
   const [secondsSinceLastBeat, setSecondsSinceLastBeat] = useState<number | null>(null);
   const [showRequestModal,     setShowRequestModal]     = useState(false);
   const [showViewerPanel,      setShowViewerPanel]      = useState(false);
+  const [pollingEnabled,       setPollingEnabled]       = useState(false);
+
+  const pendingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollIntervalRef    = useRef<NodeJS.Timeout | null>(null);
+  const mySessionRef       = useRef<LiveSession | null>(null);
+
+  // Keep ref in sync so callbacks always have fresh session state
+  useEffect(() => { mySessionRef.current = mySession; }, [mySession]);
 
   const iAmViewer = !!mySession && mySession.requesterId === myId;
   const iAmTarget = !!mySession && mySession.targetId    === myId;
   const isActive  = mySession?.status === 'ACTIVE';
 
-  // ── Broadcast (target sends heartbeats) ──────────────────────
+  // Broadcast heartbeats only when I am the target of an active session
   useScreenShareBroadcast({ active: iAmTarget && isActive });
 
-  // ── Poll: incoming requests (runs for all users) ─────────────
+  // ── activatePolling — called when Share Screen button is clicked ──
+  const activatePolling = useCallback(() => {
+    setPollingEnabled(true);
+  }, []);
+
+  // ── Poll for incoming requests (target side) ──────────────────
   const pollPending = useCallback(async () => {
     if (!myId) return;
     try {
       const res  = await fetch('/api/screenshare/pending');
       const data = await res.json();
-      if (!res.ok) return;
-
       if (data.incoming) {
         if (data.incoming.status === 'PENDING') {
           setIncomingRequest(data.incoming as LiveSession);
           setMySession(data.incoming as LiveSession);
+          // Auto-activate polling when we receive an incoming request
+          setPollingEnabled(true);
         } else if (data.incoming.status === 'ACTIVE') {
           setMySession(data.incoming as LiveSession);
           setIncomingRequest(null);
         } else {
           setIncomingRequest(null);
-          if (mySession?.targetId === myId) setMySession(null);
+          const cur = mySessionRef.current;
+          if (cur?.targetId === myId) setMySession(null);
         }
       } else {
         setIncomingRequest(null);
-        if (iAmTarget) setMySession(null);
+        const cur = mySessionRef.current;
+        if (cur?.targetId === myId) setMySession(null);
       }
-    } catch {
-      // Network hiccup — ignore
-    }
-  }, [myId, mySession, iAmTarget]);
+    } catch {}
+  }, [myId]);
 
-  // ── Poll: viewer reads target's heartbeat ────────────────────
+  // ── Poll for viewer heartbeat (requester/viewer side) ─────────
   const pollViewer = useCallback(async () => {
     if (!myId || !iAmViewer) return;
     try {
       const res  = await fetch('/api/screenshare/poll');
       const data = await res.json();
-
       if (!data.session) {
-        setMySession(null);
-        setLiveHeartbeat(null);
-        setShowViewerPanel(false);
-        return;
+        setMySession(null); setLiveHeartbeat(null); setShowViewerPanel(false); return;
       }
-
       setMySession(data.session as LiveSession);
-
-      if (data.session.status !== 'ACTIVE') {
-        setLiveHeartbeat(null);
-        return;
-      }
-
-      setShowViewerPanel(true);
-
+      if (data.session.status !== 'ACTIVE') { setLiveHeartbeat(null); return; }
+      // Only show viewer panel if there's a heartbeat
       if (data.heartbeat) {
         setLiveHeartbeat(data.heartbeat as LiveHeartbeat);
+        setShowViewerPanel(true);
       }
       setIsStale(data.stale ?? false);
       setSecondsSinceLastBeat(data.secondsSinceLastBeat ?? null);
-    } catch {
-      // Ignore
-    }
+    } catch {}
   }, [myId, iAmViewer]);
 
-  // ── Start/stop polling (FIXED: No more setInterval! No more click spam!) ─────────
+  // ── Polling logic — ALWAYS RUNS (two-tier approach) ───────────────
   useEffect(() => {
     if (status !== 'authenticated' || !myId) return;
 
-    // Only run when the component mounts
+    // Clear any existing interval
+    if (pendingIntervalRef.current) clearInterval(pendingIntervalRef.current);
+
+    const hasActiveSession = !!mySession;
+
+    // ✅ ALWAYS poll — just at different speeds
+    // - IDLE: 15s background check (so receivers can get incoming requests)
+    // - ACTIVE: 2s fast poll (when session exists or button clicked)
+    const interval = hasActiveSession || pollingEnabled ? ACTIVE_POLL_MS : IDLE_POLL_MS;
+
+    // Poll immediately then set interval
     pollPending();
-
-    // Only refresh when the user comes back to the tab (prevents server spam)
-    const handleFocus = () => pollPending();
-
-    window.addEventListener('focus', handleFocus);
+    pendingIntervalRef.current = setInterval(pollPending, interval);
 
     return () => {
-      window.removeEventListener('focus', handleFocus);
+      if (pendingIntervalRef.current) clearInterval(pendingIntervalRef.current);
     };
-  }, [status, myId, pollPending]);
+  }, [status, myId, pollingEnabled, mySession, pollPending]);
 
-  // Check if I am a viewer, and only then poll. 30 seconds is enough
+  // ── Viewer poll — only when I am the viewer ───────────────────
   useEffect(() => {
-    if (!iAmViewer) {
-      return;
-    }
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (!iAmViewer) return;
 
     pollViewer();
-
-    // Only poll viewer every 30 seconds OR on specific clicks
-    const interval = setInterval(pollViewer, 30000); // 30 seconds
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    pollIntervalRef.current = setInterval(pollViewer, ACTIVE_POLL_MS);
+    return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
   }, [iAmViewer, pollViewer]);
 
-  // ── Actions ───────────────────────────────────────────────────
+  // ── Reset to idle polling when session ends ──────────────────
+  useEffect(() => {
+    if (!mySession && !incomingRequest && pollingEnabled) {
+      const t = setTimeout(() => setPollingEnabled(false), 3_000);
+      return () => clearTimeout(t);
+    }
+  }, [mySession, incomingRequest, pollingEnabled]);
 
+  // ── Actions ───────────────────────────────────────────────────
   const verifyPassword = useCallback(async (password: string): Promise<boolean> => {
-    const res  = await fetch('/api/screenshare/verify-password', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch('/api/screenshare/verify-password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password }),
     });
-    const data = await res.json();
-    return data.verified === true;
+    return (await res.json()).verified === true;
   }, []);
 
   const requestSession = useCallback(async (targetUserId: string) => {
-    const res  = await fetch('/api/screenshare/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch('/api/screenshare/request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetUserId }),
     });
     const data = await res.json();
@@ -217,37 +204,25 @@ export function ScreenShareProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const respondToRequest = useCallback(async (sessionId: string, action: 'ACCEPT' | 'REJECT') => {
-    const res  = await fetch('/api/screenshare/respond', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch('/api/screenshare/respond', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId, action }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Failed to respond');
-
-    if (action === 'REJECT') {
-      setIncomingRequest(null);
-      setMySession(null);
-    } else {
-      setMySession(data.session as LiveSession);
-      setIncomingRequest(null);
-    }
+    if (action === 'REJECT') { setIncomingRequest(null); setMySession(null); }
+    else { setMySession(data.session as LiveSession); setIncomingRequest(null); }
   }, []);
 
   const endSession = useCallback(async () => {
-    if (!mySession) return;
+    if (!mySessionRef.current) return;
     await fetch('/api/screenshare/end', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionId: mySession.id }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: mySessionRef.current.id }),
     });
-    setMySession(null);
-    setIncomingRequest(null);
-    setLiveHeartbeat(null);
-    setShowViewerPanel(false);
-  }, [mySession]);
-
-  // ─── Context value ────────────────────────────────────────────
+    setMySession(null); setIncomingRequest(null);
+    setLiveHeartbeat(null); setShowViewerPanel(false);
+  }, []);
 
   const value: ScreenShareContextValue = {
     mySession, incomingRequest, liveHeartbeat, isStale, secondsSinceLastBeat,
@@ -255,6 +230,7 @@ export function ScreenShareProvider({ children }: { children: ReactNode }) {
     requestSession, respondToRequest, endSession, verifyPassword,
     showRequestModal, setShowRequestModal,
     showViewerPanel,  setShowViewerPanel,
+    activatePolling,
   };
 
   return (

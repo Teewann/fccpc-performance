@@ -66,7 +66,7 @@ export default function PerformancePage() {
         </div>
 
         <div style={{ background: "var(--accent-bg)", border: "0.5px solid var(--accent-border)", borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 13, color: "var(--accent-text)", lineHeight: 1.5 }}>
-          This ranks logged work weighted by supervisor scores, not raw volume ; quantity alone doesn't move you up.
+          This ranks logged work weighted by supervisor scores, not raw volume — quantity alone doesn't move you up.
           Disputed entries are excluded. Top performers here are a signal for recognition, not an automatic decision.
         </div>
 

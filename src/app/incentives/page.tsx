@@ -121,7 +121,7 @@ export default function IncentivesPage() {
         </div>
 
         <div style={{ background: "var(--accent-bg)", border: "0.5px solid var(--accent-border)", borderRadius: 10, padding: "12px 16px", marginBottom: 24, fontSize: 13, color: "var(--accent-text)", lineHeight: 1.5 }}>
-          These are recommendations for recognition, not automatic rewards ; reward and incentive decisions remain
+          These are recommendations for recognition, not automatic rewards — reward and incentive decisions remain
           a human, policy-driven process. Disputed log entries are excluded, and rankings are quality-weighted, not
           just volume, matching the same rules as the staff leaderboard.
         </div>

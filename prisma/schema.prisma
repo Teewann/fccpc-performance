@@ -42,6 +42,7 @@ model User {
   checkIns                                                CheckIn[]
   consentRecords                                          ConsentRecord[]
   DailyLog_DailyLog_proxyLoggedByIdToUser                 DailyLog[]                @relation("DailyLog_proxyLoggedByIdToUser")
+  hrResolvedLogs DailyLog[] @relation("HRResolvedLogs")
   supervisedLogs                                          DailyLog[]                @relation("SupervisorLogs")
   dailyLogs                                               DailyLog[]
   evcAnnotations                                          EVCAnnotation[]           @relation("EVCAnnotations")
@@ -145,6 +146,10 @@ model DailyLog {
   loggedByProxy                       Boolean   @default(false)
   proxyLoggedById                     String?
   taskId                              String?
+  hrResolutionNote String?
+  hrResolvedAt     DateTime?
+  hrResolvedById   String?
+  hrResolvedBy     User?    @relation("HRResolvedLogs", fields: [hrResolvedById], references: [id])
   User_DailyLog_proxyLoggedByIdToUser User?     @relation("DailyLog_proxyLoggedByIdToUser", fields: [proxyLoggedById], references: [id])
   supervisor                          User?     @relation("SupervisorLogs", fields: [supervisorId], references: [id])
   Task                                Task?     @relation(fields: [taskId], references: [id])
@@ -334,10 +339,10 @@ model Task {
   treatmentStatus    String?    @default("PENDING")
   broadcastParentId  String?
   isBroadcastParent  Boolean    @default(false)
-  DailyLog           DailyLog[]
+  broadcastParent    Task?      @relation("BroadcastChildren", fields: [broadcastParentId], references: [id])
+  broadcastChildren  Task[]     @relation("BroadcastChildren")
+  dailyLogs          DailyLog[]
   assignedTo         User?      @relation("AssignedTasks", fields: [assignedToId], references: [id])
-  Task               Task?      @relation("TaskToTask", fields: [broadcastParentId], references: [id])
-  other_Task         Task[]     @relation("TaskToTask")
   createdBy          User       @relation("CreatedTasks", fields: [createdById], references: [id])
   department         Department @relation(fields: [departmentId], references: [id])
   forwardedFrom      User?      @relation("ForwardedFrom", fields: [forwardedFromId], references: [id])
@@ -738,21 +743,20 @@ model AccountActivationCode {
 }
 
 model IncentiveRecommendation {
-  id               String    @id
+  id               String    @id @default(cuid())
   userId           String
-  month            String
-  segment          String
+  user             User      @relation(fields: [userId], references: [id])
+  month            String    // "2026-08" format
+  segment          String    // FRONTLINE | SUPERVISORY | LEADERSHIP
   rank             Int
   performanceIndex Float
   taskCount        Int
   avgScore         Float?
-  status           String    @default("PENDING")
+  status           String    @default("PENDING") // PENDING | ACKNOWLEDGED | ACTIONED | DISMISSED
   hrNote           String?
   actionedById     String?
   actionedAt       DateTime?
   createdAt        DateTime  @default(now())
-  User             User      @relation(fields: [userId], references: [id])
-
   @@unique([userId, month])
 }
 
@@ -783,14 +787,13 @@ model OrgGoal {
 }
 
 model ScreenShareAuditLog {
-  id                 String             @id
+  id                 String             @id @default(cuid())   // ← ADD THIS
   sessionId          String
   action             String
   actorId            String
   metadata           Json?
   createdAt          DateTime           @default(now())
   ScreenShareSession ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@index([actorId])
   @@index([sessionId])
 }
@@ -823,8 +826,7 @@ model ScreenShareSession {
   ScreenShareHeartbeat                      ScreenShareHeartbeat[]
   User_ScreenShareSession_requesterIdToUser User                   @relation("ScreenShareSession_requesterIdToUser", fields: [requesterId], references: [id], onDelete: Cascade)
   User_ScreenShareSession_targetIdToUser    User                   @relation("ScreenShareSession_targetIdToUser", fields: [targetId], references: [id], onDelete: Cascade)
-  ScreenShareSignal                         ScreenShareSignal[]
-
+  signals                                   ScreenShareSignal[]
   @@index([requesterId])
   @@index([status])
   @@index([targetId])
@@ -840,7 +842,6 @@ model ScreenShareSignal {
   consumed           Boolean            @default(false)
   createdAt          DateTime           @default(now())
   ScreenShareSession ScreenShareSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
   @@index([createdAt])
   @@index([sessionId, toUserId, consumed])
 }
@@ -1011,3 +1012,4 @@ enum ScreenShareStatus {
   REJECTED
   EXPIRED
 }
+

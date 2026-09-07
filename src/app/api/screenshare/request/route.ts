@@ -1,4 +1,5 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+﻿// src/app/api/screenshare/request/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
@@ -46,17 +47,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ✅ FIXED: Include id and updatedAt
     const newSession = await prisma.screenShareSession.create({
       data: {
+        id: `ss_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         requesterId: currentUser.id,
         targetId: targetUserId,
         status: "PENDING",
+        updatedAt: new Date(),
       },
       include: {
-        requester: {
+        User_ScreenShareSession_requesterIdToUser: {
           select: { id: true, name: true, email: true, role: true },
         },
-        target: {
+        User_ScreenShareSession_targetIdToUser: {
           select: { id: true, name: true, email: true, role: true },
         },
       },
@@ -64,8 +68,8 @@ export async function POST(request: NextRequest) {
 
     const normalised = {
       ...newSession,
-      requester: { ...newSession.requester, image: null },
-      target:    { ...newSession.target,    image: null },
+      requester: { ...newSession.User_ScreenShareSession_requesterIdToUser, image: null },
+      target: { ...newSession.User_ScreenShareSession_targetIdToUser, image: null },
     };
 
     return NextResponse.json({ session: normalised });

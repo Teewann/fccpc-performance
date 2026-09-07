@@ -1,59 +1,32 @@
-// src/app/api/daily-logs/pending-actions/route.ts
-//
-// Returns only the entries THIS user specifically needs to act on — not a
-// system-wide list. Two categories share the ackStatus field: proxy entries
-// logged on this user's behalf, and cross-department claims matching this
-// user's department.
-
-import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+﻿// src/app/api/daily-logs/pending-actions/route.ts
+// Returns logs that need acknowledgment from the current user (as supervisor).
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import prisma from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const userId = (session?.user as any)?.id;
+    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      include: { department: { select: { name: true } } },
-    });
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    // Category 1: proxy entries logged on this user's behalf
-    const proxyPending = await prisma.dailyLog.findMany({
-      where: { userId: user.id, loggedByProxy: true, ackStatus: "PENDING" },
-      include: { proxyLoggedBy: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 20,
+    // Find logs submitted by staff under this supervisor that need review
+    const pending = await prisma.dailyLog.findMany({
+      where: {
+        supervisorId: userId,
+        status: 'SUBMITTED',
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
     });
 
-    // Category 2: cross-department claims that name this user's department.
-    const crossDeptPending = user.department
-      ? await prisma.dailyLog.findMany({
-          where: {
-            crossDeptFlag: { contains: user.department.name, mode: "insensitive" },
-            ackStatus: "PENDING",
-            loggedByProxy: false,
-          },
-          include: { user: { select: { name: true } } },
-          orderBy: { createdAt: "desc" },
-          take: 20,
-        })
-      : [];
-
-    return NextResponse.json({
-      proxyPending,
-      crossDeptPending,
-      total: proxyPending.length + crossDeptPending.length,
-    });
+    return NextResponse.json({ pending });
   } catch (error) {
-    console.error("Pending actions error:", error);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    console.error('[pending-actions]', error);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

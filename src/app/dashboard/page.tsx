@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 export const dynamic = "force-dynamic";
 
@@ -311,7 +311,7 @@ export default function DashboardPage() {
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
               Log submissions by status over time
             </p>
-            {!data || data.trendData.length === 0 ? <EmptyChart height={220} /> : (
+            {!data || !data.trendData || data.trendData.length === 0 ? <EmptyChart height={220} /> : ( 
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart data={data.trendData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -333,7 +333,7 @@ export default function DashboardPage() {
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 12 }}>
               For selected period
             </p>
-            {!data || data.pieData.every((p) => p.value === 0) ? <EmptyChart height={160} /> : (
+            {!data || !data.pieData || data.pieData.every((p) => p.value === 0) ? <EmptyChart height={160} /> : (
               <ResponsiveContainer width="100%" height={160}>
                 <PieChart>
                   <Pie data={data.pieData} dataKey="value" innerRadius={44} outerRadius={68} paddingAngle={3}>
@@ -347,15 +347,21 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 8 }}>
-              {data?.pieData.map((p) => (
-                <div key={p.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.fill, flexShrink: 0 }} />
-                    <span style={{ fontSize: 14, color: "var(--text-muted)" }}>{p.name}</span>
+              {data?.pieData && data.pieData.length > 0 ? (
+                data.pieData.map((p) => (
+                  <div key={p.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <div style={{ width: 10, height: 10, borderRadius: "50%", background: p.fill, flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, color: "var(--text-muted)" }}>{p.name}</span>
+                    </div>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{p.value}</span>
                   </div>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>{p.value}</span>
+                ))
+              ) : (
+                <div style={{ color: "var(--text-hint)", textAlign: "center", padding: "8px 0", fontSize: 14 }}>
+                  No status data available
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
@@ -366,7 +372,7 @@ export default function DashboardPage() {
           <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
             Log submissions per department in selected period
           </p>
-          {!data || data.departmentChart.length === 0 ? <EmptyChart /> : (
+          {!data || !data.departmentChart || data.departmentChart.length === 0 ? <EmptyChart /> : (
             <ResponsiveContainer width="100%" height={210}>
               <BarChart data={data.departmentChart} margin={{ top: 4, right: 12, left: -24, bottom: 44 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -388,7 +394,7 @@ export default function DashboardPage() {
           <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
             <SectionTitle>Task breakdown</SectionTitle>
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 12 }}>All-time task status</p>
-            {!data || data.taskBreakdown.every((p) => p.value === 0) ? <EmptyChart height={150} /> : (
+            {!data || !data.taskBreakdown || data.taskBreakdown.every((p) => p.value === 0) ? <EmptyChart height={150} /> : (
               <ResponsiveContainer width="100%" height={150}>
                 <PieChart>
                   <Pie data={data.taskBreakdown} dataKey="value" innerRadius={40} outerRadius={62} paddingAngle={3}>
@@ -402,15 +408,21 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
-              {data?.taskBreakdown.map((p) => (
-                <div key={p.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.fill, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.name}</span>
+              {data?.taskBreakdown && data.taskBreakdown.length > 0 ? (
+                data.taskBreakdown.map((p) => (
+                  <div key={p.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: p.fill, flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{p.name}</span>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{p.value}</span>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{p.value}</span>
+                ))
+              ) : (
+                <div style={{ color: "var(--text-hint)", textAlign: "center", padding: "8px 0", fontSize: 14 }}>
+                  No task data available
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
@@ -418,7 +430,7 @@ export default function DashboardPage() {
           <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
             <SectionTitle>Top performers</SectionTitle>
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 12 }}>Most approved logs in period</p>
-            {!data || data.performers.length === 0 ? (
+            {!data || !data.performers || data.performers.length === 0 ? (
               <div style={{ color: "var(--text-hint)", fontSize: 15, textAlign: "center", padding: "24px 0" }}>
                 No approved logs yet
               </div>
@@ -454,7 +466,7 @@ export default function DashboardPage() {
           <div className="card-bg" style={{ borderRadius: 14, padding: 24 }}>
             <SectionTitle>Recent submissions</SectionTitle>
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 12 }}>Latest staff activity</p>
-            {!data || data.recentLogs.length === 0 ? (
+            {!data || !data.recentLogs || data.recentLogs.length === 0 ? (
               <div style={{ color: "var(--text-hint)", fontSize: 15, textAlign: "center", padding: "24px 0" }}>
                 No logs submitted yet
               </div>
@@ -496,7 +508,7 @@ export default function DashboardPage() {
           <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>
             Departments with no log submissions in the selected period
           </p>
-          {!data ? null : data.lowActivity.length === 0 ? (
+          {!data || !data.lowActivity ? null : data.lowActivity.length === 0 ? (
             <div style={{ color: "#22c55e", fontSize: 16, fontWeight: 500, textAlign: "center", padding: "16px 0" }}>
               🎉 All departments have activity in this period
             </div>
