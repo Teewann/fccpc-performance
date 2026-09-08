@@ -27,8 +27,12 @@ export async function embeddingFromImageData(imageData: string): Promise<Float32
     img.onerror = reject;
   });
 
+  // ✅ FIXED: Much more forgiving detection settings
   const detection = await faceapi
-    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ 
+      inputSize: 416,        // Larger = better detection
+      scoreThreshold: 0.15   // MUCH lower = catches more faces
+    }))
     .withFaceLandmarks()
     .withFaceDescriptor();
 
@@ -43,7 +47,8 @@ export async function embeddingFromImageData(imageData: string): Promise<Float32
   const eyeDist = Math.hypot(leftCenter.x - rightCenter.x, leftCenter.y - rightCenter.y);
   const eyeSpacingToBox = eyeDist / detection.detection.box.width;
 
-  if (eyeSpacingToBox < 0.22 || eyeSpacingToBox > 0.65) {
+  // ✅ MORE FORGIVING: wider acceptable range
+  if (eyeSpacingToBox < 0.12 || eyeSpacingToBox > 0.75) {
     throw new Error("Your face doesn't appear fully visible. Please remove anything covering your face and try again.");
   }
 
@@ -65,7 +70,10 @@ export async function verifyEmbedding(
     });
 
     const detection = await faceapi
-      .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }))
+      .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ 
+        inputSize: 416, 
+        scoreThreshold: 0.15 
+      }))
       .withFaceLandmarks()
       .withFaceDescriptor();
 

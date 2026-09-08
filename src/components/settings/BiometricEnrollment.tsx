@@ -23,10 +23,15 @@ export function BiometricEnrollment() {
 
   async function refresh() {
     setLoading(true);
-    const [d, f] = await Promise.all([listMyDevices(), hasFaceEnrolled()]);
-    setDevices(d);
-    setFaceEnrolled(f);
-    setLoading(false);
+    try {
+      const [d, f] = await Promise.all([listMyDevices(), hasFaceEnrolled()]);
+      setDevices(d);
+      setFaceEnrolled(f);
+    } catch (error) {
+      console.error("Refresh error:", error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { refresh(); }, []);
@@ -70,7 +75,7 @@ export function BiometricEnrollment() {
       if (result.success) {
         setMsg({ text: "Fingerprint/Face unlock enrolled on this device.", ok: true });
         setCode("");
-        refresh();
+        await refresh();
       } else {
         setMsg({ text: result.error || "Enrollment failed.", ok: false });
       }
@@ -82,6 +87,7 @@ export function BiometricEnrollment() {
     }
   }
 
+  // ✅ CORRECT: No optimistic setFaceEnrolled(true)
   async function handleFaceCapture(imageData: string) {
     setShowFaceCapture(false);
     setBusy(true);
@@ -105,29 +111,40 @@ export function BiometricEnrollment() {
       if (res.ok) {
         setMsg({ text: "Face enrolled successfully!", ok: true });
         setCode("");
-        refresh();
+        setPendingFaceCode(undefined);
+        
+        // ✅ ONLY update UI AFTER server confirms
+        await refresh();
+        
+        // Clear message after 3 seconds
+        setTimeout(() => {
+          setMsg({ text: "", ok: true });
+        }, 3000);
       } else {
         setMsg({ text: data.error || "Face enrollment failed.", ok: false });
+        setPendingFaceCode(undefined);
       }
     } catch (err: any) {
       console.error("Face enrollment error:", err);
       setMsg({ text: err?.message || "Face enrollment failed. Please try again.", ok: false });
+      setPendingFaceCode(undefined);
     }
 
     setBusy(false);
-    setPendingFaceCode(undefined);
   }
 
   async function handleRemoveDevice(id: string) {
     if (!confirm("Remove this device? A new IT code will be needed only if this was your last enrolled method.")) return;
     const ok = await removeDevice(id);
-    if (ok) refresh();
+    if (ok) await refresh();
   }
 
   async function handleRemoveFace() {
     if (!confirm("Remove your enrolled face data?")) return;
     const ok = await removeFaceEnrollment();
-    if (ok) refresh();
+    if (ok) {
+      await refresh();
+    }
   }
 
   if (loading) return <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Loading...</div>;

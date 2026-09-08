@@ -74,7 +74,7 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
       let currentHint = "Position your face in the oval";
 
       if (brightness < 50) {
-        currentHint = "Too dark — move to better lighting";
+        currentHint = "Too dark ; move to better lighting";
       } else {
         const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 }));
         if (!mountedRef.current) return;

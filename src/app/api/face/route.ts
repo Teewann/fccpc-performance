@@ -19,6 +19,7 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+      select: { id: true },
     });
     if (!user) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -28,7 +29,8 @@ export async function GET() {
       where: { userId: user.id },
     });
     
-    return NextResponse.json({ enrolled: !!face });
+    // ✅ FIX: Return hasFace (matches frontend expectation)
+    return NextResponse.json({ hasFace: !!face });
   } catch (error) {
     console.error("GET /api/face error:", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -65,7 +67,6 @@ export async function POST(request: NextRequest) {
         faceEmbedding = embedding;
         console.log("✅ Using embedding from request");
       } else if (image) {
-        // For now, we'll store a placeholder
         console.warn("⚠️ Image received but server-side face extraction not implemented. Storing placeholder.");
         faceEmbedding = [];
       } else {
@@ -157,12 +158,10 @@ export async function POST(request: NextRequest) {
 
     // ─── VERIFY ACTION ──────────────────────────────────────────────
     if (action === "verify") {
-      // ── Get the embedding from request ────────────────────────────
       if (!embedding || embedding.length === 0) {
         return NextResponse.json({ error: "No face embedding provided" }, { status: 400 });
       }
 
-      // ── Get stored face data ──────────────────────────────────────
       const stored = await prisma.faceData.findUnique({
         where: { userId: user.id },
       });
@@ -171,14 +170,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "No face enrolled. Please set up face verification in Settings first." }, { status: 400 });
       }
 
-      // ── Check if it's a placeholder ───────────────────────────────
       if (stored.embedding === "PLACEHOLDER") {
         return NextResponse.json({ 
           error: "Face data is incomplete. Please re-enroll your face in Settings." 
         }, { status: 400 });
       }
 
-      // ── Decrypt and compare ──────────────────────────────────────
       try {
         const storedEmbedding: number[] = JSON.parse(decrypt(stored.embedding));
         
@@ -189,7 +186,6 @@ export async function POST(request: NextRequest) {
         const distance = euclideanDistance(embedding, storedEmbedding);
         const match = distance <= MATCH_THRESHOLD;
 
-        // ── Log the attempt ──────────────────────────────────────────
         await prisma.biometricAttempt.create({
           data: {
             userId: user.id,
