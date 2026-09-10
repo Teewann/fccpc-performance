@@ -9,15 +9,17 @@ import UserAvatar from "@/components/UserAvatar";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import NotificationBell from "@/components/layout/NotificationBell";
-import { ScreenShareButton } from '@/components/screenshare/ScreenShareUI';
+import { ScreenShareButton } from "@/components/screenshare/ScreenShareUI";
 
 type NavLink = {
   label: string;
   href: string;
   badge?: string;
   badgeGreen?: boolean;
-  icon?: string;
-  iconColor?: string;
+  icon: string;
+  iconColor: string;
+  // If omitted, visible to every role. Otherwise, only these roles see it.
+  allowedRoles?: string[];
 };
 
 type NavSection = {
@@ -25,172 +27,69 @@ type NavSection = {
   links: NavLink[];
 };
 
-const NAV_LINKS: Record<string, { icon: string; color: string }> = {
-  "/dashboard":        { icon: "▦",  color: "#60a5fa" },
-  "/staff-logs":       { icon: "📋", color: "#a78bfa" },
-  "/daily-log":        { icon: "📝", color: "#34d399" },
-  "/check-in":         { icon: "🕐", color: "#f59e0b" },
-  "/id-card":          { icon: "🪪", color: "#38bdf8" },
-  "/intern":           { icon: "📓", color: "#fb923c" },
-  "/supervisor":       { icon: "👁",  color: "#c084fc" },
-  "/departments":      { icon: "🏢", color: "#60a5fa" },
-  "/tasks":            { icon: "✅", color: "#4ade80" },
-  "/kpi":              { icon: "📊", color: "#f472b6" },
-  "/appraisals":       { icon: "⭐", color: "#fbbf24" },
-  "/leave":            { icon: "🏖", color: "#34d399" },
-  "/evc-directives":   { icon: "📌", color: "#f87171" },
-  "/compliance":       { icon: "⚖",  color: "#a3e635" },
-  "/portal":           { icon: "🏛",  color: "#60a5fa" },
-  "/payment-workflow": { icon: "💳", color: "#34d399" },
-  "/case-transfer":    { icon: "↔",  color: "#f59e0b" },
-  "/ai-insights":      { icon: "✦",  color: "#e879f9" },
-  "/reports":          { icon: "📈", color: "#60a5fa" },
-  "/announcements":    { icon: "📢", color: "#fb923c" },
-  "/exams":            { icon: "🎓", color: "#a78bfa" },
-  "/staff-directory":  { icon: "👥", color: "#38bdf8" },
-  "/chat":             { icon: "💬", color: "#4ade80" },
-  "/users":            { icon: "🔧", color: "#f59e0b" },
-  "/audit-trail":      { icon: "🔍", color: "#f87171" },
-  "/settings":         { icon: "⚙",  color: "#94a3b8" },
-  "/vc9k2":            { icon: "⚡", color: "#fbbf24" },
-  "/admin/account-activation": { icon: "🔑", color: "#f472b6" },
-};
+const DIRECTOR_OR_UNIT_HEAD = ["DIRECTOR", "SUPERVISOR", "ADMIN"];
+const HR_ONLY = ["HR"];
+const ADMIN_ONLY = ["ADMIN"];
+const EXECUTIVE_ONLY = ["EXECUTIVE"];
+const NOT_STAFF_FACING = ["DIRECTOR", "SUPERVISOR", "HR", "ADMIN", "EXECUTIVE"]; // EVC Directives
 
-function makeLink(label: string, href: string, extra?: Partial<NavLink>): NavLink {
-  const cfg = NAV_LINKS[href] || { icon: "•", color: "#94a3b8" };
-  return { label, href, icon: cfg.icon, iconColor: cfg.color, ...extra };
-}
+// ── Single source of truth for the whole nav — one place, no duplicate lists ──
+const SECTIONS: NavSection[] = [
+  {
+    section: "Core",
+    links: [
+      { label: "Dashboard", href: "/dashboard", icon: "▦", iconColor: "#60a5fa" },
+      { label: "Daily Work Log", href: "/daily-log", icon: "📝", iconColor: "#34d399", allowedRoles: undefined },
+      { label: "Supervisor Panel", href: "/supervisor", icon: "👁", iconColor: "#c084fc", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
+      { label: "Attendance", href: "/check-in", icon: "🕐", iconColor: "#f59e0b" },
+      { label: "ID Card", href: "/id-card", icon: "🪪", iconColor: "#38bdf8" },
+      { label: "Intern Log", href: "/intern", icon: "📓", iconColor: "#fb923c", allowedRoles: ["INTERN"] },
+    ],
+  },
+  {
+    section: "Management",
+    links: [
+      { label: "Departments", href: "/departments", icon: "🏢", iconColor: "#60a5fa", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
+      { label: "Tasks", href: "/tasks", icon: "✅", iconColor: "#4ade80" },
+      { label: "KPI Manager", href: "/kpi", icon: "📊", iconColor: "#f472b6" },
+      { label: "Appraisals", href: "/appraisals", icon: "⭐", iconColor: "#fbbf24", allowedRoles: HR_ONLY },
+      { label: "EVC Directives", href: "/evc-directives", icon: "📌", iconColor: "#f87171", allowedRoles: NOT_STAFF_FACING },
+      { label: "Leave", href: "/leave", icon: "🏖", iconColor: "#34d399" },
+      { label: "Payment Workflow", href: "/payment-workflow", icon: "💳", iconColor: "#34d399" },
+    ],
+  },
+  {
+    section: "Intelligence",
+    links: [
+      { label: "AI Insights", href: "/ai-insights", icon: "✦", iconColor: "#e879f9", badge: "AI", badgeGreen: true, allowedRoles: DIRECTOR_OR_UNIT_HEAD },
+      { label: "Reports", href: "/reports", icon: "📈", iconColor: "#60a5fa" },
+      { label: "Communications", href: "/announcements", icon: "📢", iconColor: "#fb923c" },
+      { label: "Promotion Exams", href: "/exams", icon: "🎓", iconColor: "#a78bfa" },
+      { label: "Staff Directory", href: "/staff-directory", icon: "👥", iconColor: "#38bdf8", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
+      { label: "Performance", href: "/performance", icon: "🏆", iconColor: "#fbbf24", allowedRoles: HR_ONLY },
+      { label: "Incentives", href: "/incentives", icon: "🎯", iconColor: "#f472b6", badge: "HR", badgeGreen: true, allowedRoles: HR_ONLY },
+      { label: "HR Oversight", href: "/hr-oversight", icon: "👁", iconColor: "#c084fc", allowedRoles: HR_ONLY },
+    ],
+  },
+  {
+    section: "System",
+    links: [
+      { label: "Users", href: "/users", icon: "🔧", iconColor: "#f59e0b", allowedRoles: ADMIN_ONLY },
+      { label: "Audit Trail", href: "/audit-trail", icon: "🔍", iconColor: "#f87171", allowedRoles: ADMIN_ONLY },
+      { label: "Settings", href: "/settings", icon: "⚙", iconColor: "#94a3b8" },
+      { label: "EVC Suite", href: "/vc9k2", icon: "⚡", iconColor: "#fbbf24", allowedRoles: EXECUTIVE_ONLY },
+      { label: "Account Activation", href: "/admin/account-activation", icon: "🔑", iconColor: "#f472b6", badge: "Admin", badgeGreen: true, allowedRoles: ADMIN_ONLY },
+    ],
+  },
+];
 
 function getNavItems(role: string): NavSection[] {
-  const isIntern     = role === "INTERN";
-  const isStaff      = role === "STAFF";
-  const isSupervisor = role === "SUPERVISOR";
-  const isDirector   = role === "DIRECTOR";
-  const isHR         = role === "HR";
-  const isAdmin      = role === "ADMIN";
-  const isExecutive  = role === "EXECUTIVE";
-  const isCorper     = role === "CORPER";
-  const isITSiwes    = role === "IT_SIWES";
-  const isContract   = role === "CONTRACT";
-  const isConsultant = role === "CONSULTANT";
-  const isOther      = role === "OTHER";
-
-  const isRegularStaff   = isStaff || isSupervisor || isDirector || isCorper || isITSiwes || isContract || isConsultant || isOther;
-  const canReviewLogs    = isSupervisor || isDirector || isHR || isAdmin || isExecutive;
-  const canSeeKPI        = isDirector || isHR || isAdmin || isExecutive;
-  const canSeeAppraisals = isHR || isAdmin || isExecutive;
-  const canSeeAI         = isDirector || isHR || isAdmin || isExecutive;
-  const canSeeReports    = isDirector || isHR || isAdmin || isExecutive;
-  const canSeeExams      = isHR || isAdmin || isExecutive || isStaff || isSupervisor || isDirector;
-  const canSeeUsers      = isAdmin;
-  const canSeeAudit      = isAdmin;
-  const canSeeActivation = isAdmin;
-
-  if (isAdmin) {
-    return [
-      {
-        section: "Core",
-        links: [
-          makeLink("Dashboard",      "/dashboard" ),
-          makeLink("Staff Logs",     "/staff-logs"),
-          makeLink("Daily Work Log", "/daily-log" ),
-          makeLink("Attendance",     "/check-in"  ),
-          makeLink("ID Card",        "/id-card"   ),
-          makeLink("Intern Log",     "/intern"    ),
-        ],
-      },
-      {
-        section: "Management",
-        links: [
-          makeLink("Supervisor Panel",      "/supervisor"    ),
-          makeLink("Departments",           "/departments"   ),
-          makeLink("Tasks",                 "/tasks"         ),
-          makeLink("KPI Manager",           "/kpi"           ),
-          makeLink("Appraisals",            "/appraisals"    ),
-          makeLink("Leave",                 "/leave"         ),
-          makeLink("EVC Directives",        "/evc-directives"),
-          makeLink("Business Compliance",   "/compliance"    ),
-          makeLink("Business Registration", "/portal"        ),
-        ],
-      },
-      {
-        section: "Intelligence",
-        links: [
-          makeLink("AI Insights",     "/ai-insights",    { badge: "AI", badgeGreen: true }),
-          makeLink("Reports",         "/reports"        ),
-          makeLink("Communications",  "/announcements"  ),
-          makeLink("Promotion Exams", "/exams"          ),
-          makeLink("Staff Directory", "/staff-directory"),
-        ],
-      },
-      {
-        section: "System",
-        links: [
-          makeLink("Chat",        "/chat"       ),
-          makeLink("Users",       "/users"      ),
-          makeLink("Audit Trail", "/audit-trail"),
-          makeLink("Settings",    "/settings"   ),
-          makeLink("EVC Suite",   "/vc9k2"      ),
-          makeLink("Account Activation", "/admin/account-activation", { badge: "Admin", badgeGreen: true }),
-        ],
-      },
-    ];
-  }
-
-  return [
-    {
-      section: "Core",
-      links: [
-        makeLink("Dashboard", "/dashboard"),
-        ...(!isIntern ? [makeLink("Staff Logs", "/supervisor")] : []),
-        ...(isRegularStaff ? [
-          makeLink("Daily Work Log", "/daily-log"),
-          makeLink("Performance", "/performance"),
-          makeLink("Incentives", "/incentives"),
-          makeLink("Attendance",     "/check-in" ),
-          makeLink("ID Card",        "/id-card"  ),
-        ] : []),
-        ...(isIntern ? [makeLink("Intern Log", "/intern")] : []),
-      ],
-    },
-    {
-      section: "Management",
-      links: [
-        ...(canReviewLogs    ? [makeLink("Supervisor Panel",      "/supervisor"      )] : []),
-        makeLink("Departments",           "/departments"     ),
-        ...(!isIntern        ? [makeLink("Tasks",                 "/tasks"           )] : []),
-        ...(canSeeKPI        ? [makeLink("KPI Manager",           "/kpi"             )] : []),
-        ...(canSeeAppraisals ? [makeLink("Appraisals",            "/appraisals"      )] : []),
-        makeLink("Leave",                 "/leave"           ),
-        makeLink("EVC Directives",        "/evc-directives"  ),
-        makeLink("Business Compliance",   "/compliance"      ),
-        makeLink("Business Registration", "/portal"          ),
-        makeLink("Payment Workflow",      "/payment-workflow"),
-        makeLink("Case Transfer",         "/case-transfer"   ),
-      ],
-    },
-    {
-      section: "Intelligence",
-      links: [
-        ...(canSeeAI      ? [makeLink("AI Insights",    "/ai-insights",    { badge: "3", badgeGreen: true })] : []),
-        ...(canSeeReports ? [makeLink("Reports",         "/reports"        )] : []),
-        makeLink("Communications",  "/announcements"  ),
-        ...(canSeeExams   ? [makeLink("Promotion Exams", "/exams"          )] : []),
-        ...(!isIntern     ? [makeLink("Staff Directory", "/staff-directory")] : []),
-      ],
-    },
-    {
-      section: "System",
-      links: [
-        makeLink("Chat",     "/chat"    ),
-        ...(canSeeUsers ? [makeLink("Users",       "/users"      )] : []),
-        ...(canSeeAudit ? [makeLink("Audit Trail", "/audit-trail")] : []),
-        makeLink("Settings", "/settings"),
-        ...(isExecutive ? [makeLink("EVC Suite", "/vc9k2")] : []),
-        ...(canSeeActivation ? [makeLink("Account Activation", "/admin/account-activation", { badge: "Admin", badgeGreen: true })] : []),
-      ],
-    },
-  ].filter((s) => s.links.length > 0);
+  return SECTIONS
+    .map((section) => ({
+      section: section.section,
+      links: section.links.filter((link) => !link.allowedRoles || link.allowedRoles.includes(role)),
+    }))
+    .filter((s) => s.links.length > 0);
 }
 
 const TOP_ICONS = [
@@ -207,8 +106,8 @@ const SECTION_COLORS: Record<string, string> = {
   System:       "#34d399",
 };
 
-// Persist collapsed sections in sessionStorage so they survive navigation
 const STORAGE_KEY = "sidebar_closed_sections";
+const SCROLL_KEY = "sidebar_scroll_position";
 
 function loadClosedSections(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -240,48 +139,39 @@ export default function Sidebar() {
   const [userIdRef,      setUserIdRef]      = useState<string>("");
   const [collapsed,      setCollapsed]      = useState(false);
   const [expandedWidth, setExpandedWidth] = useState<number>(232);
-
+  const [isClient, setIsClient] = useState(false);
   const isResizing = useRef(false);
+  const navRef = useRef<HTMLElement>(null);
 
-  // Load from sessionStorage on mount so state persists across navigation
-  const [closedSections, setClosedSections] = useState<Set<string>>(() => loadClosedSections());
-
-  // Load saved width after mount
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    setIsClient(true);
     try {
       const raw = sessionStorage.getItem("sidebar_width");
       if (raw) {
-        const w = Number(raw);
-        if (!isNaN(w) && w >= 180 && w <= 400) {
-          setExpandedWidth(w);
+        const width = Number(raw);
+        if (width >= 180 && width <= 400) {
+          setExpandedWidth(width);
         }
       }
     } catch {}
   }, []);
 
   useEffect(() => {
-    // Check sessionStorage first — avoids a DB trip on every page navigation
-    try {
-      const cached = sessionStorage.getItem("sidebar_account_cache");
-      if (cached) {
-        const d = JSON.parse(cached);
-        if (d?.photo)     setUserPhoto(d.photo);
-        if (d?.userIdRef) setUserIdRef(d.userIdRef);
-        return; // already have it this session, skip the network call
-      }
-    } catch {}
+    if (isClient) {
+      try {
+        sessionStorage.setItem("sidebar_width", String(expandedWidth));
+      } catch {}
+    }
+  }, [expandedWidth, isClient]);
 
+  const [closedSections, setClosedSections] = useState<Set<string>>(() => loadClosedSections());
+
+  useEffect(() => {
     fetch("/api/settings/account")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.user?.photo)     setUserPhoto(d.user.photo);
         if (d?.user?.userIdRef) setUserIdRef(d.user.userIdRef);
-        try {
-          sessionStorage.setItem("sidebar_account_cache", JSON.stringify({
-            photo: d?.user?.photo, userIdRef: d?.user?.userIdRef,
-          }));
-        } catch {}
       })
       .catch(() => {});
   }, []);
@@ -291,6 +181,28 @@ export default function Sidebar() {
     if (p) setUserPhoto(p);
   }, [session]);
 
+  // ── Preserve scroll position across navigations ──────────────────────
+  // Each page currently mounts its own <Sidebar />, so this remounts on
+  // every navigation and would otherwise reset to the top every time.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    try {
+      const saved = sessionStorage.getItem(SCROLL_KEY);
+      if (saved) nav.scrollTop = Number(saved);
+    } catch {}
+
+    let raf: number | null = null;
+    const onScroll = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        try { sessionStorage.setItem(SCROLL_KEY, String(nav.scrollTop)); } catch {}
+      });
+    };
+    nav.addEventListener("scroll", onScroll);
+    return () => nav.removeEventListener("scroll", onScroll);
+  }, []);
+
   const toggleSection = useCallback((s: string) => {
     setClosedSections((prev) => {
       const next = new Set(prev);
@@ -299,7 +211,7 @@ export default function Sidebar() {
       return next;
     });
   }, []);
-  
+
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     if (collapsed) return;
     e.preventDefault();
@@ -319,10 +231,6 @@ export default function Sidebar() {
         isResizing.current = false;
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
-        setExpandedWidth((w) => {
-          try { sessionStorage.setItem("sidebar_width", String(w)); } catch {}
-          return w;
-        });
       }
     }
     window.addEventListener("mousemove", handleMouseMove);
@@ -333,29 +241,28 @@ export default function Sidebar() {
     };
   }, []);
 
-  const navItems     = getNavItems(role);
+  const navItems = getNavItems(role);
   const sidebarWidth = collapsed ? 62 : expandedWidth;
 
   return (
     <>
-      <aside style={{
-        width: sidebarWidth,
-        flexShrink: 0,
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        position: "sticky",
-        top: 0,
-        background: "var(--bg-sidebar)",
-        borderRight: "0.5px solid var(--border)",
-        transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
-        overflow: "hidden",
-        zIndex: 40,
-      }}>
-
-        {/* ══════════════════════════════════════
-            SECTION 1 - LOGO (never shrinks)
-        ══════════════════════════════════════ */}
+      <aside
+        suppressHydrationWarning
+        style={{
+          width: sidebarWidth,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          position: "sticky",
+          top: 0,
+          background: "var(--bg-sidebar)",
+          borderRight: "0.5px solid var(--border)",
+          transition: "width 0.22s cubic-bezier(0.4,0,0.2,1)",
+          overflow: "hidden",
+          zIndex: 40,
+        }}
+      >
         <div style={{
           flexShrink: 0,
           borderBottom: "0.5px solid var(--border-soft)",
@@ -363,7 +270,6 @@ export default function Sidebar() {
           transition: "padding 0.22s",
         }}>
           {collapsed ? (
-            /* Collapsed: logo only at very top */
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <div style={{
                 width: 38, height: 38, borderRadius: "50%", background: "#fff",
@@ -375,7 +281,6 @@ export default function Sidebar() {
               </div>
             </div>
           ) : (
-            /* Expanded: full logo + name, exactly as before */
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{
                 width: 52, height: 52, borderRadius: "50%", flexShrink: 0,
@@ -401,9 +306,6 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* ══════════════════════════════════════
-            SECTION 2 - ICON STRIP (below logo)
-        ══════════════════════════════════════ */}
         <div style={{
           flexShrink: 0,
           borderBottom: "0.5px solid var(--border-soft)",
@@ -411,9 +313,7 @@ export default function Sidebar() {
           transition: "padding 0.22s",
         }}>
           {collapsed ? (
-            /* Collapsed icon strip: collapse arrow + bell stacked */
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              {/* Expand arrow */}
               <button
                 onClick={() => setCollapsed(false)}
                 title="Expand sidebar"
@@ -434,7 +334,6 @@ export default function Sidebar() {
               <NotificationBell />
             </div>
           ) : (
-            /* Expanded icon strip: collapse | bell | chat | evc | comms | tasks */
             <div style={{
               display: "flex", alignItems: "center",
               justifyContent: "space-between",
@@ -443,9 +342,8 @@ export default function Sidebar() {
               background: "var(--bg-input)",
               border: "0.5px solid var(--border)",
               gap: 2,
-              overflow: "hidden", // prevents tasks icon from sticking out
+              overflow: "hidden",
             }}>
-              {/* Collapse button */}
               <button
                 onClick={() => setCollapsed(true)}
                 title="Collapse sidebar"
@@ -464,15 +362,12 @@ export default function Sidebar() {
                 ◀
               </button>
 
-              {/* Divider */}
               <div style={{ width: 1, height: 20, background: "var(--border)", flexShrink: 0, opacity: 0.5 }} />
 
-              {/* Bell */}
               <div style={{ flexShrink: 0 }}>
                 <NotificationBell />
               </div>
 
-              {/* Quick-action icons */}
               {TOP_ICONS.map((item) => {
                 const isActive = pathname === item.href;
                 return (
@@ -495,7 +390,7 @@ export default function Sidebar() {
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = isActive ? `${item.color}25` : "transparent";
-                      e.currentTarget.style.border = isActive ? `2px solid ${item.color}60` : "transparent";
+                      e.currentTarget.style.border = `2px solid ${isActive ? item.color + "60" : "transparent"}`;
                       e.currentTarget.style.transform = "scale(1)";
                     }}
                   >
@@ -507,23 +402,21 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* ══════════════════════════════════════
-            SECTION 3 - NAV (scrollable)
-        ══════════════════════════════════════ */}
-        <nav style={{
-          flex: 1,
-          overflowY: "auto",
-          overflowX: "hidden",
-          paddingTop: 4,
-          paddingBottom: 8,
-          // inhouse scroll - only this region scrolls
-        }}>
+        <nav
+          ref={navRef}
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            overflowX: "hidden",
+            paddingTop: 4,
+            paddingBottom: 8,
+          }}
+        >
           {collapsed ? (
-            /* Icon-only when collapsed */
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, paddingTop: 4 }}>
               {navItems.flatMap((s) => s.links).map((link) => {
                 const isActive = pathname === link.href;
-                const color    = link.iconColor || "#94a3b8";
+                const color    = link.iconColor;
                 return (
                   <Link key={link.href} href={link.href} title={link.label} style={{
                     width: 44, height: 36, borderRadius: 8,
@@ -536,7 +429,7 @@ export default function Sidebar() {
                     onMouseEnter={(e) => { e.currentTarget.style.background = `${color}18`; e.currentTarget.style.border = `2px solid ${color}40`; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? `${color}22` : "transparent"; e.currentTarget.style.border = isActive ? `2px solid ${color}55` : "2px solid transparent"; }}
                   >
-                    {link.icon || "•"}
+                    {link.icon}
                     {link.badge && (
                       <span style={{
                         position: "absolute", top: 3, right: 3,
@@ -550,7 +443,6 @@ export default function Sidebar() {
               })}
             </div>
           ) : (
-            /* Full nav */
             navItems.map((section) => {
               const isClosed = closedSections.has(section.section);
               const sColor   = SECTION_COLORS[section.section] || "#94a3b8";
@@ -588,7 +480,7 @@ export default function Sidebar() {
                   }}>
                     {section.links.map((link) => {
                       const isActive = pathname === link.href;
-                      const lColor   = link.iconColor || "#94a3b8";
+                      const lColor   = link.iconColor;
                       return (
                         <Link key={link.href} href={link.href} style={{
                           display: "flex", alignItems: "center", gap: 9,
@@ -596,14 +488,14 @@ export default function Sidebar() {
                           borderLeft: `3px solid ${isActive ? lColor : "transparent"}`,
                           background: isActive ? `${lColor}18` : "transparent",
                           color: isActive ? lColor : "var(--text-muted)",
-                          fontWeight: isActive ? 600 : 400,
+                          fontWeight: isActive ? 700 : 500,
                           textDecoration: "none", transition: "all 0.12s",
                         }}
                           onMouseEnter={(e) => { if (!isActive) { e.currentTarget.style.background = `${lColor}12`; e.currentTarget.style.color = lColor; } }}
                           onMouseLeave={(e) => { if (!isActive) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; } }}
                         >
                           <span style={{ fontSize: 17, flexShrink: 0, minWidth: 22, textAlign: "center" }}>
-                            {link.icon || "•"}
+                            {link.icon}
                           </span>
                           <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {link.label}
@@ -628,12 +520,6 @@ export default function Sidebar() {
           )}
         </nav>
 
-        {/* ══════════════════════════════════════
-          {/* ══════════════════════════════════════
-    SECTION 4 - FOOTER (never scrolls)
-        {/* ══════════════════════════════════════
-            SECTION 4 - FOOTER (never scrolls)
-        ══════════════════════════════════════ */}
         <div style={{
           flexShrink: 0,
           padding: collapsed ? "10px 8px" : "12px 12px 14px",
@@ -643,7 +529,6 @@ export default function Sidebar() {
           {collapsed ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
               <UserAvatar user={{ photo: userPhoto, name: userName }} size={30} />
-              <ScreenShareButton compact={true} />
               <button onClick={toggleTheme} title={dark ? "Light mode" : "Dark mode"} style={{
                 width: 30, height: 30, borderRadius: 8, border: "0.5px solid var(--border)",
                 background: "var(--bg-input)", cursor: "pointer", fontSize: 14,
@@ -664,13 +549,15 @@ export default function Sidebar() {
                     {AGENCY.roleLabels?.[role as keyof typeof AGENCY.roleLabels] || role}
                   </div>
                   <div style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 700, color: "#ef4444", textTransform: "uppercase", marginTop: 2, letterSpacing: "0.05em" }}>
-                    ID: {userIdRef || "-"}
+                    ID: {userIdRef || "—"}
                   </div>
                 </div>
               </div>
-              
-              <ScreenShareButton compact={false} />
-              
+
+              <div style={{ marginBottom: 6 }}>
+                <ScreenShareButton compact={true} />
+              </div>
+
               <button onClick={toggleTheme} style={{
                 display: "flex", alignItems: "center", gap: 9, width: "100%",
                 padding: "8px 12px", borderRadius: 9, marginBottom: 7,
@@ -681,7 +568,7 @@ export default function Sidebar() {
                 <span style={{ fontSize: 14 }}>{dark ? "☀️" : "🌙"}</span>
                 {dark ? "Light mode" : "Dark mode"}
               </button>
-              
+
               <LogoutButton />
             </>
           )}
@@ -710,6 +597,14 @@ export default function Sidebar() {
         aside nav::-webkit-scrollbar { width: 3px; }
         aside nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
         aside nav::-webkit-scrollbar-track { background: transparent; }
+        @keyframes ssRecordPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.85); }
+        }
+        @keyframes ssSpin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
       `}</style>
     </>
   );
