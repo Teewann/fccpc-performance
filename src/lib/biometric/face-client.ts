@@ -93,29 +93,28 @@ export async function removeFaceEnrollment(): Promise<boolean> {
 
 export async function embeddingFromImageData(imageData: string): Promise<Float32Array> {
   await loadModels();
-
   const img = document.createElement("img");
   img.src = imageData;
   await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
 
-  const detection = await faceapi
-    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 }))
+  // First attempt: large/lenient
+  let detection = await faceapi
+    .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.05 }))
     .withFaceLandmarks()
     .withFaceDescriptor();
 
-  if (!detection || detection.detection.score < 0.6) {
-    throw new Error("No clear face detected in that photo. Face the camera directly, at a normal distance, with your face fully visible.");
+    console.log("Detection attempt result:", detection);
+
+  // Second attempt, different size, before giving up entirely
+  if (!detection) {
+    detection = await faceapi
+      .detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.05 }))
+      .withFaceLandmarks()
+      .withFaceDescriptor();
   }
 
-  const left = detection.landmarks.getLeftEye();
-  const right = detection.landmarks.getRightEye();
-  const leftCenter = { x: (left[0].x + left[3].x) / 2, y: (left[0].y + left[3].y) / 2 };
-  const rightCenter = { x: (right[0].x + right[3].x) / 2, y: (right[0].y + right[3].y) / 2 };
-  const eyeDist = Math.hypot(leftCenter.x - rightCenter.x, leftCenter.y - rightCenter.y);
-  const eyeRatio = eyeDist / detection.detection.box.width;
-
-  if (eyeRatio < 0.25 || eyeRatio > 0.6) {
-    throw new Error("Your face doesn't appear fully visible or properly framed. Please remove anything covering your face and try again.");
+  if (!detection) {
+    throw new Error("No clear face detected in that photo. Face the camera directly, at a normal distance, with your face fully visible.");
   }
 
   return detection.descriptor;

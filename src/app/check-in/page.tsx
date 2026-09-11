@@ -800,7 +800,7 @@ function CheckInContent() {
                       Not checked in yet
                     </div>
                     <div style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 20 }}>
-                      Work starts at 8:00 AM : check in before 8:15 AM to avoid a late mark
+                      Work starts at 8:00 AM : check in before 9:00 AM to avoid a late mark
                     </div>
                   </>
                 ) : !checkedOut ? (

@@ -6,7 +6,7 @@ import { AGENCY } from "@/config/agency.config";
 
 const WORK_START_HOUR   = 8;
 const WORK_START_MINUTE = 0;
-const LATE_GRACE_MINS   = 30; // late after 8:30 AM
+const LATE_GRACE_MINS   = 60; // late after 9:00 AM
 
 function todayDate() {
   const d = new Date();

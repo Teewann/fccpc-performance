@@ -152,7 +152,7 @@ export default function FaceCaptureModal({ onCapture, onCancel, isOpen }: FaceCa
 
             if (faceSizeRatio < 0.20) {
               setState("too_far"); goodSinceRef.current = null;
-            } else if (offCenterX > 0.30 || offCenterY > 0.32) {
+            } else if (offCenterX > 0.30 || offCenterY > 0.42) {
               setState("off_center"); goodSinceRef.current = null;
             } else if (detection.score < 0.55) {
               // A weak/partial detection (hand, side profile, obscured face) — treat as "no real face yet"

@@ -196,7 +196,6 @@ export default function SettingsPage() {
     { id: "account",    label: "My account",    icon: "👤" },
     { id: "photo",      label: "Profile photo", icon: "📷" },
     { id: "appearance", label: "Appearance",    icon: "🎨" },
-    { id: "agency",     label: "Agency info",   icon: "🏛️" },
     { id: "security",   label: "Security",      icon: "🔐" },
   ];
 
@@ -444,34 +443,6 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* ════ AGENCY TAB ════ */}
-            {tab === "agency" && (
-              <div>
-                <h2 style={{ fontSize: 22, fontWeight: 600, color: "var(--text-primary)", marginBottom: 6 }}>Agency information</h2>
-                <p style={{ fontSize: 15, color: "var(--text-muted)", marginBottom: 28 }}>
-                  This system is configured for <strong style={{ color: "var(--text-primary)" }}>{AGENCY.shortName}</strong>.
-                </p>
-                {[
-                  { label: "Full agency name", value: AGENCY.name },
-                  { label: "Short name", value: AGENCY.shortName },
-                  { label: "System tagline", value: AGENCY.tagline },
-                  { label: "Chief executive title", value: `${AGENCY.terms.chiefExecutive} (${AGENCY.terms.chiefExecutiveShort})` },
-                  { label: "Department head title", value: AGENCY.terms.departmentHead },
-                  { label: "Intern label", value: AGENCY.terms.intern },
-                  { label: "Country", value: AGENCY.country },
-                  { label: "System version", value: AGENCY.version },
-                  { label: "Working days / month", value: String(AGENCY.workingDays.perMonth) },
-                ].map(({ label, value }) => (
-                  <div key={label} style={{
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                    padding: "15px 0", borderBottom: "0.5px solid var(--border-soft)",
-                  }}>
-                    <div style={{ fontSize: 15, color: "var(--text-muted)", fontWeight: 500 }}>{label}</div>
-                    <div style={{ fontSize: 15, color: "var(--text-primary)", fontWeight: 600 }}>{value}</div>
-                  </div>
-                ))}
-              </div>
-            )}
 
             {/* ════ SECURITY TAB ════ */}
             {tab === "security" && (
@@ -484,8 +455,6 @@ export default function SettingsPage() {
                 {[
                   { label: "Account status", value: "Active", color: "#4ade80" },
                   { label: "Authentication", value: "Email and password", color: "var(--text-primary)" },
-                  { label: "Session type", value: "JSON Web Token - expires on browser close", color: "var(--text-primary)" },
-                  { label: "Password hashing", value: "bcrypt", color: "var(--text-primary)" },
                   { label: "Your role", value: AGENCY.roleLabels[profile?.role as keyof typeof AGENCY.roleLabels] || profile?.role || "-", color: "var(--text-primary)" },
                   { label: "Account created", value: profile ? new Date(profile.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "-", color: "var(--text-primary)" },
                 ].map(({ label, value, color }) => (

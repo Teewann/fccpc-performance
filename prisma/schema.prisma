@@ -25,6 +25,7 @@ model User {
   department   Department? @relation(fields: [departmentId], references: [id])
   unit         Unit?       @relation(fields: [unitId], references: [id])
   dailyLogs    DailyLog[]
+  hrResolvedLogs DailyLog[] @relation("HRResolvedLogs")
   proxyLoggedLogs DailyLog[] @relation("ProxyLoggedBy")  //ADD THIS
   supervisedLogs DailyLog[] @relation("SupervisorLogs")
   supervisorId   String?
@@ -146,6 +147,10 @@ model DailyLog {
   proxyLoggedBy    User?      @relation("ProxyLoggedBy", fields: [proxyLoggedById], references: [id])  //ADD THIS
   crossDeptFlag    String?
   ackStatus        String?
+  hrResolutionNote String?
+  hrResolvedAt     DateTime?
+  hrResolvedById   String?
+  hrResolvedBy     User?     @relation("HRResolvedLogs", fields: [hrResolvedById], references: [id])
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
