@@ -13,6 +13,12 @@ export async function GET(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+      select: {
+        id: true,
+        role: true,
+        departmentId: true,
+        unitId: true,
+      },
     });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
@@ -20,37 +26,67 @@ export async function GET(request: NextRequest) {
     const page     = parseInt(searchParams.get("page")     || "1");
     const limit    = parseInt(searchParams.get("limit")    || "20");
     const status   = searchParams.get("status")   || "ALL";
-    const deptId   = searchParams.get("deptId")   || null;
-    const userId   = searchParams.get("userId")   || null;
     const dateFrom = searchParams.get("dateFrom") || null;
     const dateTo   = searchParams.get("dateTo")   || null;
     const search   = searchParams.get("search")   || null;
+    const scope    = searchParams.get("scope")    || "auto"; // "auto" | "mine"
 
-    // Staff can only see their own logs
-    // Supervisors/Admin/HR see all logs (or filtered by dept)
-    const isPrivileged = ["SUPERVISOR","HR","DIRECTOR","ADMIN","EXECUTIVE"].includes(user.role);
+    // ─── Decide scope by role ──────────────────────────────────────
+    let where: any = {};
 
-    const where: any = {};
+    if (user.role === "EXECUTIVE") {
+      // Org-wide
+      if (scope === "mine") where.userId = user.id;
 
-    if (!isPrivileged) {
-      where.userId = user.id;
+    } else if (user.role === "DIRECTOR") {
+      // DIRECTOR = dept head OR unit head (same role, different assignment)
+      if (scope === "mine") {
+        where.userId = user.id;
+      } else if (user.unitId) {
+        // Unit head — sees their unit
+        where.user = { unitId: user.unitId };
+      } else if (user.departmentId) {
+        // Department head — sees their department
+        where.user = { departmentId: user.departmentId };
+      } else {
+        return NextResponse.json({ error: "No department or unit assigned" }, { status: 400 });
+      }
+
+    } else if (user.role === "SUPERVISOR") {
+      if (scope === "mine") {
+        where.userId = user.id;
+      } else {
+        // Supervisor = delegated role. Only their direct reports + self.
+        where.OR = [
+          { userId: user.id },
+          { user: { supervisorId: user.id } },
+        ];
+      }
+
     } else {
-      if (userId)  where.userId          = userId;
-      if (deptId)  where.user            = { departmentId: deptId };
+      // STAFF, HR, ADMIN, and everyone else → only their own
+      where.userId = user.id;
     }
 
-    if (status !== "ALL") where.status   = status;
+    // ─── Apply user-facing filters ─────────────────────────────────
+    if (status !== "ALL") where.status = status;
     if (dateFrom || dateTo) {
       where.date = {};
       if (dateFrom) where.date.gte = new Date(dateFrom);
       if (dateTo)   where.date.lte = new Date(dateTo);
     }
     if (search) {
-      where.OR = [
-        { taskTitle:   { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
+      const searchOR = [
+        { taskTitle:     { contains: search, mode: "insensitive" } },
+        { description:   { contains: search, mode: "insensitive" } },
         { caseReference: { contains: search, mode: "insensitive" } },
       ];
+      if (where.OR) {
+        where.AND = [{ OR: where.OR }, { OR: searchOR }];
+        delete where.OR;
+      } else {
+        where.OR = searchOR;
+      }
     }
 
     const [logs, total] = await Promise.all([
@@ -67,9 +103,25 @@ export async function GET(request: NextRequest) {
       prisma.dailyLog.count({ where }),
     ]);
 
-    // Summary stats
+    // ─── Stats — same scope as list ────────────────────────────────
+    const statsWhere: any = {};
+    if (user.role === "EXECUTIVE") {
+      // org-wide
+    } else if (user.role === "DIRECTOR") {
+      if (user.unitId) statsWhere.user = { unitId: user.unitId };
+      else if (user.departmentId) statsWhere.user = { departmentId: user.departmentId };
+      else statsWhere.userId = user.id;
+    } else if (user.role === "SUPERVISOR") {
+      statsWhere.OR = [
+        { userId: user.id },
+        { user: { supervisorId: user.id } },
+      ];
+    } else {
+      statsWhere.userId = user.id;
+    }
+
     const allForStats = await prisma.dailyLog.findMany({
-      where: isPrivileged ? (deptId ? { user: { departmentId: deptId } } : {}) : { userId: user.id },
+      where: statsWhere,
       select: { status: true, timeSpent: true },
     });
 
@@ -89,7 +141,7 @@ export async function GET(request: NextRequest) {
       stats,
     });
   } catch (error) {
-    console.error(error);
+    console.error("[staff-logs GET]", error);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }
@@ -176,7 +228,7 @@ export async function PATCH(request: NextRequest) {
       data: {
         userId: reviewer.id,
         action: `LOG_${status}`,
-        detail: `Log ${logId} (${log.taskTitle}) — ${comment || "no comment"}`,
+        detail: `Log ${logId} (${log.taskTitle}) ${comment || "No comment"}`,
       },
     });
 

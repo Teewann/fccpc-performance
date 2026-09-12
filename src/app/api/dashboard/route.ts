@@ -82,40 +82,27 @@ export async function GET(request: NextRequest) {
     };
 
     // ── BATCH 1: fire all independent queries at the SAME time ─────────
-    // (previously these ran one-by-one, each paying full network latency)
+    // ✅ OPTIMIZED: fetch rows once, derive counts in JS — avoids duplicate DB round-trips.
+    // Previously this block fired 16 queries; now it fires 9.
     const [
       totalStaff,
       activeDepartments,
-      logsInRange,
-      approvedLogs,
-      rejectedLogs,
+      logRows,
       pendingLogs,
-      queriedLogs,
-      tasksInRange,
+      taskRows,
       tasksPending,
-      tasksCompleted,
       leaveInRange,
       leavePending,
-      allLogs,
-      taskInProgress,
-      taskOverdue,
       recentLogs,
     ] = await Promise.all([
       isPrivileged ? prisma.user.count({ where: { isActive: true } }) : Promise.resolve(0),
       isPrivileged ? prisma.department.count() : Promise.resolve(0),
-      prisma.dailyLog.count({ where: logWhere }),
-      prisma.dailyLog.count({ where: { ...logWhere, status: "APPROVED" } }),
-      prisma.dailyLog.count({ where: { ...logWhere, status: "REJECTED" } }),
+      prisma.dailyLog.findMany({ where: logWhere, select: { date: true, status: true } }),
       prisma.dailyLog.count({ where: { status: "SUBMITTED", userId: user.id } }),
-      prisma.dailyLog.count({ where: { ...logWhere, status: "QUERIED" } }),
-      prisma.task.count({ where: taskWhere }),
+      prisma.task.findMany({ where: taskWhere, select: { status: true } }),
       prisma.task.count({ where: { status: "PENDING", assignedToId: user.id } }),
-      prisma.task.count({ where: { ...taskWhere, status: "COMPLETED" } }),
       prisma.leaveRequest.count({ where: leaveWhere }),
       prisma.leaveRequest.count({ where: { status: "PENDING", userId: user.id } }),
-      prisma.dailyLog.findMany({ where: logWhere, select: { date: true, status: true } }),
-      prisma.task.count({ where: { ...taskWhere, status: "IN_PROGRESS" } }),
-      prisma.task.count({ where: { ...taskWhere, status: "OVERDUE" } }),
       prisma.dailyLog.findMany({
         take: 8,
         orderBy: { createdAt: "desc" },
@@ -129,6 +116,18 @@ export async function GET(request: NextRequest) {
         },
       }),
     ]);
+
+    // Derived entirely from data already fetched above — no extra queries needed.
+    const allLogs = logRows;
+    const logsInRange   = logRows.length;
+    const approvedLogs  = logRows.filter((l) => l.status === "APPROVED").length;
+    const rejectedLogs  = logRows.filter((l) => l.status === "REJECTED").length;
+    const queriedLogs   = logRows.filter((l) => l.status === "QUERIED").length;
+
+    const tasksInRange   = taskRows.length;
+    const tasksCompleted = taskRows.filter((t) => t.status === "COMPLETED").length;
+    const taskInProgress = taskRows.filter((t) => t.status === "IN_PROGRESS").length;
+    const taskOverdue    = taskRows.filter((t) => t.status === "OVERDUE").length;
 
     // ── Calculate derived values ──────────────────────────────────────
     const submittedInRange = Math.max(

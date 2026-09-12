@@ -33,7 +33,7 @@ export function useScreenShareBroadcast({ active }: UseBroadcastOptions) {
     const text = (target.textContent || target.getAttribute('aria-label') || '').trim().slice(0, 80);
 
     lastClickRef.current = {
-      x: Math.round((e.clientX / window.innerWidth) * 100),  // % of viewport — privacy-safe
+    x: Math.round((e.clientX / window.innerWidth) * 100),  // % of viewport, privacy-safe
       y: Math.round((e.clientY / window.innerHeight) * 100),
       selector,
       text,

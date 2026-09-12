@@ -184,6 +184,7 @@ export async function POST(request: NextRequest) {
   });
 
   // Notify recipients
+    // Notify recipients
   await prisma.notification.createMany({
     data: finalRecipientIds.map((userId) => ({
       userId,
@@ -193,6 +194,19 @@ export async function POST(request: NextRequest) {
       link: "/announcements?tab=memos",
     })),
   });
+
+  // ✅ AUDIT: record memo publication
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: senderId,
+        action: "MEMO_PUBLISHED",
+        detail: `Published memo "${subject.trim()}" to ${finalRecipientIds.length} recipient(s) — target: ${targetType || "unspecified"}`,
+      },
+    });
+  } catch (e) {
+    console.error("[audit] memo log failed:", e);
+  }
 
   return NextResponse.json({ success: true, memo });
 }

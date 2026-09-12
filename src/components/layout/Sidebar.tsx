@@ -65,7 +65,6 @@ const SECTIONS: NavSection[] = [
       { label: "Reports", href: "/reports", icon: "📈", iconColor: "#60a5fa" },
       { label: "Communications", href: "/announcements", icon: "📢", iconColor: "#fb923c" },
       { label: "Promotion Exams", href: "/exams", icon: "🎓", iconColor: "#a78bfa" },
-      { label: "Staff Directory", href: "/staff-directory", icon: "👥", iconColor: "#38bdf8", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
       { label: "Performance", href: "/performance", icon: "🏆", iconColor: "#fbbf24", allowedRoles: HR_ONLY },
       { label: "Incentives", href: "/incentives", icon: "🎯", iconColor: "#f472b6", badge: "HR", badgeGreen: true, allowedRoles: HR_ONLY },
       { label: "HR Oversight", href: "/hr-oversight", icon: "👁", iconColor: "#c084fc", allowedRoles: HR_ONLY },

@@ -110,15 +110,28 @@ export async function POST(
     });
     // Notifications (non-fatal)
     try {
-      await prisma.notification.createMany({
+            await prisma.notification.createMany({
         data: toUserIds.map(uid => ({
           userId: uid,
           title: `Forwarded: ${original.subject}`,
           message: `${userName} forwarded a memo to you: "${original.subject}"`,
           type: "INFO",
+          link: "/announcements?tab=memos",
         })),
       });
-    } catch (e) { console.error(e); }
+        } catch (e) { console.error(e); }
+
+    // ✅ AUDIT: record memo forward
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId,
+          action: "MEMO_FORWARDED",
+          detail: `Forwarded memo "${original.subject}" to ${toUserIds.length} recipient(s)`,
+        },
+      });
+    } catch (e) { console.error("[audit] memo forward log failed:", e); }
+
     return NextResponse.json({ success: true, memo: forwarded }, { status: 201 });
   } catch (error) {
     console.error(error);

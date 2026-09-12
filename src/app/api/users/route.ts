@@ -315,7 +315,6 @@ export async function DELETE(request: NextRequest) {
     if (!session?.user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-    // ✅ Use session data directly — no DB round trip needed
     const adminId = (session.user as any).id as string;
     const adminRole = (session.user as any).role as string;
     if (adminRole !== "ADMIN")
@@ -324,21 +323,20 @@ export async function DELETE(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "User ID required" }, { status: 400 });
-
-    if (id === adminId) {
-      return NextResponse.json({ error: "You cannot delete your own account" }, { status: 400 });
-    }
+    if (id === adminId) return NextResponse.json({ error: "You cannot deactivate your own account" }, { status: 400 });
 
     const target = await prisma.user.findUnique({ where: { id } });
-    if (!target)  return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    await prisma.user.delete({ where: { id } });
+    // Deactivate, don't hard-delete — preserves every historical record
+    // (logs, check-ins, chat, revenue, tasks, etc.) instead of destroying it.
+    await prisma.user.update({ where: { id }, data: { isActive: false } });
 
     await prisma.auditLog.create({
       data: {
         userId: adminId,
-        action: "USER_DELETED",
-        detail: `Admin deleted user: ${target.name} (${target.email})`,
+        action: "USER_DEACTIVATED",
+        detail: `Deactivated user: ${target.name} (${target.email})`,
       },
     });
 

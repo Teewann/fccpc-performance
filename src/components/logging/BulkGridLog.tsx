@@ -10,11 +10,28 @@ import { useState } from "react";
 import { useToast } from "@/components/ui/ToastProvider";
 import { MESSAGES } from "@/lib/messages";
 
-type Row = { taskTitle: string; taskCategory: string; description: string; timeSpent: string };
-const EMPTY_ROW: Row = { taskTitle: "", taskCategory: "", description: "", timeSpent: "1" };
+type Row = {
+  taskTitle: string;
+  taskCategory: string;
+  description: string;
+  hours: number;
+  minutes: number;
+};
+
+const EMPTY_ROW: Row = {
+  taskTitle: "",
+  taskCategory: "",
+  description: "",
+  hours: 1,
+  minutes: 0,
+};
 
 export default function BulkGridLog({ onSubmitted }: { onSubmitted: () => void }) {
-  const [rows, setRows] = useState<Row[]>([{ ...EMPTY_ROW }, { ...EMPTY_ROW }, { ...EMPTY_ROW }]);
+  const [rows, setRows] = useState<Row[]>([
+    { ...EMPTY_ROW },
+    { ...EMPTY_ROW },
+    { ...EMPTY_ROW },
+  ]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const { showToast } = useToast();
@@ -23,6 +40,12 @@ export default function BulkGridLog({ onSubmitted }: { onSubmitted: () => void }
     width: "100%", background: "var(--bg-input)", border: "0.5px solid var(--border)",
     borderRadius: 8, padding: "8px 10px", fontSize: 13, color: "var(--text-primary)",
     outline: "none", boxSizing: "border-box",
+  };
+
+  const miniSel: React.CSSProperties = {
+    background: "var(--bg-input)", border: "0.5px solid var(--border)",
+    borderRadius: 6, padding: "6px 4px", fontSize: 12, color: "var(--text-primary)",
+    outline: "none", cursor: "pointer",
   };
 
   function updateRow(i: number, patch: Partial<Row>) {
@@ -38,6 +61,8 @@ export default function BulkGridLog({ onSubmitted }: { onSubmitted: () => void }
     setSubmitting(true);
     let ok = 0;
     for (const r of valid) {
+      // Convert hours + minutes to decimal hours (e.g. 1h 20m → 1.33)
+      const total = Math.round((r.hours + r.minutes / 60) * 100) / 100;
       try {
         const res = await fetch("/api/daily-logs", {
           method: "POST",
@@ -46,7 +71,7 @@ export default function BulkGridLog({ onSubmitted }: { onSubmitted: () => void }
             taskTitle: r.taskTitle,
             taskCategory: r.taskCategory,
             description: r.description || r.taskTitle,
-            timeSpent: r.timeSpent || "1",
+            timeSpent: String(total > 0 ? total : 0.01),
             priority: "MEDIUM",
             status: "SUBMITTED",
           }),
@@ -72,19 +97,32 @@ export default function BulkGridLog({ onSubmitted }: { onSubmitted: () => void }
       </div>
       {error && <div style={{ background: "#1f0707", border: "0.5px solid #7f1d1d", color: "#f87171", borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr 70px 32px", gap: 8, marginBottom: 8, padding: "0 4px" }}>
-        {["Title", "Category", "Notes", "Hrs", ""].map((h) => (
+      <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr 140px 32px", gap: 8, marginBottom: 8, padding: "0 4px" }}>
+        {["Title", "Category", "Notes", "Time spent", ""].map((h) => (
           <div key={h} style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>{h}</div>
         ))}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
         {rows.map((row, i) => (
-          <div key={i} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr 70px 32px", gap: 8, alignItems: "center" }}>
+          <div key={i} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1.4fr 140px 32px", gap: 8, alignItems: "center" }}>
             <input style={cellInp} placeholder="What did you do?" value={row.taskTitle} onChange={(e) => updateRow(i, { taskTitle: e.target.value })} />
             <input style={cellInp} placeholder="Category" value={row.taskCategory} onChange={(e) => updateRow(i, { taskCategory: e.target.value })} />
             <input style={cellInp} placeholder="Optional notes" value={row.description} onChange={(e) => updateRow(i, { description: e.target.value })} />
-            <input type="number" step="0.5" min="0.5" max="12" style={cellInp} value={row.timeSpent} onChange={(e) => updateRow(i, { timeSpent: e.target.value })} />
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <select style={miniSel} value={row.hours} onChange={(e) => updateRow(i, { hours: Number(e.target.value) })}>
+                {Array.from({ length: 13 }, (_, h) => h).map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>h</span>
+              <select style={miniSel} value={row.minutes} onChange={(e) => updateRow(i, { minutes: Number(e.target.value) })}>
+                {Array.from({ length: 60 }, (_, m) => m).map((m) => (
+                  <option key={m} value={m}>{String(m).padStart(2, "0")}</option>
+                ))}
+              </select>
+              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>m</span>
+            </div>
             <button onClick={() => removeRow(i)} style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 15 }}>✕</button>
           </div>
         ))}

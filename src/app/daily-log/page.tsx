@@ -1,14 +1,14 @@
 "use client";
 
 export const dynamic = "force-dynamic";
-
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import Sidebar from "@/components/layout/Sidebar";
 import ThemeToggleButton from "@/components/layout/ThemeToggleButton";
 import { TASK_TYPE_GROUPS, getTaskTypeLabel, getTaskTypeIcon } from "@/config/taskTypes";
 import LogModeHub from "@/components/logging/LogModeHub";
 import PendingAcknowledgments from "@/components/PendingAcknowledgments";
-import TimeRangePicker from "@/components/TimeRangePicker";
+import DurationPicker from "@/components/DurationPicker";
 
 type TaskTemplate = {
   id: string;
@@ -69,7 +69,7 @@ const EMPTY: FormData = {
   taskType: "",
 };
 
-// Roles allowed to log on behalf of staff (Proxy mode). Adjust to taste —
+// Roles allowed to log on behalf of staff (Proxy mode). Adjust to taste,
 // this mirrors the "isPrivileged" pattern already used on your tasks page.
 const PROXY_CAPABLE_ROLES = ["DIRECTOR", "SUPERVISOR", "HR", "ADMIN", "EXECUTIVE"];
 
@@ -188,9 +188,8 @@ export default function CheckInPage() {
     marginBottom: 7,
   };
 
-  // ── The original manual form, now passed into LogModeHub as one of six
-  // modes instead of being the only option. Content unchanged, just no
-  // longer wrapped in its own card — LogModeHub supplies that wrapper now.
+  // The original manual form, now passed into LogModeHub as one of six
+  // modes instead of being the only option.
   const manualFormContent = (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 14, borderBottom: "0.5px solid var(--border-soft)" }}>
@@ -206,7 +205,7 @@ export default function CheckInPage() {
       <div style={{ marginBottom: 16 }}>
         <label style={lbl}>Type of task <span style={{ color: "#f87171" }}>*</span></label>
         <select name="taskType" value={form.taskType} onChange={handleChange} style={inp} required>
-          <option value="">: Select task type :</option>
+          <option value="">Select task type</option>
           {Object.entries(TASK_TYPE_GROUPS).map(([group, types]) => (
             <optgroup key={group} label={group}>
               {types.map((t) => (
@@ -249,8 +248,7 @@ export default function CheckInPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
         <div style={{ gridColumn: "1/-1" }}>
-          <label style={lbl}>Time spent <span style={{ color: "#f87171" }}>*</span></label>
-          <TimeRangePicker onChange={(hours) => setForm((p) => ({ ...p, timeSpent: String(hours) }))} />
+          <DurationPicker onChange={(hours) => setForm((p) => ({ ...p, timeSpent: String(hours) }))} />
         </div>
         <div>
           <label style={lbl}>Status</label>
@@ -299,7 +297,7 @@ export default function CheckInPage() {
           <label style={lbl}>Evidence upload</label>
           <div style={{ border: "1px dashed var(--border)", borderRadius: 10, padding: "18px", textAlign: "center", cursor: "pointer" }}>
             <div style={{ fontSize: 14, color: "var(--text-muted)" }}>Click to upload evidence file</div>
-            <div style={{ fontSize: 12, color: "var(--text-hint)", marginTop: 4 }}>PDF, Word, Excel, images : max 10MB</div>
+            <div style={{ fontSize: 12, color: "var(--text-hint)", marginTop: 4 }}>PDF, Word, Excel, images. Max 10MB</div>
           </div>
         </div>
       )}
@@ -337,6 +335,19 @@ export default function CheckInPage() {
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>{today}</p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Link href="/staff-logs" style={{
+              padding: "9px 18px",
+              borderRadius: 10,
+              border: "1.5px solid #60a5fa",
+              background: "#0c1a2e",
+              color: "#60a5fa",
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}>
+              📋 All my logs
+            </Link>
             <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 10, border: "1.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontSize: 13, fontWeight: 600 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
               Log open
@@ -367,7 +378,7 @@ export default function CheckInPage() {
             onSubmitted={fetchTodayLogs}
           />
 
-          {/* Right panel — unchanged, plus pending confirmations at top */}
+          {/* Right panel, plus pending confirmations at top */}
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <PendingAcknowledgments />
             <div className="card-bg" style={{ borderRadius: 14, padding: 20 }}>
@@ -407,15 +418,15 @@ export default function CheckInPage() {
             <div className="card-bg" style={{ borderRadius: 14, padding: 20 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", marginBottom: 14 }}>Submission guide</div>
               {[
-                "Pick whichever mode is fastest for you ; Quick capture, Timer, Repeat, Bulk entry, or the full Manual form",
-                "Give a clear title and enough detail that a reviewer understands what happened",
-                "Enter honest time spent : this feeds your KPI score",
-                "Cross-department work gets flagged for acknowledgment from that department",
-                "Submit before end of day : late submissions are flagged",
+                "Pick whichever mode is fastest for you. Quick capture, Timer, Repeat, Bulk entry, or the full Manual form.",
+                "Give a clear title and enough detail that a reviewer understands what happened.",
+                "Enter honest time spent. This feeds your KPI score.",
+                "Cross-department work gets flagged for acknowledgment from that department.",
+                "Submit before end of day. Late submissions are flagged.",
               ].map((tip, i) => (
                 <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--accent-bg)", border: "0.5px solid var(--accent-border)", color: "var(--accent-text)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</div>
-                  <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>{tip}</p>
+                  <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#1c1107", border: "0.5px solid #78350f", color: "#f59e0b", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</div>
+                  <p style={{ fontSize: 13, color: "#f59e0b", lineHeight: 1.5 }}>{tip}</p>
                 </div>
               ))}
             </div>

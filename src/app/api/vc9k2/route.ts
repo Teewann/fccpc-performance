@@ -15,12 +15,27 @@ export async function GET(request: NextRequest) {
       where: { email: session.user.email },
     });
 
-    if (!user || user.role !== "EXECUTIVE") {
+        if (!user || user.role !== "EXECUTIVE") {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     const { searchParams } = new URL(request.url);
     const section = searchParams.get("section") || "overview";
+
+    // ✅ AUDIT: record EVC suite access (only for overview to avoid spamming)
+    if (section === "overview") {
+      try {
+        await prisma.auditLog.create({
+          data: {
+            userId: user.id,
+            action: "EVC_SUITE_ACCESS",
+            detail: `Executive accessed EVC Suite (section: ${section})`,
+          },
+        });
+      } catch (e) {
+        console.error("[audit] evc access log failed:", e);
+      }
+    }
 
     if (section === "overview") {
       const now        = new Date();

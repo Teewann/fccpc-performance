@@ -60,8 +60,8 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-  async jwt({ token, user }) {
-    if (user) {
+    async jwt({ token, user }) {
+      if (user) {
         token.id = user.id;
         token.role = (user as any).role;
         token.departmentId = (user as any).departmentId;
@@ -75,6 +75,37 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).departmentId = token.departmentId as string | null;
       }
       return session;
+    },
+  },
+  // ✅ AUDIT: record login / logout
+  events: {
+    async signIn({ user }) {
+      try {
+        await prisma.auditLog.create({
+          data: {
+            userId: user.id as string,
+            action: "USER_LOGIN",
+            detail: `User logged in: ${user.email}`,
+          },
+        });
+      } catch (e) {
+        console.error("[audit] signIn log failed:", e);
+      }
+    },
+    async signOut({ token }) {
+      try {
+        if (token?.id) {
+          await prisma.auditLog.create({
+            data: {
+              userId: token.id as string,
+              action: "USER_LOGOUT",
+              detail: `User logged out: ${token.email ?? "unknown"}`,
+            },
+          });
+        }
+      } catch (e) {
+        console.error("[audit] signOut log failed:", e);
+      }
     },
   },
   pages: {

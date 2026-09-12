@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
         data: {
           userId: hrUser.id,
           action: "HR_DISPUTE_RESOLVED",
-          detail: `Resolved dispute on log "${log.taskTitle}" (${log.refNo || log.id})${note ? ` — ${note}` : ""}`,
+          detail: `Resolved dispute on log "${log.taskTitle}" (${log.refNo || log.id})${note ? ` ${note}` : ""}`,
         },
       });
       return NextResponse.json({ success: true, log: updated });

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       unit, year: parseInt(year), startDate: new Date(startDate), endDate: new Date(endDate),
       contributions: {
         create: contributions.map((c: any) => ({
-          title: `${title} — contribution`,
+          title: `${title}  contribution`,
           target: parseFloat(c.target),
           current: 0,
           unit,

@@ -3,18 +3,13 @@
 // Lets staff clone a past entry (yesterday's or any recent one) with today's
 // date, editing only what changed. Cuts repetitive daily filing to one tap
 // + a quick edit.
-//
-// ASSUMPTION: calls GET /api/daily-logs?mine=true&limit=15 to get the
-// current user's recent entries. If your existing GET /api/daily-logs
-// handler doesn't support a `mine` + `limit` query param yet, that's a
-// small addition needed server-side — happy to write that once I see the
-// route file.
 
 "use client";
 
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/ToastProvider";
 import { MESSAGES } from "@/lib/messages";
+import DurationPicker from "@/components/DurationPicker";
 
 type RecentLog = {
   id: string;
@@ -25,6 +20,15 @@ type RecentLog = {
   timeSpent: number;
   priority: string;
 };
+
+function formatHours(hours: number): string {
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  if (h === 0 && m === 0) return "0 min";
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h} hr`;
+  return `${h} hr ${m} min`;
+}
 
 export default function RepeatLog({ onSubmitted }: { onSubmitted: () => void }) {
   const [recent, setRecent] = useState<RecentLog[]>([]);
@@ -94,10 +98,11 @@ export default function RepeatLog({ onSubmitted }: { onSubmitted: () => void }) 
           onChange={(e) => setEditing({ ...editing, taskTitle: e.target.value })} />
         <textarea style={{ ...inp, resize: "none", marginBottom: 10 }} rows={2} value={editing.description}
           onChange={(e) => setEditing({ ...editing, description: e.target.value })} />
-        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
-          <input type="number" step="0.5" style={{ ...inp, width: 100 }} value={editing.timeSpent}
-            onChange={(e) => setEditing({ ...editing, timeSpent: Number(e.target.value) })} />
-          <span style={{ fontSize: 13, color: "var(--text-muted)", alignSelf: "center" }}>hours today</span>
+        <div style={{ marginBottom: 14 }}>
+          <DurationPicker
+            onChange={(hours) => setEditing({ ...editing, timeSpent: hours })}
+            initialHours={editing.timeSpent}
+          />
         </div>
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={() => setEditing(null)} style={{ padding: "12px 20px", borderRadius: 10, border: "0.5px solid var(--border)", background: "var(--bg-input)", color: "var(--text-muted)", cursor: "pointer" }}>Back</button>
@@ -119,7 +124,7 @@ export default function RepeatLog({ onSubmitted }: { onSubmitted: () => void }) 
       {loading ? (
         <div style={{ fontSize: 14, color: "var(--text-muted)", textAlign: "center", padding: 30 }}>Loading your recent entries…</div>
       ) : distinct.length === 0 ? (
-        <div style={{ fontSize: 14, color: "var(--text-muted)", textAlign: "center", padding: 30 }}>No recent entries yet — log something once and it'll show up here to repeat.</div>
+        <div style={{ fontSize: 14, color: "var(--text-muted)", textAlign: "center", padding: 30 }}>No recent entries yet. Log something once and it'll show up here to repeat.</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {distinct.map((log) => (
@@ -127,7 +132,7 @@ export default function RepeatLog({ onSubmitted }: { onSubmitted: () => void }) 
               className="card-bg"
               style={{ borderRadius: 10, padding: "12px 16px", cursor: "pointer", border: "0.5px solid var(--border)" }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>{log.taskTitle}</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{log.taskCategory} · {log.timeSpent}h</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{log.taskCategory} · {formatHours(log.timeSpent)}</div>
             </div>
           ))}
         </div>

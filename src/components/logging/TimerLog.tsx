@@ -46,7 +46,9 @@ export default function TimerLog({ onSubmitted }: { onSubmitted: () => void }) {
   async function finish() {
     setSubmitting(true);
     setError("");
-    const hours = Math.max(0.5, Math.round((elapsed / 3600000) * 2) / 2); // rounds to nearest 0.5h, min 0.5
+    // ✅ Accurate to the nearest minute, no forced minimum.
+    // 1 min = 0.02 hrs, 10 min = 0.17 hrs, 20 min = 0.33 hrs.
+    const hours = Math.max(0.01, Math.round((elapsed / 3600000) * 100) / 100);
     try {
       const res = await fetch("/api/daily-logs", {
         method: "POST",
@@ -84,7 +86,7 @@ export default function TimerLog({ onSubmitted }: { onSubmitted: () => void }) {
     return (
       <div>
         <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
-          Logged {mins}m {secs}s — add a quick note
+          Logged {mins}m {secs}s. Add a quick note.
         </div>
         <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 14 }}>{label}</div>
         {error && <div style={{ background: "#1f0707", border: "0.5px solid #7f1d1d", color: "#f87171", borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
@@ -102,7 +104,7 @@ export default function TimerLog({ onSubmitted }: { onSubmitted: () => void }) {
     <div>
       <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>Timer</div>
       <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16 }}>
-        For work you're starting right now — no form until you're done.
+        For work you're starting right now. No form until you're done.
       </div>
       {error && <div style={{ background: "#1f0707", border: "0.5px solid #7f1d1d", color: "#f87171", borderRadius: 10, padding: "10px 14px", fontSize: 13, marginBottom: 12 }}>{error}</div>}
 

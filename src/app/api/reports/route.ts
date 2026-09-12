@@ -362,7 +362,7 @@ export async function GET(request: NextRequest) {
           postedBy: a.author.name,
           role: a.author.role,
           audience: a.targetDeptId ? "One department" : "All staff",
-          engagement: "—",
+          engagement: "",
           pinned: a.isPinned ? "Yes" : "",
           date: new Date(a.createdAt).toLocaleDateString("en-GB"),
         })),
@@ -447,7 +447,7 @@ export async function GET(request: NextRequest) {
         date: new Date(c.date).toLocaleDateString("en-GB"),
         checkIn: new Date(c.checkInAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
         checkOut: c.checkOutAt ? new Date(c.checkOutAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "—",
-        hours: c.hoursWorked ?? "—",
+        hours: c.hoursWorked ?? "",
         status: c.status,
         location: `In: ${c.isOnPremises ? "On-premises" : "Outside"}${c.checkOutAt ? ` · Out: ${c.checkOutIsOnPremises ? "On-premises" : "Outside"}` : ""}`,
         method: c.verificationMethod ?? "Unverified",
@@ -515,12 +515,12 @@ export async function GET(request: NextRequest) {
       rows = staff.map((u) => ({
         name: u.name,
         email: u.email,
-        staffId: u.staffId ?? "—",
+        staffId: u.staffId ?? "",
         role: u.role,
-        jobTitle: u.jobTitle ?? "—",
-        gradeLevel: u.gradeLevel ?? "—",
+        jobTitle: u.jobTitle ?? "",
+        gradeLevel: u.gradeLevel ?? "",
         department: u.department?.name ?? "Unassigned",
-        unit: u.unit?.name ?? "—",
+        unit: u.unit?.name ?? "",
         status: u.isActive ? "Active" : "Inactive",
         joined: new Date(u.createdAt).toLocaleDateString("en-GB"),
       }));
@@ -599,6 +599,20 @@ export async function GET(request: NextRequest) {
           recordedAt: new Date(s.recordedAt).toLocaleDateString("en-GB"),
         }))
       );
+    }
+
+    // ─── RETURN RESPONSE ──────────────────────────────────────────────
+        // ✅ AUDIT: record report generation
+    try {
+      await prisma.auditLog.create({
+        data: {
+          userId: user.id,
+          action: "REPORT_GENERATED",
+          detail: `Generated "${type}" report (period: ${period}, rows: ${rows.length})${deptId ? `, dept: ${deptId}` : ""}${deptIdList ? `, depts: ${deptIdList.join(",")}` : ""}`,
+        },
+      });
+    } catch (e) {
+      console.error("[audit] report log failed:", e);
     }
 
     // ─── RETURN RESPONSE ──────────────────────────────────────────────

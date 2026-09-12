@@ -21,6 +21,11 @@ type AuditLog = {
 
 const ACTION_CONFIG: Record<string, { bg: string; color: string; border: string; icon: string }> = {
   USER_LOGIN:               { bg: "#052e16", color: "#4ade80", border: "#14532d", icon: "🔐" },
+  USER_LOGOUT:              { bg: "#1c1107", color: "#f59e0b", border: "#78350f", icon: "🚪" },
+  REPORT_GENERATED:         { bg: "#0c1a2e", color: "#60a5fa", border: "#1e3a5f", icon: "📊" },
+  MEMO_PUBLISHED:           { bg: "#1a0a2e", color: "#a78bfa", border: "#4c1d95", icon: "📨" },
+  MEMO_FORWARDED:           { bg: "#1a0a2e", color: "#c084fc", border: "#6b21a8", icon: "↪️" },
+  EVC_SUITE_ACCESS:         { bg: "#1f0707", color: "#f87171", border: "#7f1d1d", icon: "⚡" },
   USER_CREATED:             { bg: "#0c1a2e", color: "#60a5fa", border: "#1e3a5f", icon: "👤" },
   USER_UPDATED:             { bg: "#0c1a2e", color: "#60a5fa", border: "#1e3a5f", icon: "✏️" },
   ACCOUNT_UPDATED:          { bg: "#0c1a2e", color: "#60a5fa", border: "#1e3a5f", icon: "⚙️" },
@@ -54,6 +59,11 @@ function formatAction(action: string) {
 const ACTION_FILTERS = [
   "ALL",
   "USER_LOGIN",
+  "USER_LOGOUT",
+  "REPORT_GENERATED",
+  "MEMO_PUBLISHED",
+  "MEMO_FORWARDED",
+  "EVC_SUITE_ACCESS",
   "DAILY_LOG_SUBMITTED",
   "LOG_APPROVED",
   "LOG_REJECTED",
@@ -280,10 +290,10 @@ export default function AuditTrailPage() {
                       })}
                     </div>
                     <div style={{ marginTop: 2 }}>
-                      {new Date(log.createdAt).toLocaleTimeString("en-GB", {
-                        hour: "2-digit", minute: "2-digit",
-                      })}
-                    </div>
+                      {new Date(log.createdAt).toLocaleTimeString("en-US", {
+                        hour: "2-digit", minute: "2-digit", hour12: true,
+                        })}
+                        </div>
                   </div>
                 </div>
               );

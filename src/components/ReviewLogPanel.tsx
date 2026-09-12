@@ -54,7 +54,7 @@ export default function ReviewLogPanel({
         showToast(data.error || "Something went wrong on our end. Try again shortly.", false);
       }
     } catch {
-      showToast("Connection issue — try again in a moment.", false);
+      showToast("Connection issue ; try again in a moment.", false);
     } finally {
       setSubmitting(null);
     }

@@ -20,7 +20,7 @@ import { useState } from "react";
 import { getTaskTypeLabel, getTaskTypeIcon } from "@/config/taskTypes";
 import { useToast } from "@/components/ui/ToastProvider";
 import { MESSAGES } from "@/lib/messages";
-
+import DurationPicker from "@/components/DurationPicker";
 type Draft = {
   title: string;
   taskCategory: string;
@@ -148,8 +148,8 @@ export default function QuickCaptureLog({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 600, color: "var(--text-primary)" }}>Quick capture</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
-            Describe everything you did today in your own words — AI will split it into entries.
+                    <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
+            Describe everything you did today in your own words. AI will split it into entries.
           </div>
         </div>
         <button
@@ -199,8 +199,8 @@ export default function QuickCaptureLog({
 
       {drafts.length > 0 && (
         <>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
-            Found {drafts.length} {drafts.length === 1 ? "entry" : "entries"} — review and edit before submitting.
+                    <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+            Found {drafts.length} {drafts.length === 1 ? "entry" : "entries"}. Review and edit before submitting.
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
             {drafts.map((d, i) => (
@@ -226,24 +226,20 @@ export default function QuickCaptureLog({
                   style={{ ...inp, resize: "none", marginBottom: 10, fontSize: 13 } as any}
                 />
                 {d.crossDepartment && (
-                  <div style={{ fontSize: 12, color: "#f59e0b", background: "#1c1107", border: "0.5px solid #78350f", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
-                    Flagged as cross-department work with <strong>{d.crossDepartment}</strong> — will need their acknowledgment once that flow is live.
+                                    <div style={{ fontSize: 12, color: "#f59e0b", background: "#1c1107", border: "0.5px solid #78350f", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+                    Flagged as cross-department work with <strong>{d.crossDepartment}</strong>. Will need their acknowledgment once that flow is live.
                   </div>
                 )}
+                <div style={{ marginBottom: 10 }}>
+                  <DurationPicker
+                    onChange={(hours) => updateDraft(i, { timeSpent: hours })}
+                    initialHours={d.timeSpent}
+                  />
+                </div>
                 <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, color: "var(--text-hint)" }}>
                     {getTaskTypeIcon(d.taskType)} {getTaskTypeLabel(d.taskType)}
                   </span>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0.5"
-                    max="12"
-                    value={d.timeSpent}
-                    onChange={(e) => updateDraft(i, { timeSpent: Number(e.target.value) })}
-                    style={{ ...inp, width: 80, padding: "6px 10px" }}
-                  />
-                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>hrs</span>
                   <span
                     style={{
                       marginLeft: "auto",

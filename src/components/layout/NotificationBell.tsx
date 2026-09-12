@@ -9,6 +9,7 @@ type Notification = {
   type: "INFO" | "WARNING" | "ALERT" | "SUCCESS";
   read: boolean;
   actionUrl?: string | null;
+  link?: string | null;
   metadata?: { senderDept?: string; [key: string]: any } | null;
   createdAt: string;
 };
@@ -91,24 +92,12 @@ export default function NotificationBell() {
     }
   }, [playSound]);
 
-  // ✅ FIXED: No more setInterval. Fetch once on mount and when window focuses.
+  // Fetch once on mount, then poll every 60s
   useEffect(() => {
-    // Fetch once when component loads
     fetchNotifs();
-    
-    // Fetch when the user comes back to the tab (e.g., from another window)
-    const handleFocus = () => fetchNotifs();
-    window.addEventListener("focus", handleFocus);
-
-    return () => {
-      window.removeEventListener("focus", handleFocus);
-    };
+    const interval = setInterval(fetchNotifs, 60000);
+    return () => clearInterval(interval);
   }, [fetchNotifs]);
-
-  // ✅ FIXED: Only fetch when the user actually clicks the bell
-  useEffect(() => {
-    if (open) fetchNotifs();
-  }, [open, fetchNotifs]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -158,7 +147,8 @@ export default function NotificationBell() {
 
   function handleClick(n: Notification) {
     if (!n.read) markRead(n.id);
-    if (n.actionUrl) { setOpen(false); router.push(n.actionUrl); }
+    const target = n.actionUrl || n.link;
+    if (target) { setOpen(false); router.push(target); }
   }
 
   const filtered = filter === "UNREAD" ? notifications.filter((n) => !n.read) : notifications;
@@ -313,13 +303,14 @@ export default function NotificationBell() {
                   {group.items.map((n) => {
                     const tc         = typeConfig[n.type] || typeConfig.INFO;
                     const senderDept = (n.metadata as any)?.senderDept;
+                    const target     = n.actionUrl || n.link;
                     return (
                       <div
                         key={n.id}
                         onClick={() => handleClick(n)}
                         style={{
                           display: "flex", gap: 10, padding: "10px 14px",
-                          cursor: n.actionUrl ? "pointer" : "default",
+                          cursor: target ? "pointer" : "default",
                           background: n.read ? "transparent" : "rgba(99,102,241,0.05)",
                           borderLeft: `3px solid ${n.read ? "transparent" : tc.color}`,
                           transition: "background 0.12s",
@@ -359,14 +350,14 @@ export default function NotificationBell() {
 
                           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
                             <span style={{ fontSize: 10, color: "var(--text-hint)" }}>
-                              {new Date(n.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                              {new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
                             </span>
                             {senderDept && (
                               <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 4, background: "var(--bg-input)", color: "var(--text-muted)", fontWeight: 600, border: "0.5px solid var(--border)" }}>
                                 {senderDept}
                               </span>
                             )}
-                            {n.actionUrl && (
+                            {target && (
                               <span style={{ fontSize: 10, color: tc.color, fontWeight: 700 }}>
                                 View →
                               </span>
