@@ -61,6 +61,13 @@ type TeamStats = {
   overdueTasks: number;
 };
 
+// ✅ Per-log decision shape
+type LogDecision = {
+  status: "APPROVED" | "REJECTED" | "QUERIED" | "";
+  score: number;
+  comment: string;
+};
+
 const STATUS_STYLE: Record<string, { bg: string; color: string; border: string; label: string }> = {
   DRAFT:     { bg:"#1e293b", color:"#94a3b8", border:"#334155",  label:"Draft"     },
   SUBMITTED: { bg:"#0c1a2e", color:"#60a5fa", border:"#1e3a5f",  label:"Submitted" },
@@ -91,7 +98,6 @@ const SOURCE_BADGE: Record<string, { color: string; bg: string; border: string; 
 export default function SupervisorPage() {
   const router = useRouter();
 
-  // Tabs: overview | logs | tasks | team
   const [activeTab,    setActiveTab]    = useState<"overview"|"logs"|"tasks"|"team">("overview");
   const [logs,         setLogs]         = useState<DailyLog[]>([]);
   const [tasks,        setTasks]        = useState<StaffTask[]>([]);
@@ -102,14 +108,23 @@ export default function SupervisorPage() {
   const [userId,       setUserId]       = useState("");
   const [userName,     setUserName]     = useState("");
 
-  // Log review state
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+
   const [selectedLog,  setSelectedLog]  = useState<DailyLog | null>(null);
   const [reviewScore,  setReviewScore]  = useState(70);
   const [reviewComment,setReviewComment]= useState("");
   const [submitting,   setSubmitting]   = useState(false);
   const [toast,        setToast]        = useState<{msg:string;ok:boolean}|null>(null);
 
-  // Filters
+  // ✅ Bulk selection + per-log decisions
+  const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
+  const [showDecisionPanel, setShowDecisionPanel] = useState(false);
+  const [decisions, setDecisions] = useState<Record<string, LogDecision>>({});
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+
+  // ✅ Phase C: AI suggest
+  const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [aiReasons, setAiReasons] = useState<Record<string, string>>({});
   const [logFilter,    setLogFilter]    = useState<"ALL"|"SUBMITTED"|"APPROVED"|"REJECTED">("SUBMITTED");
   const [taskFilter,   setTaskFilter]   = useState("ALL");
   const [staffFilter,  setStaffFilter]  = useState("ALL");
@@ -120,7 +135,6 @@ export default function SupervisorPage() {
     setTimeout(() => setToast(null), 4000);
   }
 
-  // ── Fetch data ────────────────────────────────────────────────────
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -141,7 +155,6 @@ export default function SupervisorPage() {
       if (meData.user) { setUserRole(meData.user.role); setUserId(meData.user.id); setUserName(meData.user.name || ""); }
       if (usersRes.ok) setTeamStaff(usersData.users || []);
 
-      // Compute stats
       const allLogs: DailyLog[] = logsData.logs || [];
       const allTasks: StaffTask[] = tasksData.tasks || [];
       const scores = allLogs.filter(l => l.supervisorScore !== null).map(l => l.supervisorScore as number);
@@ -157,12 +170,21 @@ export default function SupervisorPage() {
           t.dueDate && new Date(t.dueDate) < new Date() && !["COMPLETED","CANCELLED"].includes(t.status)
         ).length,
       });
+
+      // Clear stale selections
+      setSelectedLogIds(prev => {
+        const next = new Set<string>();
+        prev.forEach(id => {
+          const log = allLogs.find(l => l.id === id);
+          if (log && log.status === "SUBMITTED") next.add(id);
+        });
+        return next;
+      });
     } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Review log ────────────────────────────────────────────────────
   async function handleReview(action: "APPROVED"|"REJECTED"|"QUERIED") {
     if (!selectedLog) return;
     setSubmitting(true);
@@ -190,7 +212,152 @@ export default function SupervisorPage() {
     } finally { setSubmitting(false); }
   }
 
-  // ── Filtered data ─────────────────────────────────────────────────
+  function toggleSelect(id: string) {
+    setSelectedLogIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+    function clearSelection() {
+    setSelectedLogIds(new Set());
+    setDecisions({});
+    setAiReasons({});
+  }
+
+  // ✅ Open the decision panel — pre-fill every selected log with default decision
+  function openDecisionPanel() {
+    const initial: Record<string, LogDecision> = {};
+    selectedLogIds.forEach(id => {
+      initial[id] = decisions[id] || { status: "", score: 70, comment: "" };
+    });
+    setDecisions(initial);
+    setShowDecisionPanel(true);
+  }
+
+  function setDecisionFor(logId: string, patch: Partial<LogDecision>) {
+    setDecisions(prev => ({
+      ...prev,
+      [logId]: { ...(prev[logId] || { status: "", score: 70, comment: "" }), ...patch },
+    }));
+  }
+
+  // ✅ Quick apply to all rows
+  function applyAll(status: "APPROVED"|"REJECTED"|"QUERIED") {
+    setDecisions(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(id => {
+        next[id] = { ...next[id], status };
+      });
+      return next;
+    });
+  }
+
+  function applyAllPendingRows(status: "APPROVED"|"REJECTED"|"QUERIED") {
+    // Same as applyAll but for rows that don't have a decision yet
+    setDecisions(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(id => {
+        if (!next[id].status) next[id] = { ...next[id], status };
+      });
+      return next;
+    });
+  }
+
+  // ✅ Save all decisions
+  async function saveAllDecisions() {
+    const decided = Object.entries(decisions).filter(([_, d]) => d.status !== "");
+    if (decided.length === 0) {
+      showToast("No decisions to save. Set a decision on at least one log.", false);
+      return;
+    }
+
+    setBulkSubmitting(true);
+    try {
+      const res = await fetch("/api/staff-logs/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisions: decided.map(([logId, d]) => ({
+            logId,
+            status: d.status,
+            score: d.status === "APPROVED" ? d.score : null,
+            comment: d.comment,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(
+          `${data.reviewed} of ${data.total} decision${data.total !== 1 ? "s" : ""} saved.`
+        );
+        setShowDecisionPanel(false);
+        clearSelection();
+        fetchAll();
+      } else {
+        showToast(data.error || "Save failed.", false);
+      }
+    } finally { setBulkSubmitting(false); }
+  }
+
+  
+  async function handleAISuggest() {
+    const selectedIds = Object.keys(decisions);
+    if (selectedIds.length === 0) {
+      showToast("No logs selected.", false);
+      return;
+    }
+    if (selectedIds.length > 20) {
+      showToast("AI Suggest works best on 20 or fewer logs at a time. Please narrow your selection.", false);
+      return;
+    }
+
+    setAiSuggesting(true);
+    try {
+      const res = await fetch("/api/staff-logs/ai-suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ logIds: selectedIds }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        showToast(data.error || "AI suggestion failed.", false);
+        return;
+      }
+
+      const suggestions: { logId: string; decision: string; score: number | null; reason: string }[] =
+        data.suggestions || [];
+
+      if (suggestions.length === 0) {
+        showToast("AI returned no suggestions.", false);
+        return;
+      }
+
+      const newDecisions = { ...decisions };
+      const newReasons: Record<string, string> = { ...aiReasons };
+
+      suggestions.forEach(s => {
+        const existing = newDecisions[s.logId] || { status: "", score: 70, comment: "" };
+        newDecisions[s.logId] = {
+          status: s.decision as "APPROVED" | "REJECTED" | "QUERIED",
+          score: s.decision === "APPROVE" && s.score != null ? s.score : existing.score,
+          comment: existing.comment,
+        };
+        newReasons[s.logId] = s.reason;
+      });
+
+      setDecisions(newDecisions);
+      setAiReasons(newReasons);
+      showToast(`AI suggested decisions for ${suggestions.length} log${suggestions.length !== 1 ? "s" : ""}. Review and adjust before saving.`);
+    } catch {
+      showToast("Network error contacting AI.", false);
+    } finally {
+      setAiSuggesting(false);
+    }
+  }
+
   const filteredLogs = logs.filter(l => {
     if (logFilter !== "ALL" && l.status !== logFilter) return false;
     if (staffFilter !== "ALL" && l.user.id !== staffFilter) return false;
@@ -198,6 +365,8 @@ export default function SupervisorPage() {
         !l.user.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  const selectableLogs = filteredLogs.filter(l => l.status === "SUBMITTED");
 
   const filteredTasks = tasks.filter(t => {
     if (taskFilter !== "ALL") {
@@ -239,11 +408,11 @@ export default function SupervisorPage() {
     );
   };
 
+  // ✅ Decision panel modal is rendered at the bottom of the JSX
   return (
     <div className="flex min-h-screen" style={{ background:"var(--bg-page)" }}>
       <Sidebar />
 
-      {/* Toast */}
       {toast && (
         <div style={{ position:"fixed", top:20, right:20, zIndex:9999,
           background: toast.ok?"#052e16":"#1f0707",
@@ -258,7 +427,6 @@ export default function SupervisorPage() {
 
       <main className="flex-1 p-6 min-w-0">
 
-        {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div>
             <h1 style={{ fontSize:26, fontWeight:700, color:"var(--text-primary)", letterSpacing:"-0.02em" }}>
@@ -283,7 +451,6 @@ export default function SupervisorPage() {
           </div>
         </div>
 
-        {/* TABS */}
         <div style={{ display:"flex", gap:6, marginBottom:20, flexWrap:"wrap" }}>
           {tabBtn("overview", "📊 Overview")}
           {tabBtn("logs",     "📝 Log Reviews", stats.pendingReview)}
@@ -297,10 +464,8 @@ export default function SupervisorPage() {
           </div>
         ) : (
           <>
-            {/* ── OVERVIEW TAB ─────────────────────────────────────── */}
             {activeTab === "overview" && (
               <div>
-                {/* Stats grid */}
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:14, marginBottom:24 }}>
                   {[
                     { label:"Logs pending review", value:stats.pendingReview, color:"#f59e0b", bg:"#1c1107", border:"#78350f", action:() => setActiveTab("logs") },
@@ -335,7 +500,6 @@ export default function SupervisorPage() {
                   ))}
                 </div>
 
-                {/* Quick alerts */}
                 {stats.pendingReview > 0 && (
                   <div style={{ background:"#1c1107", border:"0.5px solid #78350f", borderRadius:12, padding:"14px 20px", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                     <div>
@@ -363,14 +527,11 @@ export default function SupervisorPage() {
               </div>
             )}
 
-            {/* ── LOG REVIEWS TAB (merged from Staff Logs) ─────────── */}
             {activeTab === "logs" && (
               <div style={{ display:"grid", gridTemplateColumns:selectedLog?"1fr 400px":"1fr", gap:16 }}>
 
-                {/* Log list */}
                 <div>
-                  {/* Filters */}
-                  <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+                  <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap", alignItems:"center" }}>
                     <input style={{ ...inp, width:200 }} placeholder="🔍 Search staff or task…" value={search} onChange={e=>setSearch(e.target.value)} />
                     <select style={inp} value={logFilter} onChange={e=>setLogFilter(e.target.value as any)}>
                       <option value="ALL">All logs</option>
@@ -382,7 +543,79 @@ export default function SupervisorPage() {
                       <option value="ALL">All staff</option>
                       {teamStaff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
+
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 4, padding: 3, background: "var(--bg-input)", border: "0.5px solid var(--border)", borderRadius: 10 }}>
+                      <button
+                        onClick={() => setViewMode("cards")}
+                        title="Card view"
+                        style={{
+                          padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          border: viewMode === "cards" ? "1.5px solid #60a5fa" : "1.5px solid transparent",
+                          background: viewMode === "cards" ? "#0c1a2e" : "transparent",
+                          color: viewMode === "cards" ? "#60a5fa" : "var(--text-muted)",
+                        }}
+                      >
+                        📋 Cards
+                      </button>
+                      <button
+                        onClick={() => setViewMode("table")}
+                        title="Table view"
+                        style={{
+                          padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          border: viewMode === "table" ? "1.5px solid #60a5fa" : "1.5px solid transparent",
+                          background: viewMode === "table" ? "#0c1a2e" : "transparent",
+                          color: viewMode === "table" ? "#60a5fa" : "var(--text-muted)",
+                        }}
+                      >
+                        📊 Table
+                      </button>
+                    </div>
                   </div>
+
+                  {/* ✅ Selection bar with single "Open Decision Panel" button */}
+                  {selectedLogIds.size > 0 && (
+                    <div style={{
+                      background: "#0c1a2e",
+                      border: "1.5px solid #60a5fa",
+                      borderRadius: 12,
+                      padding: "12px 18px",
+                      marginBottom: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#60a5fa" }}>
+                        ✓ {selectedLogIds.size} log{selectedLogIds.size !== 1 ? "s" : ""} selected
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button onClick={openDecisionPanel}
+                          style={{ padding: "8px 22px", borderRadius: 9, border: "1.5px solid #60a5fa", background: "#0c1a2e", color: "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                          🎯 Open Decision Panel
+                        </button>
+                        <button onClick={clearSelection}
+                          style={{ padding: "8px 18px", borderRadius: 9, border: "0.5px solid var(--border)", background: "var(--bg-input)", color: "var(--text-muted)", fontSize: 13, cursor: "pointer" }}>
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectableLogs.length > 1 && logFilter === "SUBMITTED" && (
+                    <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 10 }}>
+                      <button
+                        onClick={() => {
+                          const allSelected = selectableLogs.every(l => selectedLogIds.has(l.id));
+                          if (allSelected) clearSelection();
+                          else setSelectedLogIds(new Set(selectableLogs.map(l => l.id)));
+                        }}
+                        style={{ fontSize: 12, padding: "6px 14px", borderRadius: 8, border: "0.5px solid var(--border)", background: "var(--bg-input)", color: "var(--text-muted)", cursor: "pointer" }}
+                      >
+                        {selectableLogs.every(l => selectedLogIds.has(l.id)) ? "Deselect all" : `Select all ${selectableLogs.length}`}
+                      </button>
+                    </div>
+                  )}
 
                   {filteredLogs.length === 0 ? (
                     <div className="card-bg" style={{ borderRadius:14, padding:48, textAlign:"center" }}>
@@ -390,27 +623,56 @@ export default function SupervisorPage() {
                       <div style={{ fontSize:16, fontWeight:500, color:"var(--text-primary)" }}>No logs found</div>
                       <div style={{ fontSize:13, color:"var(--text-muted)", marginTop:6 }}>Try changing the filter</div>
                     </div>
-                  ) : (
+                  ) : viewMode === "cards" ? (
                     <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                       {filteredLogs.map(log => {
                         const ss = STATUS_STYLE[log.status] || STATUS_STYLE.SUBMITTED;
                         const sel = selectedLog?.id === log.id;
+                        const isSelected = selectedLogIds.has(log.id);
+                        const isSelectable = log.status === "SUBMITTED";
+                        const dec = decisions[log.id];
                         return (
-                          <div key={log.id} onClick={() => { setSelectedLog(sel?null:log); setReviewComment(log.supervisorComment||""); setReviewScore(log.supervisorScore||70); }}
+                          <div key={log.id}
                             className="card-bg"
                             style={{ borderRadius:12, padding:"16px 20px", cursor:"pointer",
                               borderLeft:`3px solid ${sel?"var(--accent)":ss.color}`,
-                              outline:`0.5px solid ${sel?"var(--accent)":"var(--border)"}` }}>
+                              outline:`0.5px solid ${isSelected?"#60a5fa":sel?"var(--accent)":"var(--border)"}`,
+                              background: isSelected ? "rgba(96,165,250,0.08)" : undefined }}>
                             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
-                              <div style={{ flex:1 }}>
-                                <div style={{ fontSize:15, fontWeight:600, color:"var(--text-primary)", marginBottom:3 }}>{log.taskTitle}</div>
-                                <div style={{ fontSize:13, color:"var(--text-muted)" }}>
-                                  <span style={{ color:"#60a5fa", cursor:"pointer", textDecoration:"underline" }}
-                                    onClick={e=>{e.stopPropagation();router.push(`/staff-directory?userId=${log.user.id}`);}}>
-                                    {log.user.name}
-                                  </span>
-                                  {" · "}{log.user.department?.name || "No dept"}
-                                  {" · "}{log.taskCategory}
+                              <div style={{ display:"flex", gap:10, alignItems:"flex-start", flex:1 }}>
+                                {isSelectable && (
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => { e.stopPropagation(); toggleSelect(log.id); }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ marginTop: 4, width: 18, height: 18, cursor: "pointer", accentColor: "#60a5fa" }}
+                                  />
+                                )}
+                                <div
+                                  onClick={() => { setSelectedLog(sel?null:log); setReviewComment(log.supervisorComment||""); setReviewScore(log.supervisorScore||70); }}
+                                  style={{ flex: 1, cursor: "pointer" }}
+                                >
+                                  <div style={{ fontSize:15, fontWeight:600, color:"var(--text-primary)", marginBottom:3 }}>
+                                    {log.taskTitle}
+                                    {dec?.status && (
+                                      <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 6,
+                                        background: dec.status === "APPROVED" ? "#052e16" : dec.status === "REJECTED" ? "#1f0707" : "#1c1107",
+                                        color: dec.status === "APPROVED" ? "#4ade80" : dec.status === "REJECTED" ? "#f87171" : "#f59e0b",
+                                        border: `0.5px solid ${dec.status === "APPROVED" ? "#14532d" : dec.status === "REJECTED" ? "#7f1d1d" : "#78350f"}`,
+                                      }}>
+                                        → {dec.status === "APPROVED" ? "Approve" : dec.status === "REJECTED" ? "Reject" : "Query"}{dec.status === "APPROVED" ? ` (${dec.score})` : ""}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{ fontSize:13, color:"var(--text-muted)" }}>
+                                    <span style={{ color:"#60a5fa", cursor:"pointer", textDecoration:"underline" }}
+                                      onClick={e=>{e.stopPropagation();router.push(`/staff-directory?userId=${log.user.id}`);}}>
+                                      {log.user.name}
+                                    </span>
+                                    {" · "}{log.user.department?.name || "No dept"}
+                                    {" · "}{log.taskCategory}
+                                  </div>
                                 </div>
                               </div>
                               <span style={{ fontSize:12, fontWeight:600, padding:"4px 10px", borderRadius:7,
@@ -418,7 +680,10 @@ export default function SupervisorPage() {
                                 {ss.label}
                               </span>
                             </div>
-                            <div style={{ fontSize:13, color:"var(--text-muted)", lineHeight:1.5, marginBottom:10 }}>
+                            <div
+                              onClick={() => { setSelectedLog(sel?null:log); setReviewComment(log.supervisorComment||""); setReviewScore(log.supervisorScore||70); }}
+                              style={{ fontSize:13, color:"var(--text-muted)", lineHeight:1.5, marginBottom:10, cursor: "pointer" }}
+                            >
                               {log.description.length > 120 ? log.description.slice(0,118)+"…" : log.description}
                             </div>
                             <div style={{ display:"flex", gap:16, fontSize:12, color:"var(--text-hint)", flexWrap:"wrap" }}>
@@ -432,10 +697,155 @@ export default function SupervisorPage() {
                         );
                       })}
                     </div>
+                  ) : (
+                    <div className="card-bg" style={{ borderRadius: 12, overflow: "hidden" }}>
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "36px 2fr 1.2fr 1fr 1.2fr 70px 90px 110px 80px 90px",
+                        gap: 10,
+                        padding: "12px 16px",
+                        background: "var(--bg-input)",
+                        borderBottom: "0.5px solid var(--border)",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: "var(--text-muted)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.06em",
+                      }}>
+                        <div></div>
+                        <div>Title</div>
+                        <div>Staff</div>
+                        <div>Dept</div>
+                        <div>Category</div>
+                        <div>Time</div>
+                        <div>Priority</div>
+                        <div>Status</div>
+                        <div>Score</div>
+                        <div>Actions</div>
+                      </div>
+
+                      {filteredLogs.map((log, i) => {
+                        const ss = STATUS_STYLE[log.status] || STATUS_STYLE.SUBMITTED;
+                        const isSelected = selectedLogIds.has(log.id);
+                        const isSelectable = log.status === "SUBMITTED";
+                        const sel = selectedLog?.id === log.id;
+                        const dec = decisions[log.id];
+                        return (
+                          <div
+                            key={log.id}
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "36px 2fr 1.2fr 1fr 1.2fr 70px 90px 110px 80px 90px",
+                              gap: 10,
+                              padding: "12px 16px",
+                              alignItems: "center",
+                              borderBottom: "0.5px solid var(--border-soft)",
+                              background: isSelected
+                                ? "rgba(96,165,250,0.08)"
+                                : sel
+                                ? "var(--accent-bg)"
+                                : i % 2 === 0
+                                ? "transparent"
+                                : "var(--bg-input)",
+                              fontSize: 13,
+                            }}
+                          >
+                            <div>
+                              {isSelectable && (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => { e.stopPropagation(); toggleSelect(log.id); }}
+                                  style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#60a5fa" }}
+                                />
+                              )}
+                            </div>
+
+                            <div
+                              onClick={() => { setSelectedLog(sel?null:log); setReviewComment(log.supervisorComment||""); setReviewScore(log.supervisorScore||70); }}
+                              style={{ cursor: "pointer", minWidth: 0 }}
+                            >
+                              <div style={{ fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {log.taskTitle}
+                                {dec?.status && (
+                                  <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 5,
+                                    background: dec.status === "APPROVED" ? "#052e16" : dec.status === "REJECTED" ? "#1f0707" : "#1c1107",
+                                    color: dec.status === "APPROVED" ? "#4ade80" : dec.status === "REJECTED" ? "#f87171" : "#f59e0b",
+                                  }}>
+                                    {dec.status === "APPROVED" ? `✓ ${dec.score}` : dec.status === "REJECTED" ? "✕" : "?"}
+                                  </span>
+                                )}
+                              </div>
+                              {log.caseReference && (
+                                <div style={{ fontSize: 11, color: "var(--text-hint)", marginTop: 2 }}>
+                                  🔖 {log.caseReference}
+                                </div>
+                              )}
+                            </div>
+
+                            <div
+                              onClick={(e) => { e.stopPropagation(); router.push(`/staff-directory?userId=${log.user.id}`); }}
+                              style={{ cursor: "pointer", color: "#60a5fa", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            >
+                              {log.user.name}
+                            </div>
+
+                            <div style={{ color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {log.user.department?.name || "-"}
+                            </div>
+
+                            <div style={{ color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {log.taskCategory}
+                            </div>
+
+                            <div style={{ color: "var(--text-primary)", fontWeight: 500 }}>
+                              {log.timeSpent}h
+                            </div>
+
+                            <div>
+                              <span style={{
+                                fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5,
+                                background: log.priority === "CRITICAL" ? "#1f0707" : log.priority === "HIGH" ? "#1c1107" : log.priority === "MEDIUM" ? "#0c1a2e" : "#052e16",
+                                color: log.priority === "CRITICAL" ? "#f87171" : log.priority === "HIGH" ? "#f59e0b" : log.priority === "MEDIUM" ? "#60a5fa" : "#4ade80",
+                                border: `0.5px solid ${log.priority === "CRITICAL" ? "#7f1d1d" : log.priority === "HIGH" ? "#78350f" : log.priority === "MEDIUM" ? "#1e3a5f" : "#14532d"}`,
+                              }}>
+                                {log.priority}
+                              </span>
+                            </div>
+
+                            <div>
+                              <span style={{
+                                fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 5,
+                                background: ss.bg, color: ss.color, border: `0.5px solid ${ss.border}`,
+                              }}>
+                                {ss.label}
+                              </span>
+                            </div>
+
+                            <div style={{ color: log.supervisorScore !== null ? "#a78bfa" : "var(--text-hint)", fontWeight: 600 }}>
+                              {log.supervisorScore !== null ? `${log.supervisorScore}` : "-"}
+                            </div>
+
+                            <div>
+                              <button
+                                onClick={() => { setSelectedLog(sel?null:log); setReviewComment(log.supervisorComment||""); setReviewScore(log.supervisorScore||70); }}
+                                style={{
+                                  padding: "5px 12px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                                  border: isSelectable ? "1px solid #1e3a5f" : "0.5px solid var(--border)",
+                                  background: isSelectable ? "#0c1a2e" : "var(--bg-input)",
+                                  color: isSelectable ? "#60a5fa" : "var(--text-muted)",
+                                }}
+                              >
+                                {isSelectable ? "Review" : "View"}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
 
-                {/* Review panel */}
                 {selectedLog && (
                   <div className="card-bg" style={{ borderRadius:14, padding:22, position:"sticky", top:24, alignSelf:"start", maxHeight:"calc(100vh - 120px)", overflowY:"auto" }}>
                     <div style={{ display:"flex", justifyContent:"space-between", marginBottom:16, paddingBottom:12, borderBottom:"0.5px solid var(--border-soft)" }}>
@@ -529,7 +939,6 @@ export default function SupervisorPage() {
               </div>
             )}
 
-            {/* ── DEPARTMENT TASKS TAB ─────────────────────────────── */}
             {activeTab === "tasks" && (
               <div>
                 <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
@@ -581,7 +990,6 @@ export default function SupervisorPage() {
                               </div>
                             </div>
                             <div style={{ display:"flex", gap:6, flexShrink:0, marginLeft:12, flexWrap:"wrap", justifyContent:"flex-end" }}>
-                              {/* EVC / source badge */}
                               <span style={{ fontSize:11, fontWeight:700, padding:"3px 9px", borderRadius:6,
                                 background:sb.bg, color:sb.color, border:`0.5px solid ${sb.border}` }}>
                                 {sb.label}
@@ -611,7 +1019,6 @@ export default function SupervisorPage() {
               </div>
             )}
 
-            {/* ── MY TEAM TAB ──────────────────────────────────────── */}
             {activeTab === "team" && (
               <div>
                 <div style={{ marginBottom:16 }}>
@@ -686,6 +1093,197 @@ export default function SupervisorPage() {
           </>
         )}
       </main>
+
+      {/* ✅ Decision Panel Modal */}
+      {showDecisionPanel && (
+        <div onClick={() => !bulkSubmitting && setShowDecisionPanel(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 9998,
+            display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: "var(--bg-card)", border: "0.5px solid var(--border)",
+              borderRadius: 14, padding: 24, maxWidth: 900, width: "100%",
+              maxHeight: "92vh", overflowY: "auto" }}>
+
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, paddingBottom: 12, borderBottom: "0.5px solid var(--border-soft)" }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text-primary)" }}>
+                  Batch Review: {Object.keys(decisions).length} log{Object.keys(decisions).length !== 1 ? "s" : ""}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+                  Set a decision on each log, then click Save All. Logs without a decision will be skipped.
+                </div>
+              </div>
+              <button onClick={() => setShowDecisionPanel(false)} disabled={bulkSubmitting}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 22, cursor: "pointer" }}>
+                ✕
+              </button>
+            </div>
+
+            {/* Quick apply bar */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, padding: "10px 14px", background: "var(--bg-input)", borderRadius: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600 }}>
+                Quick apply to all:
+              </span>
+              <button onClick={() => applyAll("APPROVED")}
+                style={{ padding: "6px 14px", borderRadius: 7, border: "1px solid #4ade80", background: "#052e16", color: "#4ade80", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                ✅ All Approve
+              </button>
+              <button onClick={() => applyAll("QUERIED")}
+                style={{ padding: "6px 14px", borderRadius: 7, border: "1px solid #f59e0b", background: "#1c1107", color: "#f59e0b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                ❓ All Query
+              </button>
+              <button onClick={() => applyAll("REJECTED")}
+                style={{ padding: "6px 14px", borderRadius: 7, border: "1px solid #f87171", background: "#1f0707", color: "#f87171", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                ✕ All Reject
+              </button>
+              <button onClick={() => { setDecisions({}); }}
+                style={{ padding: "6px 14px", borderRadius: 7, border: "0.5px solid var(--border)", background: "transparent", color: "var(--text-muted)", fontSize: 12, cursor: "pointer" }}>
+                Clear all
+              </button>
+            </div>
+
+            {/* Per-log rows */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+              {Object.keys(decisions).map(logId => {
+                const log = logs.find(l => l.id === logId);
+                if (!log) return null;
+                const dec = decisions[logId];
+                return (
+                  <div key={logId} style={{
+                    padding: 14, borderRadius: 10,
+                    border: `0.5px solid ${dec.status === "APPROVED" ? "#4ade80" : dec.status === "REJECTED" ? "#f87171" : dec.status === "QUERIED" ? "#f59e0b" : "var(--border)"}`,
+                    background: dec.status === "APPROVED" ? "rgba(74,222,128,0.05)" : dec.status === "REJECTED" ? "rgba(248,113,113,0.05)" : dec.status === "QUERIED" ? "rgba(245,158,11,0.05)" : "var(--bg-input)",
+                  }}>
+                    {/* Log info row */}
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-primary)" }}>
+                        {log.taskTitle}
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3 }}>
+                        {log.user.name} · {log.user.department?.name || "No dept"} · {log.taskCategory} · {log.timeSpent}h
+                      </div>
+                      {aiReasons[logId] && (
+                        <div style={{
+                          marginTop: 6,
+                          fontSize: 12,
+                          color: "#a78bfa",
+                          background: "#1a0a2e",
+                          border: "0.5px solid #4c1d95",
+                          borderRadius: 6,
+                          padding: "5px 10px",
+                          lineHeight: 1.4,
+                        }}>
+                          ✨ <strong>AI:</strong> {aiReasons[logId]}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Decision controls */}
+                    <div style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: 10, alignItems: "center" }}>
+                      {/* Decision buttons */}
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {(["APPROVED", "QUERIED", "REJECTED"] as const).map(s => {
+                          const active = dec.status === s;
+                          const colors = s === "APPROVED" ? { bg: "#052e16", border: "#4ade80", color: "#4ade80", label: "✅" }
+                            : s === "QUERIED" ? { bg: "#1c1107", border: "#f59e0b", color: "#f59e0b", label: "❓" }
+                            : { bg: "#1f0707", border: "#f87171", color: "#f87171", label: "✕" };
+                          return (
+                            <button key={s}
+                              onClick={() => setDecisionFor(logId, { status: s })}
+                              style={{
+                                padding: "6px 10px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                background: active ? colors.bg : "transparent",
+                                border: `1.5px solid ${active ? colors.border : "var(--border)"}`,
+                                color: active ? colors.color : "var(--text-muted)",
+                                opacity: active ? 1 : 0.6,
+                              }}
+                              title={s === "APPROVED" ? "Approve" : s === "QUERIED" ? "Query" : "Reject"}
+                            >
+                              {colors.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Score — only shown when approved */}
+                      {dec.status === "APPROVED" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)" }}>Score:</span>
+                          <input
+                            type="number" min={0} max={100}
+                            value={dec.score}
+                            onChange={(e) => setDecisionFor(logId, { score: Math.max(0, Math.min(100, Number(e.target.value))) })}
+                            style={{ width: 60, background: "var(--bg-input)", border: "0.5px solid var(--border)", borderRadius: 6, padding: "5px 8px", fontSize: 13, color: "var(--text-primary)", outline: "none" }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Comment input */}
+                      <input
+                        type="text"
+                        value={dec.comment}
+                        onChange={(e) => setDecisionFor(logId, { comment: e.target.value })}
+                        placeholder="Comment (optional)"
+                        style={{
+                          background: "var(--bg-input)", border: "0.5px solid var(--border)",
+                          borderRadius: 6, padding: "6px 10px", fontSize: 13,
+                          color: "var(--text-primary)", outline: "none", width: "100%",
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Footer */}
+                        <div style={{ display: "flex", gap: 10, paddingTop: 14, borderTop: "0.5px solid var(--border-soft)", alignItems: "center" }}>
+              <button
+                onClick={handleAISuggest}
+                disabled={aiSuggesting || bulkSubmitting}
+                style={{
+                  padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: aiSuggesting ? "wait" : "pointer",
+                  border: "1.5px solid #a78bfa", background: "#1a0a2e", color: "#a78bfa",
+                  opacity: aiSuggesting ? 0.6 : 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {aiSuggesting ? "✨ Thinking…" : "✨ AI Suggest"}
+              </button>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", flex: 1 }}>
+                {(() => {
+                  const approved = Object.values(decisions).filter(d => d.status === "APPROVED").length;
+                  const queried = Object.values(decisions).filter(d => d.status === "QUERIED").length;
+                  const rejected = Object.values(decisions).filter(d => d.status === "REJECTED").length;
+                  const undecided = Object.values(decisions).filter(d => !d.status).length;
+                  return (
+                    <>
+                      {approved > 0 && <span style={{ color: "#4ade80", fontWeight: 700, marginRight: 10 }}>✓ {approved} approve</span>}
+                      {queried > 0 && <span style={{ color: "#f59e0b", fontWeight: 700, marginRight: 10 }}>? {queried} query</span>}
+                      {rejected > 0 && <span style={{ color: "#f87171", fontWeight: 700, marginRight: 10 }}>✕ {rejected} reject</span>}
+                      {undecided > 0 && <span style={{ color: "var(--text-hint)" }}>{undecided} undecided</span>}
+                    </>
+                  );
+                })()}
+              </div>
+              <button onClick={() => setShowDecisionPanel(false)} disabled={bulkSubmitting}
+                style={{ padding: "10px 20px", borderRadius: 9, border: "0.5px solid var(--border)",
+                  background: "var(--bg-input)", color: "var(--text-muted)", fontSize: 14, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={saveAllDecisions} disabled={bulkSubmitting}
+                style={{
+                  padding: "10px 28px", borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: "pointer",
+                  border: "1.5px solid #60a5fa", background: "#0c1a2e", color: "#60a5fa",
+                  opacity: bulkSubmitting ? 0.6 : 1,
+                }}>
+                {bulkSubmitting ? "Saving…" : "Save All Decisions"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

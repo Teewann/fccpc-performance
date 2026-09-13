@@ -13,11 +13,35 @@ interface Props {
   onSend: (params: { content?: string; fileUrl?: string; fileName?: string; fileType?: string }) => Promise<void>;
 }
 
-const EMOJI_PALETTE = [
-  "😀","😂","😊","😍","🥰","😎","🤔","😅","😭","😤",
-  "👍","👎","❤️","🔥","🎉","✅","⚠️","📌","🙏","👏",
-  "💪","🤝","📋","📊","💡","🎯","🚀","⚡","🔑","📝",
+// ── Grouped emoji palette — 96 emojis organized by category ───────
+const EMOJI_GROUPS: { label: string; emojis: string[] }[] = [
+  {
+    label: "Smileys",
+    emojis: ["😀","😃","😄","😁","😆","😅","😂","🤣","😊","😇","🙂","🙃","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😝","😜","🤪","🤨","🧐","🤓","😎","🥳"],
+  },
+  {
+    label: "Gestures",
+    emojis: ["👍","👎","👌","✌️","🤞","🤝","🙏","👏","🙌","💪","🤙","👋","✋","🖐","☝️","👆","👇","👈","👉","✊","👊","🤛","🤜"],
+  },
+  {
+    label: "Hearts",
+    emojis: ["❤️","🧡","💛","💚","💙","💜","🖤","🤍","💔","❣️","💕","💞","💓","💗","💖","💘","💝"],
+  },
+  {
+    label: "Office",
+    emojis: ["📋","📝","📌","📍","📎","🖇️","📁","📂","🗂️","📊","📈","📉","📅","📆","🗓️","💼","💻","🖥️","⌨️","🖱️","🖨️","📱","☎️","📞","📠","🔌","🔋"],
+  },
+  {
+    label: "Symbols",
+    emojis: ["✅","❌","⚠️","💡","🔥","⭐","🌟","✨","⚡","🎯","🚀","🏆","🎉","🎊","🎁","🔔","🔕","✔️","✖️","➕","➖","➡️","⬅️","⬆️","⬇️","🔄","🔃","♻️"],
+  },
+  {
+    label: "Reactions",
+    emojis: ["🤔","🤨","😐","😑","😶","🙄","😏","😒","😔","😞","😟","😕","🙁","☹️","😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡","🤬","🤯","😳","🥵","🥶","😱"],
+  },
 ];
+
+const ALL_EMOJIS = EMOJI_GROUPS.flatMap(g => g.emojis);
 
 export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend }: Props) {
   const [text,            setText]            = useState("");
@@ -28,6 +52,7 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
   const [isRecording,     setIsRecording]     = useState(false);
   const [recSeconds,      setRecSeconds]      = useState(0);
   const [showEmoji,       setShowEmoji]       = useState(false);
+  const [emojiGroup,      setEmojiGroup]      = useState(0);
 
   const inputRef       = useRef<HTMLTextAreaElement>(null);
   const fileInputRef   = useRef<HTMLInputElement>(null);
@@ -35,7 +60,6 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
   const chunksRef      = useRef<Blob[]>([]);
   const recTimerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Auto-resize textarea
   const resizeTextarea = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -45,7 +69,6 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
 
   useEffect(() => { resizeTextarea(); }, [text, resizeTextarea]);
 
-  // Focus input on reply change
   useEffect(() => {
     if (replyingTo) setTimeout(() => inputRef.current?.focus(), 50);
   }, [replyingTo]);
@@ -160,6 +183,12 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
 
   const fmt = (s: number) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
 
+  // Blue accent colors for controls
+  const BLUE      = "#60a5fa";
+  const BLUE_BG   = "#0c1a2e";
+  const BLUE_BDR  = "#1e3a5f";
+  const BLUE_SOFT = "rgba(96,165,250,0.15)";
+
   return (
     <div style={{
       flexShrink: 0,
@@ -168,7 +197,6 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
       padding: "10px 16px 12px",
       position: "relative",
     }}>
-      {/* Upload progress */}
       {uploading && (
         <div style={{
           position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)",
@@ -184,46 +212,73 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
         </div>
       )}
 
-      {/* Emoji palette */}
+      {/* Emoji palette — grouped, 96 emojis */}
       {showEmoji && (
         <div style={{
           position: "absolute", bottom: "100%", left: 16,
           marginBottom: 6,
           background: "var(--bg-card)", border: "1px solid var(--border)",
-          borderRadius: 12, padding: 12,
-          display: "flex", flexWrap: "wrap", gap: 4, width: 280,
-          zIndex: 50, boxShadow: "0 8px 28px rgba(0,0,0,0.3)",
+          borderRadius: 12, overflow: "hidden",
+          width: 340, zIndex: 50,
+          boxShadow: "0 8px 28px rgba(0,0,0,0.3)",
         }}>
-          {EMOJI_PALETTE.map(em => (
-            <button
-              key={em}
-              onClick={() => { setText(t => t + em); setShowEmoji(false); inputRef.current?.focus(); }}
-              style={{
-                fontSize: 20, background: "none", border: "none", cursor: "pointer",
-                padding: "4px", borderRadius: 6, lineHeight: 1,
-                transition: "transform 0.1s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.transform = "scale(1.25)"}
-              onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
-            >
-              {em}
-            </button>
-          ))}
+          {/* Category tabs */}
+          <div style={{
+            display: "flex", gap: 2, padding: "6px 6px 4px",
+            borderBottom: "1px solid var(--border-soft)",
+            overflowX: "auto",
+          }}>
+            {EMOJI_GROUPS.map((g, i) => (
+              <button
+                key={g.label}
+                onClick={() => setEmojiGroup(i)}
+                style={{
+                  padding: "4px 10px", borderRadius: 6, fontSize: 11,
+                  fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+                  border: emojiGroup === i ? `1px solid ${BLUE_BDR}` : "1px solid transparent",
+                  background: emojiGroup === i ? BLUE_BG : "transparent",
+                  color: emojiGroup === i ? BLUE : "var(--text-muted)",
+                }}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+          {/* Emoji grid */}
+          <div style={{
+            display: "flex", flexWrap: "wrap", gap: 2,
+            padding: 10, maxHeight: 220, overflowY: "auto",
+          }}>
+            {EMOJI_GROUPS[emojiGroup].emojis.map(em => (
+              <button
+                key={em}
+                onClick={() => { setText(t => t + em); inputRef.current?.focus(); }}
+                style={{
+                  fontSize: 20, background: "none", border: "none", cursor: "pointer",
+                  padding: "4px", borderRadius: 6, lineHeight: 1,
+                  transition: "transform 0.1s, background 0.1s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.25)"; e.currentTarget.style.background = BLUE_SOFT; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.background = "none"; }}
+              >
+                {em}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Reply bar */}
       {replyingTo && (
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
           marginBottom: 8, padding: "7px 12px",
           borderRadius: 8,
-          background: "var(--bg-input)",
-          border: "1px solid var(--border)",
-          borderLeft: "3px solid var(--accent)",
+          background: BLUE_BG,
+          border: `1px solid ${BLUE_BDR}`,
+          borderLeft: `3px solid ${BLUE}`,
         }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--accent-text)", marginBottom: 1 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: BLUE, marginBottom: 1 }}>
               Replying to {replyingTo.sender.name}
             </div>
             <div style={{
@@ -242,27 +297,26 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
         </div>
       )}
 
-      {/* File preview bar */}
       {filePending && (
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
           marginBottom: 8, padding: "7px 12px",
           borderRadius: 8,
-          background: "var(--bg-input)",
-          border: "1px solid var(--border)",
+          background: BLUE_BG,
+          border: `1px solid ${BLUE_BDR}`,
         }}>
           {filePending.type.startsWith("image/") ? (
             <img src={filePending.url} alt="preview" style={{
               width: 40, height: 40, objectFit: "cover", borderRadius: 6,
-              border: "1px solid var(--border)", flexShrink: 0,
+              border: `1px solid ${BLUE_BDR}`, flexShrink: 0,
             }} />
           ) : (
             <div style={{
               width: 40, height: 40, borderRadius: 8,
-              background: "var(--accent-bg)", border: "1px solid var(--accent)",
+              background: BLUE_BG, border: `1px solid ${BLUE}`,
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             }}>
-              <FileIcon size={18} color="var(--accent-text)" />
+              <FileIcon size={18} color={BLUE} />
             </div>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -292,9 +346,9 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
           </button>
           <button onClick={handleSend} disabled={sending} style={{
             padding: "6px 14px", borderRadius: 8, flexShrink: 0,
-            border: "1.5px solid var(--accent)",
-            background: "var(--accent-bg-strong, #052e16)",
-            color: "var(--accent-text)", fontSize: 12, fontWeight: 600,
+            border: `1.5px solid ${BLUE}`,
+            background: BLUE_BG,
+            color: BLUE, fontSize: 12, fontWeight: 600,
             cursor: sending ? "not-allowed" : "pointer",
             opacity: sending ? 0.6 : 1,
           }}>
@@ -303,11 +357,10 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
         </div>
       )}
 
-      {/* Recording bar */}
       {isRecording ? (
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
-          background: "var(--bg-input)", border: "1px solid var(--border)",
+          background: BLUE_BG, border: `1px solid ${BLUE_BDR}`,
           borderRadius: 12, padding: "8px 14px",
         }}>
           <span style={{
@@ -319,76 +372,78 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
             Recording · {fmt(recSeconds)}
           </span>
           <button onClick={cancelRecording} style={{
-            padding: "6px 14px", borderRadius: 8, border: "1px solid var(--border)",
+            padding: "6px 14px", borderRadius: 8, border: `1px solid ${BLUE_BDR}`,
             background: "transparent", color: "var(--text-muted)", fontSize: 13, cursor: "pointer",
           }}>
             Cancel
           </button>
           <button onClick={sendRecording} style={{
             padding: "6px 14px", borderRadius: 8,
-            border: "1.5px solid var(--accent)",
-            background: "var(--accent-bg-strong, #052e16)",
-            color: "var(--accent-text)", fontSize: 13, fontWeight: 600, cursor: "pointer",
+            border: `1.5px solid ${BLUE}`,
+            background: BLUE_BG,
+            color: BLUE, fontSize: 13, fontWeight: 600, cursor: "pointer",
           }}>
             Send
           </button>
         </div>
       ) : !filePending ? (
-        /* Main input row */
         <div style={{
           display: "flex", alignItems: "flex-end", gap: 6,
-          background: "var(--bg-input)",
-          border: "1px solid var(--border)",
+          background: BLUE_BG,
+          border: `1px solid ${BLUE_BDR}`,
           borderRadius: 14,
           padding: "4px 6px 4px 14px",
           transition: "border-color 0.15s",
         }}
-          onFocusCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "var(--accent)"; }}
-          onBlurCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = "var(--border)"; }}
+          onFocusCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = BLUE; }}
+          onBlurCapture={e => { (e.currentTarget as HTMLDivElement).style.borderColor = BLUE_BDR; }}
         >
           {/* Emoji toggle */}
           <button
             onClick={() => setShowEmoji(v => !v)}
             title="Emoji"
             style={{
-              width: 34, height: 34, borderRadius: 8, background: "none",
+              width: 34, height: 34, borderRadius: 8,
+              background: showEmoji ? BLUE_SOFT : "transparent",
               border: "none", cursor: "pointer", flexShrink: 0,
               display: "flex", alignItems: "center", justifyContent: "center",
-              opacity: showEmoji ? 1 : 0.6, transition: "opacity 0.15s",
+              transition: "background 0.15s",
             }}
           >
-            <EmojiIcon size={18} color={showEmoji ? "var(--accent-text)" : "var(--text-muted)"} />
+            <EmojiIcon size={18} color={showEmoji ? BLUE : "#60a5fa"} />
           </button>
 
-          {/* Textarea */}
           <textarea
-            ref={inputRef}
-            value={text}
-            onChange={e => { setText(e.target.value); resizeTextarea(); }}
-            onKeyDown={handleKeyDown}
-            placeholder="Write a message… (Enter to send, Shift+Enter for new line)"
-            disabled={sending || uploading}
-            rows={1}
-            style={{
-              flex: 1, resize: "none", overflow: "hidden",
-              background: "transparent", border: "none",
-              color: "var(--text-primary)", fontSize: 14, outline: "none",
-              padding: "7px 0", lineHeight: 1.5,
-              fontFamily: "inherit",
-            }}
-          />
+  ref={inputRef}
+  value={text}
+  onChange={e => { setText(e.target.value); resizeTextarea(); }}
+  onKeyDown={handleKeyDown}
+  placeholder="Write a message… (Enter to send, Shift+Enter for new line)"
+  disabled={sending || uploading}
+  rows={1}
+  style={{
+    flex: 1, resize: "none", overflow: "hidden",
+    background: "transparent", border: "none",
+    color: "#e9edef", fontSize: 14, outline: "none",
+    padding: "7px 0", lineHeight: 1.5,
+    fontFamily: "inherit",
+    caretColor: "#60a5fa",
+  }}
+/>
 
-          {/* Attach */}
+          {/* Attach — colored blue */}
           <label title="Attach file (max 100 MB)" style={{
             width: 34, height: 34, borderRadius: 8, flexShrink: 0,
             display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: uploading ? "not-allowed" : "pointer", opacity: uploading ? 0.4 : 0.7,
-            transition: "opacity 0.15s",
+            cursor: uploading ? "not-allowed" : "pointer",
+            opacity: uploading ? 0.4 : 1,
+            background: BLUE_SOFT,
+            transition: "background 0.15s",
           }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "1"}
-            onMouseLeave={e => e.currentTarget.style.opacity = uploading ? "0.4" : "0.7"}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(96,165,250,0.28)"}
+            onMouseLeave={e => e.currentTarget.style.background = BLUE_SOFT}
           >
-            <AttachIcon size={18} color="var(--text-muted)" />
+            <AttachIcon size={18} color={BLUE} />
             <input
               ref={fileInputRef}
               type="file"
@@ -399,7 +454,6 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
             />
           </label>
 
-          {/* Send / Mic */}
           {text.trim() || filePending ? (
             <button
               onClick={handleSend}
@@ -407,16 +461,16 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
               title="Send (Enter)"
               style={{
                 width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                border: "1.5px solid var(--accent)",
-                background: "var(--accent-bg-strong, #052e16)",
-                color: "var(--accent-text)",
+                border: `1.5px solid ${BLUE}`,
+                background: BLUE_BG,
+                color: BLUE,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: (sending || uploading) ? "not-allowed" : "pointer",
                 opacity: (sending || uploading) ? 0.5 : 1,
                 transition: "all 0.15s",
               }}
             >
-              {sending ? <Spinner size={14} /> : <SendIcon size={15} color="var(--accent-text)" />}
+              {sending ? <Spinner size={14} /> : <SendIcon size={15} color={BLUE} />}
             </button>
           ) : (
             <button
@@ -425,23 +479,22 @@ export function MessageInput({ conversationId, replyingTo, onCancelReply, onSend
               title="Record voice note"
               style={{
                 width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                border: "1px solid var(--border)",
-                background: "transparent",
+                border: `1px solid ${BLUE_BDR}`,
+                background: BLUE_SOFT,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 cursor: uploading ? "not-allowed" : "pointer",
-                opacity: uploading ? 0.4 : 0.7,
-                transition: "opacity 0.15s",
+                opacity: uploading ? 0.4 : 1,
+                transition: "background 0.15s",
               }}
-              onMouseEnter={e => e.currentTarget.style.opacity = "1"}
-              onMouseLeave={e => e.currentTarget.style.opacity = uploading ? "0.4" : "0.7"}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(96,165,250,0.28)"}
+              onMouseLeave={e => e.currentTarget.style.background = BLUE_SOFT}
             >
-              <MicIcon size={16} color="var(--text-muted)" />
+              <MicIcon size={16} color={BLUE} />
             </button>
           )}
         </div>
       ) : null}
 
-      {/* Hint */}
       {!isRecording && !filePending && (
         <div style={{
           fontSize: 10, color: "var(--text-hint)",
@@ -458,8 +511,8 @@ function Spinner({ size = 18 }: { size?: number }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: "50%",
-      border: `2px solid rgba(255,255,255,0.2)`,
-      borderTopColor: "var(--accent-text)",
+      border: `2px solid rgba(96,165,250,0.25)`,
+      borderTopColor: "#60a5fa",
       animation: "spin 0.7s linear infinite",
       flexShrink: 0,
     }}>

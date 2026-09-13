@@ -10,6 +10,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import NotificationBell from "@/components/layout/NotificationBell";
 import { ScreenShareButton } from "@/components/screenshare/ScreenShareUI";
+import { ChatUnreadBadge } from "@/components/chat/ChatUnreadBadge";
 
 type NavLink = {
   label: string;
@@ -368,36 +369,38 @@ export default function Sidebar() {
               </div>
 
               {TOP_ICONS.map((item) => {
-                const isActive = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    title={item.title}
-                    style={{
-                      width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 15,
-                      background: isActive ? `${item.color}25` : "transparent",
-                      border: `2px solid ${isActive ? item.color + "60" : "transparent"}`,
-                      textDecoration: "none", transition: "all 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = `${item.color}25`;
-                      e.currentTarget.style.border = `2px solid ${item.color}60`;
-                      e.currentTarget.style.transform = "scale(1.1)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = isActive ? `${item.color}25` : "transparent";
-                      e.currentTarget.style.border = `2px solid ${isActive ? item.color + "60" : "transparent"}`;
-                      e.currentTarget.style.transform = "scale(1)";
-                    }}
-                  >
-                    {item.icon}
-                  </Link>
-                );
-              })}
-            </div>
+  const isActive = pathname === item.href;
+  return (
+    <Link
+      key={item.href}
+      href={item.href}
+      title={item.title}
+      style={{
+        position: "relative",
+        width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 15,
+        background: isActive ? `${item.color}25` : "transparent",
+        border: `2px solid ${isActive ? item.color + "60" : "transparent"}`,
+        textDecoration: "none", transition: "all 0.15s",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = `${item.color}25`;
+        e.currentTarget.style.border = `2px solid ${item.color}60`;
+        e.currentTarget.style.transform = "scale(1.1)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = isActive ? `${item.color}25` : "transparent";
+        e.currentTarget.style.border = `2px solid ${isActive ? item.color + "60" : "transparent"}`;
+        e.currentTarget.style.transform = "scale(1)";
+      }}
+    >
+      {item.icon}
+      {item.href === "/chat" && <ChatUnreadBadge />}
+    </Link>
+  );
+})}
+</div>
           )}
         </div>
 

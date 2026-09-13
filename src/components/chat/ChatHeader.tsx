@@ -1,6 +1,6 @@
 "use client";
 import UserAvatar from "@/components/UserAvatar";
-import { SearchIcon, UsersIcon, GroupIcon, VideoIcon, PhoneIcon } from "./Icons";
+import { SearchIcon, UsersIcon, GroupIcon, BackIcon } from "./Icons";
 import type { Conversation } from "./types";
 
 interface Props {
@@ -8,13 +8,15 @@ interface Props {
   currentUserId: string;
   showMembers: boolean;
   showSearch: boolean;
+  isMobile?: boolean;
+  onBack?: () => void;
   onToggleMembers: () => void;
   onToggleSearch: () => void;
 }
 
 export function ChatHeader({
   conversation, currentUserId, showMembers, showSearch,
-  onToggleMembers, onToggleSearch,
+  isMobile, onBack, onToggleMembers, onToggleSearch,
 }: Props) {
   const other = conversation.isGroup
     ? null
@@ -42,18 +44,36 @@ export function ChatHeader({
       borderBottom: "1px solid var(--border-soft)",
       background: "var(--bg-card)",
       display: "flex", alignItems: "center",
-      padding: "0 16px", gap: 12,
+      // KEY FIX: padding tight on mobile, normal on desktop
+      padding: isMobile ? "0 10px" : "0 16px",
+      gap: 10,
+      // Prevent header itself from overflowing
+      minWidth: 0, overflow: "hidden",
     }}>
+      {/* Back button — mobile only */}
+      {isMobile && onBack && (
+        <button
+          onClick={onBack}
+          style={{
+            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+            border: "none", background: "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: "var(--text-muted)",
+          }}
+        >
+          <BackIcon size={20} color="#25D366" />
+        </button>
+      )}
+
       {/* Avatar */}
       <div style={{ position: "relative", flexShrink: 0 }}>
         {conversation.isGroup ? (
           <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: "var(--accent-bg, rgba(34,197,94,0.12))",
-            border: "1.5px solid var(--accent)",
+            width: 36, height: 36, borderRadius: "50%",
+            background: "linear-gradient(135deg,#128C7E,#25D366)",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            <GroupIcon size={18} color="var(--accent-text)" />
+            <GroupIcon size={18} color="#fff" />
           </div>
         ) : (
           <UserAvatar user={{ name: other?.name || "?", photo: other?.photo }} size={36} />
@@ -61,93 +81,82 @@ export function ChatHeader({
         {isOnline && (
           <span style={{
             position: "absolute", bottom: 0, right: 0,
-            width: 9, height: 9, borderRadius: "50%",
-            background: "#22c55e",
-            border: "2px solid var(--bg-card)",
+            width: 10, height: 10, borderRadius: "50%",
+            background: "#25D366", border: "2px solid var(--bg-card)",
           }} />
         )}
       </div>
 
-      {/* Name + status */}
+      {/* Name + status — flex:1 + minWidth:0 so it shrinks, not overflows */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
-          fontSize: 14, fontWeight: 700,
-          color: "var(--text-primary)",
+          fontSize: 14, fontWeight: 700, color: "var(--text-primary)",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
           {conversation.name}
         </div>
         <div style={{
-          fontSize: 12, color: "var(--text-muted)",
-          display: "flex", alignItems: "center", gap: 5, marginTop: 1,
+          fontSize: 11, color: isOnline ? "#25D366" : "var(--text-muted)",
+          display: "flex", alignItems: "center", gap: 4, marginTop: 1,
         }}>
-          {isOnline && (
-            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e" }} />
-          )}
-          {subtitle}
+          {isOnline && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#25D366" }} />}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {subtitle}
+          </span>
         </div>
       </div>
 
-      {/* Group avatars strip */}
-      {conversation.isGroup && (
-        <div style={{ display: "flex", alignItems: "center", marginRight: 4 }}>
-          {conversation.participants.slice(0, 4).map((p, i) => (
-            <div key={p.id} style={{ marginLeft: i === 0 ? 0 : -8, zIndex: 4 - i }} title={p.name}>
+      {/* Group member avatars — hide on mobile to save space */}
+      {conversation.isGroup && !isMobile && (
+        <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          {conversation.participants.slice(0, 3).map((p, i) => (
+            <div key={p.id} style={{ marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }} title={p.name}>
               <UserAvatar user={{ name: p.name, photo: p.photo }} size={24} />
             </div>
           ))}
-          {conversation.participants.length > 4 && (
+          {conversation.participants.length > 3 && (
             <div style={{
               width: 24, height: 24, borderRadius: "50%",
               background: "var(--bg-input)", border: "1.5px solid var(--border)",
               marginLeft: -8, display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 10, fontWeight: 700, color: "var(--text-hint)",
             }}>
-              +{conversation.participants.length - 4}
+              +{conversation.participants.length - 3}
             </div>
           )}
         </div>
       )}
 
-      {/* Action buttons */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <HeaderBtn
-          onClick={onToggleSearch}
-          active={showSearch}
-          title="Search messages"
-          icon={<SearchIcon size={16} color={showSearch ? "var(--accent-text)" : "var(--text-muted)"} />}
-        />
+      {/* Action buttons — flexShrink:0 so they never disappear */}
+      <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
+        <HBtn onClick={onToggleSearch} active={showSearch} title="Search">
+          <SearchIcon size={17} color={showSearch ? "#25D366" : "var(--text-muted)"} />
+        </HBtn>
         {conversation.isGroup && (
-          <HeaderBtn
-            onClick={onToggleMembers}
-            active={showMembers}
-            title="Members"
-            icon={<UsersIcon size={16} color={showMembers ? "var(--accent-text)" : "var(--text-muted)"} />}
-          />
+          <HBtn onClick={onToggleMembers} active={showMembers} title="Members">
+            <UsersIcon size={17} color={showMembers ? "#25D366" : "var(--text-muted)"} />
+          </HBtn>
         )}
       </div>
     </div>
   );
 }
 
-function HeaderBtn({ onClick, active, title, icon }: {
-  onClick: () => void; active: boolean; title: string; icon: React.ReactNode;
+function HBtn({ onClick, active, title, children }: {
+  onClick: () => void; active: boolean; title: string; children: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
-      title={title}
-      style={{
-        width: 32, height: 32, borderRadius: 8,
-        border: active ? "1.5px solid var(--accent)" : "1px solid transparent",
-        background: active ? "var(--accent-bg, rgba(34,197,94,0.1))" : "transparent",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        cursor: "pointer", transition: "all 0.15s",
-      }}
-      onMouseEnter={e => { if (!active) e.currentTarget.style.background = "var(--bg-hover, rgba(255,255,255,0.06))"; }}
+    <button onClick={onClick} title={title} style={{
+      width: 34, height: 34, borderRadius: 8,
+      border: active ? "1.5px solid #25D366" : "1px solid transparent",
+      background: active ? "rgba(37,211,102,0.1)" : "transparent",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      cursor: "pointer", transition: "all 0.15s",
+    }}
+      onMouseEnter={e => { if (!active) e.currentTarget.style.background = "var(--bg-input)"; }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}
     >
-      {icon}
+      {children}
     </button>
   );
 }
