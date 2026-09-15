@@ -173,20 +173,17 @@ async function detectGPS(): Promise<{ lat: number; lng: number; distanceMeters: 
         const accuracy = pos.coords.accuracy;
         const distanceMeters = haversineMeters(lat, lng, FCCPC_HQ.lat, FCCPC_HQ.lng);
 
-        let effectiveRadius;
-        if (accuracy < 30) effectiveRadius = 60;
-        else if (accuracy < 100) effectiveRadius = 100;
-        else if (accuracy < 300) effectiveRadius = 200;
-        else effectiveRadius = 300;
+        console.log(`📍 Accuracy: ±${Math.round(accuracy)}m → Distance: ${Math.round(distanceMeters)}m`);
 
-        console.log(`📍 Accuracy: ±${Math.round(accuracy)}m → Radius: ${effectiveRadius}m → Distance: ${Math.round(distanceMeters)}m`);
+// Use server's logic: base 60m + accuracy margin (max 150m) — matches route.ts exactly
+const effectiveRadius = 60 + Math.min(accuracy, 150);
 
-        resolve({
-          lat,
-          lng,
-          distanceMeters,
-          onPremises: distanceMeters <= effectiveRadius,
-        });
+resolve({
+  lat,
+  lng,
+  distanceMeters,
+  onPremises: distanceMeters <= effectiveRadius,
+});
       },
       (err) => {
         console.error(`❌ GPS Error: ${err.message}`);
