@@ -100,7 +100,7 @@ export function MessageBubble({
       {!isMine && (
         <div style={{ width: 28, flexShrink: 0, alignSelf: "flex-end" }}>
           {showAvatar
-            ? <UserAvatar user={{ name: message.sender.name, photo: message.sender.photo }} size={26} />
+            ? <UserAvatar user={{ name: message.sender.name }} userId={message.sender.id} size={26} />
             : null}
         </div>
       )}
@@ -247,23 +247,23 @@ export function MessageBubble({
 
           {showChevron && (
             <button
-              onClick={() => { computeReactDirection(); setShowMenu(v => !v); setShowReacts(false); }}
-              title="Message options"
-              style={{
-                width: 22, height: 22, borderRadius: "50%",
-                background: "rgba(255,255,255,0.1)",
-                border: "none", cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 11, color: "rgba(255,255,255,0.7)",
-                flexShrink: 0, alignSelf: "flex-start",
-                marginTop: 6,
-                transition: "background 0.1s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}
-              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-            >
-              ▾
-            </button>
+  onClick={() => { computeReactDirection(); setShowMenu(v => !v); setShowReacts(false); }}
+  style={{
+    width: 22, height: 22, borderRadius: "50%",
+    background: "var(--bg-input)",
+    border: "0.5px solid var(--border)",
+    cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 11, color: "var(--text-muted)",
+    flexShrink: 0, alignSelf: "flex-start",
+    marginTop: 6,
+    transition: "background 0.1s",
+  }}
+  onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover, var(--bg-input))"; e.currentTarget.style.color = "var(--text-primary)"; }}
+  onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-input)"; e.currentTarget.style.color = "var(--text-muted)"; }}
+>
+  ▾
+</button>
           )}
         </div>
 

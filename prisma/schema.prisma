@@ -153,6 +153,10 @@ model DailyLog {
   hrResolvedBy     User?     @relation("HRResolvedLogs", fields: [hrResolvedById], references: [id])
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+  @@index([userId, date])
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([ackStatus])
 }
 
 model KPI {
@@ -420,6 +424,8 @@ model ChatMessage {
   pinned  Boolean  @default(false)   // ← ADD THIS
   reactions      ChatReaction[]
   createdAt      DateTime         @default(now())
+  @@index([conversationId, createdAt])
+  @@index([conversationId, senderId, createdAt])
 }
 
 model ChatReaction {

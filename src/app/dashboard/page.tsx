@@ -370,7 +370,7 @@ export default function DashboardPage() {
           <KpiCard label="Tasks created"    value={kpi?.tasksInRange ?? 0}    sub={`in ${FILTER_LABELS[filter].toLowerCase()}`}                 color="#06b6d4" pct={pct(kpi?.tasksInRange ?? 0, (kpi?.totalStaff ?? 1) * 2)} loading={loading} href="/tasks?view=created" />
           <KpiCard label="Tasks pending"    value={kpi?.tasksPending ?? 0}    sub="unresolved (all-time)"                                        color="#f97316" pct={pct(kpi?.tasksPending ?? 0, kpi?.tasksInRange ?? 1)}    loading={loading} href="/tasks?view=assigned" />
           {isPrivileged ? (
-            <KpiCard label="Departments"      value={kpi?.activeDepartments ?? 0} sub="registered"                                                 color="#22c55e" pct={100}                                                  loading={loading} href="/departments" />
+            <KpiCard label="Departments"      value={kpi?.activeDepartments ?? 0} sub="registered"                                                 color="#22c55e" pct={100}                                                  loading={loading} href="/insights?tab=departments" />
           ) : (
             <KpiCard label="Leave requests"   value={kpi?.leavePending ?? 0}     sub="pending approval"                                            color="#a78bfa" pct={pct(kpi?.leavePending ?? 0, kpi?.leaveInRange ?? 1)}    loading={loading} href="/leave" />
           )}

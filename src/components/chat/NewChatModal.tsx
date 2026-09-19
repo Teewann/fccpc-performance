@@ -191,7 +191,7 @@ export function NewChatModal({
                 background: "rgba(37,211,102,0.12)", border: "1px solid #25D366",
                 color: "#25D366", fontSize: 12, fontWeight: 600,
               }}>
-                <UserAvatar user={{ name: u.name, photo: u.photo }} size={16} />
+                <UserAvatar user={{ name: u.name }} userId={u.id} size={16} />
                 {u.name.split(" ")[0]}
                 <button onClick={() => toggle(u)} style={{
                   background: "none", border: "none", cursor: "pointer",
@@ -241,8 +241,8 @@ export function NewChatModal({
                 onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
               >
                 <div style={{ position: "relative", flexShrink: 0 }}>
-                  <UserAvatar user={{ name: user.name, photo: user.photo }} size={38} />
-                  {isOnline && (
+                <UserAvatar user={{ name: user.name }} userId={user.id} size={38} />                 
+                 {isOnline && (
                     <span style={{
                       position: "absolute", bottom: 0, right: 0,
                       width: 10, height: 10, borderRadius: "50%",

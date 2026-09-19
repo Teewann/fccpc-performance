@@ -14,7 +14,6 @@ export async function GET(request: NextRequest) {
     const day30ago = new Date(now); day30ago.setDate(now.getDate() - 30);
     const day7ago  = new Date(now); day7ago.setDate(now.getDate() - 7);
 
-    // Fetch all staff with their logs in last 30 days
     const users = await prisma.user.findMany({
       where: { isActive: true },
       include: {
@@ -32,6 +31,34 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    const completedGroups = await prisma.task.groupBy({
+      by: ["assignedToId"],
+      where: {
+        status: "COMPLETED",
+        completedAt: { gte: day30ago },
+        assignedToId: { not: null },
+      },
+      _count: { id: true },
+    });
+    const completedMap: Record<string, number> = {};
+    for (const g of completedGroups) {
+      if (g.assignedToId) completedMap[g.assignedToId] = g._count.id;
+    }
+
+    const overdueGroups = await prisma.task.groupBy({
+      by: ["assignedToId"],
+      where: {
+        assignedToId: { not: null },
+        dueDate: { lt: now },
+        status: { notIn: ["COMPLETED", "CANCELLED"] },
+      },
+      _count: { id: true },
+    });
+    const overdueMap: Record<string, number> = {};
+    for (const g of overdueGroups) {
+      if (g.assignedToId) overdueMap[g.assignedToId] = g._count.id;
+    }
+
     const insights = users.map((user) => {
       const logs         = user.dailyLogs;
       const totalLogs    = logs.length;
@@ -43,79 +70,73 @@ export async function GET(request: NextRequest) {
           logs.filter((l) => l.supervisorScore !== null).length
         : null;
 
-      // Unique days logged in last 30 days
       const uniqueDays = new Set(
         logs.map((l) => new Date(l.createdAt).toDateString())
       ).size;
 
-      // Week logs for trend
       const weekLogs = logs.filter((l) => new Date(l.createdAt) >= day7ago).length;
 
-      // ── Scoring algorithm ──────────────────────────────────────
-      // 1. Log frequency (40%) - target: 22 days/month (working days)
-      const freqScore  = Math.min((uniqueDays / 22) * 100, 100);
+      const completedTasks = completedMap[user.id] || 0;
+      const overdueTasks   = overdueMap[user.id]   || 0;
 
-      // 2. Approval rate (30%)
-      const approvalRate = totalLogs > 0 ? (approved / totalLogs) * 100 : 50;
+      const logPoints        = approved * 3;
+      const taskPoints       = completedTasks * 3;
+      const hasApprovedWork  = approved > 0 || completedTasks > 0;
+      const qualityBonus     = hasApprovedWork && avgScore !== null ? (avgScore / 100) * 15 : 0;
+      const consistencyBonus = hasApprovedWork ? Math.min(uniqueDays * 1.25, 10) : 0;
+      const overdueePenalty  = Math.min(overdueTasks * 2, 20);
 
-      // 3. Supervisor quality scores (20%)
-      const qualityScore = avgScore !== null ? (avgScore / 10) * 100 : 60;
+      const rawScore = logPoints + taskPoints + qualityBonus + consistencyBonus - overdueePenalty;
+      const overallScore = Math.max(0, Math.min(Math.round(rawScore), 100));
 
-      // 4. Output volume (10%) - target: 30 tasks/month
-      const volumeScore  = Math.min((totalLogs / 30) * 100, 100);
-
-      const overallScore = Math.round(
-        freqScore * 0.4 + approvalRate * 0.3 + qualityScore * 0.2 + volumeScore * 0.1
-      );
-
-      // ── Recommendation logic ──────────────────────────────────
       let tag: string;
       let reason: string;
       let tagColor: "green" | "amber" | "red" | "blue";
 
-      if (overallScore >= 85 && approved >= 15) {
-        tag = "Promote"; tagColor = "green";
-        reason = `Outstanding performance - ${totalLogs} tasks, ${Math.round(approvalRate)}% approval rate`;
-      } else if (overallScore >= 70) {
-        tag = "On Track"; tagColor = "blue";
-        reason = `Consistent output - ${totalLogs} tasks logged, ${uniqueDays} active days`;
-      } else if (uniqueDays < 10 && totalLogs < 10) {
+      if (totalLogs === 0 && completedTasks === 0 && overdueTasks === 0) {
         tag = "Low Activity"; tagColor = "amber";
-        reason = `Only ${uniqueDays} active days and ${totalLogs} logs in 30 days`;
-      } else if (rejected > approved && totalLogs > 5) {
+        reason = `No activity in the last 30 days`;
+      } else if (overdueTasks > 5) {
         tag = "Quality Issues"; tagColor = "red";
-        reason = `${rejected} rejected logs - quality review needed`;
-      } else if (overallScore < 50) {
-        tag = "Flag"; tagColor = "red";
-        reason = `Below performance threshold - score ${overallScore}%`;
-      } else {
+        reason = `${overdueTasks} overdue tasks, ${overdueePenalty} point penalty applied`;
+      } else if (overallScore >= 70 && approved >= 10) {
+        tag = "Promote"; tagColor = "green";
+        reason = `Top performer: ${approved} approved logs, ${completedTasks} tasks completed`;
+      } else if (overallScore >= 50) {
+        tag = "On Track"; tagColor = "blue";
+        reason = `Solid output: ${approved} approved logs, ${completedTasks} tasks completed`;
+      } else if (overallScore >= 30) {
         tag = "Watch"; tagColor = "amber";
-        reason = `Performance trending below target - ${totalLogs} tasks, ${uniqueDays} active days`;
+        reason = `${totalLogs} logs, ${approved} approved${overdueTasks > 0 ? `, ${overdueTasks} overdue` : ""}`;
+      } else {
+        tag = "Flag"; tagColor = "red";
+        reason = `Below threshold, score ${overallScore}`;
       }
 
       return {
-        id:           user.id,
-        name:         user.name,
-        email:        user.email,
-        department:   user.department?.name ?? "Unassigned",
+        id:             user.id,
+        name:           user.name,
+        email:          user.email,
+        department:     user.department?.name ?? "Unassigned",
         overallScore,
         totalLogs,
         approved,
         rejected,
-        totalHours:   Math.round(totalHours * 10) / 10,
+        completedTasks,
+        overdueTasks,
+        totalHours:     Math.round(totalHours * 10) / 10,
         uniqueDays,
         weekLogs,
-        avgScore:     avgScore ? Math.round(avgScore * 10) / 10 : null,
+        avgScore:       avgScore ? Math.round(avgScore * 10) / 10 : null,
         tag,
         tagColor,
         reason,
       };
     });
 
-    // Sort by score descending
     insights.sort((a, b) => b.overallScore - a.overallScore);
 
-    // Department-level insights
+    // ── Department-level insights (unchanged) ──────────────────────
     const deptGroups = await prisma.department.findMany({
       include: {
         users: {
@@ -146,13 +167,16 @@ export async function GET(request: NextRequest) {
       };
     }).sort((a, b) => b.approvalRate - a.approvalRate);
 
+    // Summary uses only staff with approved work for realistic averages
+    const activeInsights = insights.filter((i) => i.approved > 0 || i.completedTasks > 0);
+
     const summary = {
-      totalStaff:          insights.length,
+      totalStaff:          activeInsights.length,
       promotionCandidates: insights.filter((i) => i.tag === "Promote").length,
       flagged:             insights.filter((i) => i.tag === "Flag").length,
       lowActivity:         insights.filter((i) => i.tag === "Low Activity").length,
-      avgScore:            insights.length > 0
-        ? Math.round(insights.reduce((s, i) => s + i.overallScore, 0) / insights.length)
+      avgScore:            activeInsights.length > 0
+        ? Math.round(activeInsights.reduce((s, i) => s + i.overallScore, 0) / activeInsights.length)
         : 0,
     };
 

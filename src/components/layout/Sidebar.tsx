@@ -33,52 +33,53 @@ const HR_ONLY = ["HR"];
 const ADMIN_ONLY = ["ADMIN"];
 const EXECUTIVE_ONLY = ["EXECUTIVE"];
 const NOT_STAFF_FACING = ["DIRECTOR", "SUPERVISOR", "HR", "ADMIN", "EXECUTIVE"]; // EVC Directives
+const INSIGHTS_ONLY = ["HR", "ADMIN", "EXECUTIVE"];
 
-// ── Single source of truth for the whole nav — one place, no duplicate lists ──
+// ── Single source of truth for the whole nav ──
 const SECTIONS: NavSection[] = [
   {
     section: "Core",
     links: [
-      { label: "Dashboard", href: "/dashboard", icon: "▦", iconColor: "#60a5fa" },
-      { label: "Daily Work Log", href: "/daily-log", icon: "📝", iconColor: "#34d399", allowedRoles: undefined },
-      { label: "Supervisor Panel", href: "/supervisor", icon: "👁", iconColor: "#c084fc", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
-      { label: "Attendance", href: "/check-in", icon: "🕐", iconColor: "#f59e0b" },
-      { label: "ID Card", href: "/id-card", icon: "🪪", iconColor: "#38bdf8" },
-      { label: "Intern Log", href: "/intern", icon: "📓", iconColor: "#fb923c", allowedRoles: ["INTERN"] },
+      { label: "Dashboard",       href: "/dashboard",    icon: "▦", iconColor: "#60a5fa" },
+      { label: "Attendance",      href: "/check-in",     icon: "🕐", iconColor: "#f59e0b" },
+      { label: "Daily Work Log",  href: "/daily-log",    icon: "📝", iconColor: "#34d399", allowedRoles: undefined },
+      { label: "Tasks",           href: "/tasks",        icon: "✅", iconColor: "#4ade80" },
+      { label: "Performance",     href: "/performance",  icon: "🏆", iconColor: "#fbbf24" },
+      { label: "Insights",        href: "/insights",     icon: "✦", iconColor: "#e879f9", badge: "AI", badgeGreen: true, allowedRoles: INSIGHTS_ONLY },
+      { label: "Supervisor Panel",href: "/supervisor",   icon: "👁", iconColor: "#c084fc", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
+      { label: "ID Card",         href: "/id-card",      icon: "🪪", iconColor: "#38bdf8" },
+      { label: "Intern Log",      href: "/intern",       icon: "📓", iconColor: "#fb923c", allowedRoles: ["INTERN"] },
     ],
   },
   {
     section: "Management",
     links: [
-      { label: "Departments", href: "/departments", icon: "🏢", iconColor: "#60a5fa", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
-      { label: "Tasks", href: "/tasks", icon: "✅", iconColor: "#4ade80" },
-      { label: "KPI Manager", href: "/kpi", icon: "📊", iconColor: "#f472b6" },
-      { label: "Appraisals", href: "/appraisals", icon: "⭐", iconColor: "#fbbf24", allowedRoles: HR_ONLY },
-      { label: "EVC Directives", href: "/evc-directives", icon: "📌", iconColor: "#f87171", allowedRoles: NOT_STAFF_FACING },
-      { label: "Leave", href: "/leave", icon: "🏖", iconColor: "#34d399" },
-      { label: "Payment Workflow", href: "/payment-workflow", icon: "💳", iconColor: "#34d399" },
+      { label: "Departments",      href: "/departments",       icon: "🏢", iconColor: "#60a5fa", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
+      { label: "KPI Manager",      href: "/kpi",               icon: "📊", iconColor: "#f472b6" },
+      { label: "Appraisals",       href: "/appraisals",        icon: "⭐", iconColor: "#fbbf24", allowedRoles: HR_ONLY },
+      { label: "EVC Directives",   href: "/evc-directives",    icon: "📌", iconColor: "#f87171", allowedRoles: NOT_STAFF_FACING },
+      { label: "Leave",            href: "/leave",             icon: "🏖", iconColor: "#34d399" },
+      { label: "Payment Workflow", href: "/payment-workflow",  icon: "💳", iconColor: "#34d399" },
     ],
   },
   {
     section: "Intelligence",
     links: [
-      { label: "AI Insights", href: "/ai-insights", icon: "✦", iconColor: "#e879f9", badge: "AI", badgeGreen: true, allowedRoles: DIRECTOR_OR_UNIT_HEAD },
-      { label: "Reports", href: "/reports", icon: "📈", iconColor: "#60a5fa" },
-      { label: "Communications", href: "/announcements", icon: "📢", iconColor: "#fb923c" },
-      { label: "Promotion Exams", href: "/exams", icon: "🎓", iconColor: "#a78bfa" },
-      { label: "Performance", href: "/performance", icon: "🏆", iconColor: "#fbbf24", allowedRoles: HR_ONLY },
-      { label: "Incentives", href: "/incentives", icon: "🎯", iconColor: "#f472b6", badge: "HR", badgeGreen: true, allowedRoles: HR_ONLY },
-      { label: "HR Oversight", href: "/hr-oversight", icon: "👁", iconColor: "#c084fc", allowedRoles: HR_ONLY },
+      { label: "Reports",             href: "/reports",            icon: "📈", iconColor: "#60a5fa" },
+      { label: "Communications",      href: "/announcements",      icon: "📢", iconColor: "#fb923c" },
+      { label: "Promotion Exams",     href: "/exams",              icon: "🎓", iconColor: "#a78bfa" },
+      { label: "Incentives",          href: "/incentives",         icon: "🎯", iconColor: "#f472b6", badge: "HR", badgeGreen: true, allowedRoles: HR_ONLY },
+      { label: "HR Oversight",        href: "/hr-oversight",       icon: "👁", iconColor: "#c084fc", allowedRoles: HR_ONLY },
     ],
   },
   {
     section: "System",
     links: [
-      { label: "Users", href: "/users", icon: "🔧", iconColor: "#f59e0b", allowedRoles: ADMIN_ONLY },
-      { label: "Audit Trail", href: "/audit-trail", icon: "🔍", iconColor: "#f87171", allowedRoles: ADMIN_ONLY },
-      { label: "Settings", href: "/settings", icon: "⚙", iconColor: "#94a3b8" },
-      { label: "EVC Suite", href: "/vc9k2", icon: "⚡", iconColor: "#fbbf24", allowedRoles: EXECUTIVE_ONLY },
-      { label: "Account Activation", href: "/admin/account-activation", icon: "🔑", iconColor: "#f472b6", badge: "Admin", badgeGreen: true, allowedRoles: ADMIN_ONLY },
+      { label: "Users",              href: "/users",                       icon: "🔧", iconColor: "#f59e0b", allowedRoles: ADMIN_ONLY },
+      { label: "Audit Trail",        href: "/audit-trail",                 icon: "🔍", iconColor: "#f87171", allowedRoles: ADMIN_ONLY },
+      { label: "Settings",           href: "/settings",                    icon: "⚙",  iconColor: "#94a3b8" },
+      { label: "EVC Suite",          href: "/vc9k2",                       icon: "⚡", iconColor: "#fbbf24", allowedRoles: EXECUTIVE_ONLY },
+      { label: "Account Activation", href: "/admin/account-activation",    icon: "🔑", iconColor: "#f472b6", badge: "Admin", badgeGreen: true, allowedRoles: ADMIN_ONLY },
     ],
   },
 ];
@@ -181,9 +182,7 @@ export default function Sidebar() {
     if (p) setUserPhoto(p);
   }, [session]);
 
-  // ── Preserve scroll position across navigations ──────────────────────
-  // Each page currently mounts its own <Sidebar />, so this remounts on
-  // every navigation and would otherwise reset to the top every time.
+  // Preserve scroll position across navigations
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
@@ -369,38 +368,38 @@ export default function Sidebar() {
               </div>
 
               {TOP_ICONS.map((item) => {
-  const isActive = pathname === item.href;
-  return (
-    <Link
-      key={item.href}
-      href={item.href}
-      title={item.title}
-      style={{
-        position: "relative",
-        width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 15,
-        background: isActive ? `${item.color}25` : "transparent",
-        border: `2px solid ${isActive ? item.color + "60" : "transparent"}`,
-        textDecoration: "none", transition: "all 0.15s",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = `${item.color}25`;
-        e.currentTarget.style.border = `2px solid ${item.color}60`;
-        e.currentTarget.style.transform = "scale(1.1)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = isActive ? `${item.color}25` : "transparent";
-        e.currentTarget.style.border = `2px solid ${isActive ? item.color + "60" : "transparent"}`;
-        e.currentTarget.style.transform = "scale(1)";
-      }}
-    >
-      {item.icon}
-      {item.href === "/chat" && <ChatUnreadBadge />}
-    </Link>
-  );
-})}
-</div>
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    title={item.title}
+                    style={{
+                      position: "relative",
+                      width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 15,
+                      background: isActive ? `${item.color}25` : "transparent",
+                      border: `2px solid ${isActive ? item.color + "60" : "transparent"}`,
+                      textDecoration: "none", transition: "all 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = `${item.color}25`;
+                      e.currentTarget.style.border = `2px solid ${item.color}60`;
+                      e.currentTarget.style.transform = "scale(1.1)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = isActive ? `${item.color}25` : "transparent";
+                      e.currentTarget.style.border = `2px solid ${isActive ? item.color + "60" : "transparent"}`;
+                      e.currentTarget.style.transform = "scale(1)";
+                    }}
+                  >
+                    {item.icon}
+                    {item.href === "/chat" && <ChatUnreadBadge />}
+                  </Link>
+                );
+              })}
+            </div>
           )}
         </div>
 

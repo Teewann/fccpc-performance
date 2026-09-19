@@ -31,8 +31,41 @@ export async function GET(request: NextRequest) {
       role: (session.user as any).role as string,
     };
 
-    // ✅ Check if user is privileged (can see system-wide stats)
-    const isPrivileged = ["ADMIN", "DIRECTOR", "HR", "EXECUTIVE"].includes(user.role);
+    // ── Scope resolution ──────────────────────────────────────────────
+    // Every role falls into exactly one of three scopes:
+    //   • "personal"    → sees only their own data            (STAFF, SUPERVISOR, HR)
+    //   • "department"  → sees only their department's data   (DIRECTOR)
+    //   • "org"         → sees the whole org                  (ADMIN, EXECUTIVE)
+    //
+    // The same scope is applied consistently to logs, tasks, leave,
+    // staff counts, and charts. No role gets mixed scoping.
+    //
+    // NOTE: HR Director (org-wide HR) is not wired yet — when the schema
+    // has a way to distinguish HR Director from ordinary HR, add it to
+    // the `org` branch below.
+    let scopeIds: string[] = [user.id];
+    let scopeDepartmentId: string | null = null;
+    let scope: "personal" | "department" | "org" = "personal";
+
+    if (user.role === "ADMIN" || user.role === "EXECUTIVE") {
+      scope = "org";
+    } else if (user.role === "DIRECTOR") {
+      const deptId = (session.user as any).departmentId as string | null;
+      if (deptId) {
+        scope = "department";
+        scopeDepartmentId = deptId;
+        const deptUsers = await prisma.user.findMany({
+          where: { departmentId: deptId },
+          select: { id: true },
+        });
+        scopeIds = deptUsers.map((u) => u.id);
+      }
+    } else {
+      // STAFF, SUPERVISOR, HR, and any other role → personal
+      scope = "personal";
+    }
+
+    const isPrivileged = scope !== "personal"; // charts/etc. only for dept & org scopes
 
     const { searchParams } = new URL(request.url);
     const filter = searchParams.get("filter") || "week";
@@ -67,23 +100,21 @@ export async function GET(request: NextRequest) {
       rangeEnd = endOfDay(now);
     }
 
-    // ✅ FILTER BY USER - personal stats
+    // ✅ FILTER BY SCOPE — personal / department / org
     const logWhere = {
       date: { gte: rangeStart, lte: rangeEnd },
-      userId: user.id,
+      userId: { in: scopeIds },
     };
     const taskWhere = {
       createdAt: { gte: rangeStart, lte: rangeEnd },
-      assignedToId: user.id,
+      assignedToId: { in: scopeIds },
     };
     const leaveWhere = {
       createdAt: { gte: rangeStart, lte: rangeEnd },
-      userId: user.id,
+      userId: { in: scopeIds },
     };
 
     // ── BATCH 1: fire all independent queries at the SAME time ─────────
-    // ✅ OPTIMIZED: fetch rows once, derive counts in JS — avoids duplicate DB round-trips.
-    // Previously this block fired 16 queries; now it fires 9.
     const [
       totalStaff,
       activeDepartments,
@@ -95,14 +126,43 @@ export async function GET(request: NextRequest) {
       leavePending,
       recentLogs,
     ] = await Promise.all([
-      isPrivileged ? prisma.user.count({ where: { isActive: true } }) : Promise.resolve(0),
-      isPrivileged ? prisma.department.count() : Promise.resolve(0),
+      // totalStaff — scoped:
+      //   org        → all active users
+      //   department → active users in that department
+      //   personal   → 0 (staff/supervisor/HR don't need this)
+      scope === "org"
+        ? prisma.user.count({ where: { isActive: true } })
+        : scope === "department" && scopeDepartmentId
+          ? prisma.user.count({ where: { isActive: true, departmentId: scopeDepartmentId } })
+          : Promise.resolve(0),
+
+      // activeDepartments — scoped:
+      //   org        → total departments
+      //   department → always 1
+      //   personal   → 0
+      scope === "org"
+        ? prisma.department.count()
+        : scope === "department"
+          ? Promise.resolve(1)
+          : Promise.resolve(0),
+
       prisma.dailyLog.findMany({ where: logWhere, select: { date: true, status: true } }),
-      prisma.dailyLog.count({ where: { status: "SUBMITTED", userId: user.id } }),
+
+      // pending logs — scoped
+      prisma.dailyLog.count({ where: { status: "SUBMITTED", userId: { in: scopeIds } } }),
+
       prisma.task.findMany({ where: taskWhere, select: { status: true } }),
-      prisma.task.count({ where: { status: "PENDING", assignedToId: user.id } }),
+
+      // pending tasks — scoped
+      prisma.task.count({ where: { status: "PENDING", assignedToId: { in: scopeIds } } }),
+
       prisma.leaveRequest.count({ where: leaveWhere }),
-      prisma.leaveRequest.count({ where: { status: "PENDING", userId: user.id } }),
+
+      // pending leave — scoped
+      prisma.leaveRequest.count({ where: { status: "PENDING", userId: { in: scopeIds } } }),
+
+      // recent activity — stays personal for everyone
+      // ("Your recent activity" is a personal panel, not a scoped one)
       prisma.dailyLog.findMany({
         take: 8,
         orderBy: { createdAt: "desc" },
@@ -241,17 +301,29 @@ export async function GET(request: NextRequest) {
     let lowActivity: { name: string; staff: number }[] = [];
 
     if (isPrivileged) {
-      // BATCH 2: independent privileged-only queries, fired together
+      // BATCH 2: independent privileged-only queries, fired together.
+      // All three use `scopeIds` / `scopeDepartmentId` so a Director gets
+      // their department, and Admin/Executive get the whole org.
       const [deptLogsRaw, topRaw, allDepts] = await Promise.all([
-        prisma.dailyLog.findMany({ where: logWhere, select: { userId: true, status: true } }),
+        prisma.dailyLog.findMany({
+          where: { ...logWhere, userId: { in: scopeIds } },
+          select: { userId: true, status: true },
+        }),
+
         prisma.dailyLog.groupBy({
           by: ["userId"],
-          where: { ...logWhere, status: "APPROVED" },
+          where: { ...logWhere, userId: { in: scopeIds }, status: "APPROVED" },
           _count: { id: true },
           orderBy: { _count: { id: "desc" } },
           take: 5,
         }),
+
+        // Director → only their own department row
+        // Admin/Executive → all departments
         prisma.department.findMany({
+          where: scope === "department" && scopeDepartmentId
+            ? { id: scopeDepartmentId }
+            : undefined,
           select: { id: true, name: true, _count: { select: { users: true } } },
           orderBy: { name: "asc" },
         }),

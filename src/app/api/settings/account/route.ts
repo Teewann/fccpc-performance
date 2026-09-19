@@ -5,6 +5,7 @@ import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import bcrypt from "bcryptjs";
+import { cache } from "@/lib/cache";
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +17,12 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
+
+    // Cache per-user for 60 seconds. This endpoint is called by Sidebar,
+    // Topbar, and 10+ pages on every navigation — same user, same data.
+    const cacheKey = `settings:account:${session.user.email}`;
+    const cached = cache.get<{ user: unknown }>(cacheKey);
+    if (cached) return NextResponse.json(cached);
 
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
@@ -29,8 +36,8 @@ export async function GET(request: NextRequest) {
         staffId: true,
         gradeLevel: true,
         photo: true,
-        userIdRef: true, // ← added missing field
-        departmentId: true, // ← added missing field
+        userIdRef: true,
+        departmentId: true,
         department: {
           select: {
             name: true,
@@ -52,7 +59,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ user });
+    const payload = { user };
+    cache.set(cacheKey, payload, 60_000);   // 60 seconds
+    return NextResponse.json(payload);
   } catch (error) {
     console.error(error);
 
@@ -159,6 +168,9 @@ export async function PATCH(request: NextRequest) {
       where: { id: user.id },
       data: updateData,
     });
+
+    // Invalidate the cache so the next GET returns fresh data
+cache.del(`settings:account:${session.user.email}`);
 
     await prisma.auditLog.create({
       data: {

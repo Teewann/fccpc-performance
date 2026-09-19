@@ -9,7 +9,7 @@ const MSG_SELECT = {
   id: true, conversationId: true,
   content: true, fileUrl: true, fileName: true, fileType: true,
   edited: true, pinned: true, createdAt: true,
-  sender: { select: { id: true, name: true, photo: true } },
+  sender: { select: { id: true, name: true } },
   replyTo: { select: { id: true, content: true, fileName: true, sender: { select: { name: true } } } },
   reactions: { select: { id: true, emoji: true, userId: true, user: { select: { name: true } } } },
 } as const;

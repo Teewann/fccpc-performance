@@ -32,7 +32,7 @@ export async function PATCH(request: NextRequest) {
     where: { id: messageId },
     data: { pinned },
     include: {
-      sender: { select: { id: true, name: true, photo: true } },
+    sender: { select: { id: true, name: true } },
     },
   });
 

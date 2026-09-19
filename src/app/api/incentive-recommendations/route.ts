@@ -32,10 +32,13 @@ async function computeAndStoreRecommendations(month: string) {
   const monthEnd = new Date(year, monthNum, 1);
 
   const logs = await prisma.dailyLog.findMany({
-    where: {
+        where: {
       createdAt: { gte: monthStart, lt: monthEnd },
       status: { in: ["SUBMITTED", "APPROVED"] },
-      NOT: { ackStatus: "DISPUTED" },
+      OR: [
+        { ackStatus: null },
+        { ackStatus: { not: "DISPUTED" } },
+      ],
     },
     select: { userId: true, supervisorScore: true },
   });

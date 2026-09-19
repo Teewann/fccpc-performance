@@ -25,7 +25,8 @@ export async function GET() {
       participants: {
         select: {
           userId: true, lastReadAt: true,
-          user: { select: { id: true, name: true, photo: true, lastSeen: true, role: true } },
+          user: { select: { id: true, name: true, lastSeen: true, role: true } },
+          
         },
       },
       messages: {
@@ -38,27 +39,38 @@ export async function GET() {
 
   const now = Date.now();
 
-  // Count unread per conversation in parallel — one query each, fast
-  const unreadCounts = await Promise.all(
-    convs.map(async (c) => {
-      const me = c.participants.find(p => p.userId === userId);
-      const myLastRead = me?.lastReadAt;
-      const count = await prisma.chatMessage.count({
-        where: {
-          conversationId: c.id,
-          senderId: { not: userId },
-          ...(myLastRead ? { createdAt: { gt: myLastRead } } : {}),
-        },
-      });
-      return { id: c.id, count };
-    })
-  );
-  const unreadMap = new Map(unreadCounts.map(u => [u.id, u.count]));
+  // ── Batch unread counts: ONE query for all conversations ────────────
+  // Replaces the previous N+1 (one count per conversation) with a single
+  // findMany + in-memory tally. Uses ChatMessage(conversationId, createdAt).
+  const unreadMap = new Map<string, number>();
+  if (convs.length > 0) {
+    const orClauses: any[] = [];
+    for (const c of convs) {
+      const me = c.participants.find((p) => p.userId === userId);
+      const since = me?.lastReadAt ?? null;
+      if (since) {
+        orClauses.push({ conversationId: c.id, createdAt: { gt: since } });
+      } else {
+        orClauses.push({ conversationId: c.id });
+      }
+    }
 
-  const result = convs.map(c => {
-    const me     = c.participants.find(p => p.userId === userId);
-    const others = c.participants.filter(p => p.userId !== userId);
-    const last   = c.messages[0];
+    const unreadMsgs = await prisma.chatMessage.findMany({
+      where: {
+        senderId: { not: userId },
+        OR: orClauses,
+      },
+      select: { conversationId: true },
+    });
+
+    for (const m of unreadMsgs) {
+      unreadMap.set(m.conversationId, (unreadMap.get(m.conversationId) ?? 0) + 1);
+    }
+  }
+
+  const result = convs.map((c) => {
+    const others = c.participants.filter((p) => p.userId !== userId);
+    const last = c.messages[0];
     const unreadCount = unreadMap.get(c.id) ?? 0;
 
     const isOnline = !c.isGroup && others[0]?.user?.lastSeen
@@ -69,9 +81,9 @@ export async function GET() {
       id: c.id,
       name: c.isGroup ? (c.name ?? "Group Chat") : (others[0]?.user?.name ?? "Unknown"),
       isGroup: c.isGroup,
-      participants: c.participants.map(p => ({
-        id: p.user.id, name: p.user.name,
-        photo: p.user.photo,
+      participants: c.participants.map((p) => ({
+        id: p.user.id,
+        name: p.user.name,
         lastSeen: p.user.lastSeen?.toISOString() ?? null,
         role: p.user.role,
       })),
@@ -79,7 +91,7 @@ export async function GET() {
       lastTime: (last?.createdAt ?? c.updatedAt).toISOString(),
       isOnline,
       hasUnread: unreadCount > 0,
-      unreadCount,          // ← FIXED: real number, not just boolean
+      unreadCount,
     };
   });
 
@@ -91,7 +103,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const myId   = (session.user as any).id   as string;
+  const myId = (session.user as any).id as string;
   const myRole = (session.user as any).role as string;
 
   const { participantIds, isGroup, name } = await req.json();
@@ -137,7 +149,7 @@ export async function POST(req: NextRequest) {
       isGroup: !!isGroup,
       participants: {
         createMany: {
-          data: allIds.map(id => ({ userId: id })),
+          data: allIds.map((id) => ({ userId: id })),
           skipDuplicates: true,
         },
       },
@@ -145,7 +157,7 @@ export async function POST(req: NextRequest) {
     select: { id: true, name: true, isGroup: true },
   });
 
-  allIds.forEach(id => cache.del(`convs:${id}`));
+  allIds.forEach((id) => cache.del(`convs:${id}`));
   return NextResponse.json({ conversation });
 }
 
@@ -181,7 +193,7 @@ export async function PATCH(req: NextRequest) {
   const allMembers = await prisma.chatParticipant.findMany({
     where: { conversationId }, select: { userId: true },
   });
-  allMembers.forEach(p => cache.del(`convs:${p.userId}`));
+  allMembers.forEach((p) => cache.del(`convs:${p.userId}`));
 
   return NextResponse.json({ conversation: updated });
 }

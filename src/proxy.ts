@@ -81,5 +81,6 @@ export const config = {
     "/api/vc9k2/:path*",
     "/api/evc-vault/:path*",
     "/api/evc-tasks/:path*",
+    "/insights/:path*",
   ],
 };

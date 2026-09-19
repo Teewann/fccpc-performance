@@ -72,7 +72,7 @@ export function CallOverlay({ call, onAccept, onReject, onHangup, onToggleMute, 
             border: call.status === "active" ? "3px solid #25D366" : "3px solid rgba(255,255,255,0.2)",
             transition: "border-color 0.4s",
           }}>
-            <UserAvatar user={{ name: user?.name ?? "?", photo: user?.photo }} size={96} />
+            <UserAvatar user={{ name: user?.name ?? "?" }} userId={user?.id} size={96} />
           </div>
           {call.status === "active" && (
             <span style={{

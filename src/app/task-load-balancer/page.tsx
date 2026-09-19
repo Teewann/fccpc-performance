@@ -517,7 +517,7 @@ export default function TaskLoadBalancerPage() {
                                 style={{ cursor: "pointer", flexShrink: 0 }}
                                 title="View staff profile"
                               >
-                                <UserAvatar user={{ photo: member.photo, name: member.name }} size={46} />
+                                <UserAvatar user={{ name: member.name }} userId={member.id} size={46} />
                               </div>
 
                               <div style={{ flex: 1, minWidth: 0 }}>
@@ -864,7 +864,7 @@ export default function TaskLoadBalancerPage() {
                                   transition: "all 0.15s",
                                 }}
                               >
-                                <UserAvatar user={{ photo: s.photo, name: s.name }} size={34} />
+                                <UserAvatar user={{ name: s.name }} userId={s.id} size={34} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                   <div style={{ fontSize: 13, fontWeight: 600, color: isChosen ? "#a78bfa" : "var(--text-primary)" }}>
                                     {s.name} {isChosen && "✓"}
@@ -934,7 +934,7 @@ export default function TaskLoadBalancerPage() {
                             <div style={{ width: 200, flexShrink: 0 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 9, cursor: "pointer" }}
                                 onClick={() => router.push(`/staff-directory?userId=${member.id}`)}>
-                                <UserAvatar user={{ photo: member.photo, name: member.name }} size={36} />
+                                <UserAvatar user={{ name: member.name }} userId={member.id} size={36} />
                                 <div>
                                   <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
                                     textDecoration: "underline", textDecorationColor: "transparent",

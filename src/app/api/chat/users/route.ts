@@ -47,11 +47,12 @@ export async function GET(req: NextRequest) {
         ...(!canSeeEVC ? { role: { notIn: ["EXECUTIVE", "CHIEF"] } } : {}),
       },
       select: {
-        id: true, name: true, email: true,
-        photo: true, role: true, staffId: true,
-        lastSeen: true,
-        department: { select: { name: true } },
-      },
+  id: true, name: true, email: true,
+  role: true, staffId: true,
+  lastSeen: true,
+  department: { select: { name: true } },
+  // photo: REMOVED — served on-demand via /api/users/avatar/[id]
+},
       orderBy: { name: "asc" },
     });
     setCache(cacheKey, allUsers as object[]);

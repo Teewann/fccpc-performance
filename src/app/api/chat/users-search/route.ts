@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         ...(!canSeeEVC ? { role: { not: "EXECUTIVE" } } : {}),
       },
       select: {
-        id: true, name: true, email: true, photo: true,
+      id: true, name: true, email: true,
         role: true, staffId: true,
         department: { select: { name: true } },
       },

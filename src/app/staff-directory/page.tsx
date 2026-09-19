@@ -19,7 +19,6 @@ type StaffMember = {
   gradeLevel: string | null;
   isActive: boolean;
   userIdRef: string | null;
-  photo: string | null;        // ← this is returned from API
   department: { id: string; name: string; shortCode: string } | null;
   unit: { id: string; name: string } | null;
   createdAt: string;
@@ -81,7 +80,7 @@ function StaffCard({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
-        <UserAvatar user={{ name: person.name, photo: person.photo, image: person.photo }} size={46} />
+        <UserAvatar user={{ name: person.name }} userId={person.id} size={46} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {person.name}
@@ -325,7 +324,7 @@ export default function StaffDirectoryPage() {
               </div>
 
               <div style={{ textAlign: "center", marginBottom: 24 }}>
-                <UserAvatar user={{ name: selected.name, photo: selected.photo, image: selected.photo }} size={80} />
+                <UserAvatar user={{ name: selected.name }} userId={selected.id} size={80} />
                 <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
                   {selected.name}
                 </div>

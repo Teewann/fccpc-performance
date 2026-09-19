@@ -213,7 +213,7 @@ function EmptyConv({ conversation, currentUserId }: { conversation: Conversation
           👥
         </div>
       ) : (
-        <UserAvatar user={{ name: other?.name ?? "?", photo: other?.photo }} size={64} />
+      <UserAvatar user={{ name: other?.name ?? "?" }} userId={other?.id} size={64} />
       )}
       <div style={{ textAlign: "center" }}>
         <div className="chat-empty-title" style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>

@@ -11,7 +11,6 @@ type User = {
   id: string; name: string; email: string; phone: string | null;
   role: string; staffId: string | null; jobTitle: string | null;
   gradeLevel: string | null; userIdRef: string | null;
-  photo: string | null;
   department: { id: string; name: string } | null;
   unit: { id: string; name: string } | null;
   createdAt: string;
@@ -55,6 +54,74 @@ const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "var(--
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><label style={lbl}>{label}</label>{children}</div>;
+}
+
+/* ─── Pagination control — used twice (top + bottom) ──────────────── */
+function Pagination({
+  page, pages, total, onPrev, onNext,
+}: {
+  page: number; pages: number; total: number;
+  onPrev: () => void; onNext: () => void;
+}) {
+  if (pages <= 1) return null;
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginTop: 12,
+        marginBottom: 12,
+        flexWrap: "wrap",
+        gap: 12,
+      }}
+    >
+      <div style={{ fontSize: 13, fontWeight: 600, color: "#60a5fa" }}>
+        Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total} users
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <button
+          onClick={onPrev}
+          disabled={page === 1}
+          style={{
+            padding: "8px 18px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: page === 1 ? "not-allowed" : "pointer",
+            border: page === 1 ? "0.5px solid var(--border)" : "1.5px solid #60a5fa",
+            background: page === 1 ? "var(--bg-input)" : "#0c1a2e",
+            color: page === 1 ? "var(--text-hint)" : "#60a5fa",
+            opacity: page === 1 ? 0.5 : 1,
+            transition: "all 0.15s",
+          }}
+        >
+          ← Previous
+        </button>
+        <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 600, padding: "0 12px" }}>
+          Page {page} of {pages}
+        </span>
+        <button
+          onClick={onNext}
+          disabled={page === pages}
+          style={{
+            padding: "8px 18px",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: page === pages ? "not-allowed" : "pointer",
+            border: page === pages ? "0.5px solid var(--border)" : "1.5px solid #60a5fa",
+            background: page === pages ? "var(--bg-input)" : "#0c1a2e",
+            color: page === pages ? "var(--text-hint)" : "#60a5fa",
+            opacity: page === pages ? 0.5 : 1,
+            transition: "all 0.15s",
+          }}
+        >
+          Next →
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function EditModal({
@@ -106,8 +173,8 @@ function EditModal({
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: "var(--bg-card)", border: "0.5px solid var(--border)", borderRadius: 16, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+      <div style={{ background: "var(--bg-card)", border: "0.5px solid var(--border)", borderRadius: 16, width: "100%", maxWidth: 580, padding: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, paddingBottom: 14, borderBottom: "0.5px solid var(--border)" }}>
           <div>
             <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>Edit User</div>
@@ -225,8 +292,8 @@ function CreateModal({ departments, units, onClose, onCreated }: {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: "var(--bg-card)", border: "0.5px solid var(--border)", borderRadius: 16, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto", padding: 24 }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 16px", overflowY: "auto" }}>
+      <div style={{ background: "var(--bg-card)", border: "0.5px solid var(--border)", borderRadius: 16, width: "100%", maxWidth: 580, padding: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 14, borderBottom: "0.5px solid var(--border)" }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text-primary)" }}>Create New User</div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, cursor: "pointer" }}>✕</button>
@@ -265,13 +332,13 @@ function CreateModal({ departments, units, onClose, onCreated }: {
             </Field>
             <Field label="Password *">
               <div style={{ position: "relative" }}>
-                <input type={showPw ? "text" : "password"} style={{ ...inp, paddingRight: 40 }} value={form.password} onChange={e => set("password", e.target.value)} required placeholder="8+ characters" />
+                <input type={showPw ? "text" : "password"} style={{ ...inp, paddingRight: 40 }} value={form.password} onChange={e => set("password", e.target.value)} required placeholder="8+ characters" autoComplete="new-password" />
                 <button type="button" onClick={() => setShowPw(!showPw)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer" }}>{showPw ? "🙈" : "👁"}</button>
               </div>
             </Field>
             <Field label="Confirm Password *">
               <input type="password" style={{ ...inp, borderColor: form.confirmPassword && form.confirmPassword !== form.password ? "#ef4444" : form.confirmPassword ? "#22c55e" : "var(--border)" }}
-                value={form.confirmPassword} onChange={e => set("confirmPassword", e.target.value)} required />
+                value={form.confirmPassword} onChange={e => set("confirmPassword", e.target.value)} required autoComplete="new-password" />
             </Field>
           </div>
           <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
@@ -295,13 +362,25 @@ export default function UsersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [search, setSearch]         = useState("");
   const [filterRole, setFilterRole] = useState("ALL");
+  const [page, setPage]   = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  // NEW — force fresh modals each time they open, so form state doesn't
+  // leak from the previous create/edit attempt.
+  const [createKey, setCreateKey] = useState(0);
+  const [editKey,   setEditKey]   = useState(0);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ ...(search ? { search } : {}), ...(filterRole !== "ALL" ? { role: filterRole } : {}) });
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: "20",
+        ...(search ? { search } : {}),
+        ...(filterRole !== "ALL" ? { role: filterRole } : {}),
+      });
       let res = await fetch(`/api/users?${params}`);
-      // Retry once on failure (connection pool timeout)
       if (!res.ok) {
         await new Promise(r => setTimeout(r, 800));
         res = await fetch(`/api/users?${params}`);
@@ -310,10 +389,12 @@ export default function UsersPage() {
       setUsers(data.users || []);
       setDepts(data.departments || []);
       setUnits(data.units || []);
+      setPages(data.pages || 1);
+      setTotal(data.total || 0);
     } catch {
       setUsers([]);
     } finally { setLoading(false); }
-  }, [search, filterRole]);
+  }, [search, filterRole, page]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
 
@@ -330,13 +411,13 @@ export default function UsersPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
           <div>
             <h1 style={{ fontSize: "clamp(20px, 4vw, 26px)", fontWeight: 700, color: "var(--text-primary)", margin: 0 }}>User Management</h1>
-            <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{users.length} users registered</p>
+            <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 4 }}>{total} users registered</p>
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <Link href="/staff-directory" style={{ padding: "9px 18px", borderRadius: 10, border: "0.5px solid #1e3a5f", background: "#0c1a2e", color: "#60a5fa", fontSize: 13, fontWeight: 600, cursor: "pointer", textDecoration: "none", whiteSpace: "nowrap" }}>
               👥 Staff Directory
             </Link>
-            <button onClick={() => setShowCreate(true)} style={{ padding: "9px 18px", borderRadius: 10, border: "1.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+            <button onClick={() => { setCreateKey(k => k + 1); setShowCreate(true); }} style={{ padding: "9px 18px", borderRadius: 10, border: "1.5px solid #22c55e", background: "#052e16", color: "#4ade80", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
               + New User
             </button>
             <ThemeToggleButton />
@@ -345,11 +426,11 @@ export default function UsersPage() {
 
         <div style={{ display: "flex", gap: 8, marginBottom: 16, overflowX: "auto", paddingBottom: 4 }}>
           {["ALL", ...ROLES].map(r => {
-            const count = r === "ALL" ? users.length : (roleCounts[r] || 0);
+            const count = r === "ALL" ? total : (roleCounts[r] || 0);
             const rs = ROLE_STYLES[r];
             const active = filterRole === r;
             return (
-              <button key={r} onClick={() => setFilterRole(r)} style={{
+              <button key={r} onClick={() => { setFilterRole(r); setPage(1); }} style={{
                 padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 500, whiteSpace: "nowrap", cursor: "pointer",
                 border: `0.5px solid ${active ? (rs?.border || "var(--accent)") : "var(--border)"}`,
                 background: active ? (rs?.bg || "var(--accent-bg)") : "var(--bg-card)",
@@ -361,7 +442,21 @@ export default function UsersPage() {
           })}
         </div>
 
-        <input style={{ ...inp, marginBottom: 16 }} placeholder="Search name, email, staff ID, job title…" value={search} onChange={e => setSearch(e.target.value)} />
+        <input
+          style={{ ...inp, marginBottom: 16 }}
+          placeholder="Search name, email, staff ID, job title…"
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(1); }}
+        />
+
+        {/* ── Pagination — top of list ── */}
+        <Pagination
+          page={page}
+          pages={pages}
+          total={total}
+          onPrev={() => setPage(p => Math.max(1, p - 1))}
+          onNext={() => setPage(p => Math.min(pages, p + 1))}
+        />
 
         {loading ? (
           <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)" }}>Loading…</div>
@@ -380,7 +475,7 @@ export default function UsersPage() {
                 return (
                   <div key={u.id} className="users-row-grid" style={{ padding: "12px 16px", borderBottom: "0.5px solid var(--border)", background: i % 2 === 0 ? "transparent" : "var(--bg-input)", minWidth: 720 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                      <UserAvatar user={{ name: u.name, photo: u.photo, image: u.photo }} size={32} />
+                      <UserAvatar user={{ name: u.name }} userId={u.id} size={32} />
                       <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
                         <div style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.jobTitle || u.staffId || "—"}</div>
@@ -395,7 +490,7 @@ export default function UsersPage() {
                     </div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{u.gradeLevel || "—"}</div>
                     <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                      <button onClick={() => setEditUser(u)} style={{ padding: "5px 14px", borderRadius: 7, border: "0.5px solid #1e3a5f", background: "#0c1a2e", color: "#60a5fa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                      <button onClick={() => { setEditKey(k => k + 1); setEditUser(u); }} style={{ padding: "5px 14px", borderRadius: 7, border: "0.5px solid #1e3a5f", background: "#0c1a2e", color: "#60a5fa", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                         Edit
                       </button>
                     </div>
@@ -409,7 +504,7 @@ export default function UsersPage() {
                 const rs = ROLE_STYLES[u.role] || ROLE_STYLES.STAFF;
                 return (
                   <div key={u.id} style={{ background: "var(--bg-card)", border: "0.5px solid var(--border)", borderRadius: 12, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14 }}>
-                    <UserAvatar user={{ name: u.name, photo: u.photo, image: u.photo }} size={40} />
+                    <UserAvatar user={{ name: u.name }} userId={u.id} size={40} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name}</div>
                       <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
@@ -418,7 +513,7 @@ export default function UsersPage() {
                         {u.department && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{u.department.name}</span>}
                       </div>
                     </div>
-                    <button onClick={() => setEditUser(u)} style={{ padding: "7px 14px", borderRadius: 8, border: "0.5px solid #1e3a5f", background: "#0c1a2e", color: "#60a5fa", fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
+                    <button onClick={() => { setEditKey(k => k + 1); setEditUser(u); }} style={{ padding: "7px 14px", borderRadius: 8, border: "0.5px solid #1e3a5f", background: "#0c1a2e", color: "#60a5fa", fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
                       Edit
                     </button>
                   </div>
@@ -427,10 +522,36 @@ export default function UsersPage() {
             </div>
           </>
         )}
+
+        {/* ── Pagination — bottom of list ── */}
+        <Pagination
+          page={page}
+          pages={pages}
+          total={total}
+          onPrev={() => setPage(p => Math.max(1, p - 1))}
+          onNext={() => setPage(p => Math.min(pages, p + 1))}
+        />
       </main>
 
-      {showCreate && <CreateModal departments={departments} units={units} onClose={() => setShowCreate(false)} onCreated={loadUsers} />}
-      {editUser   && <EditModal   user={editUser} departments={departments} units={units} onClose={() => setEditUser(null)} onSaved={loadUsers} />}
+      {showCreate && (
+        <CreateModal
+          key={createKey}
+          departments={departments}
+          units={units}
+          onClose={() => setShowCreate(false)}
+          onCreated={loadUsers}
+        />
+      )}
+      {editUser && (
+        <EditModal
+          key={editKey}
+          user={editUser}
+          departments={departments}
+          units={units}
+          onClose={() => setEditUser(null)}
+          onSaved={loadUsers}
+        />
+      )}
 
       <style>{`
         .edit-form-grid {

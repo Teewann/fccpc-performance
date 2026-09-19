@@ -140,15 +140,15 @@ if (currentUser.role === "ADMIN" || currentUser.role === "EXECUTIVE") {
       prisma.user.findMany({
         where,
         select: {
-          id: true, name: true, email: true, role: true, jobTitle: true,
-          staffId: true, isActive: true, createdAt: true, phone: true,
-          userIdRef: true,
-          photo: true,
-          gradeLevel: true,
-          supervisorId: true,   // ✅ NEW: Added supervisorId to select
-          department: { select: { id: true, name: true, shortCode: true } },
-          unit: { select: { id: true, name: true } },
-        },
+  id: true, name: true, email: true, role: true, jobTitle: true,
+  staffId: true, isActive: true, createdAt: true, phone: true,
+  userIdRef: true,
+  // photo: REMOVED — served on-demand
+  gradeLevel: true,
+  supervisorId: true,
+  department: { select: { id: true, name: true, shortCode: true } },
+  unit: { select: { id: true, name: true } },
+},
         orderBy: { name: "asc" },
         skip,
         take: limit,

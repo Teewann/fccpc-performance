@@ -76,7 +76,7 @@ export function ChatHeader({
             <GroupIcon size={18} color="#fff" />
           </div>
         ) : (
-          <UserAvatar user={{ name: other?.name || "?", photo: other?.photo }} size={36} />
+        <UserAvatar user={{ name: other?.name || "?" }} userId={other?.id} size={36} />
         )}
         {isOnline && (
           <span style={{
@@ -111,7 +111,7 @@ export function ChatHeader({
         <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
           {conversation.participants.slice(0, 3).map((p, i) => (
             <div key={p.id} style={{ marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }} title={p.name}>
-              <UserAvatar user={{ name: p.name, photo: p.photo }} size={24} />
+            <UserAvatar user={{ name: p.name }} userId={p.id} size={24} />
             </div>
           ))}
           {conversation.participants.length > 3 && (

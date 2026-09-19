@@ -63,7 +63,7 @@ export function MemberPanel({
               padding: "8px 14px",
             }}>
               <div style={{ position: "relative", flexShrink: 0 }}>
-                <UserAvatar user={{ name: p.name, photo: p.photo }} size={34} />
+              <UserAvatar user={{ name: p.name }} userId={p.id} size={34} />
                 {online && (
                   <span style={{
                     position: "absolute", bottom: 0, right: 0,
@@ -340,7 +340,7 @@ export function NewChatModal({
                 background: "var(--accent-bg)", border: "1px solid var(--accent)",
                 color: "var(--accent-text)", fontSize: 12, fontWeight: 600,
               }}>
-                <UserAvatar user={{ name: u.name, photo: u.photo }} size={16} />
+                <UserAvatar user={{ name: u.name }} userId={u.id} size={16} />
                 {u.name.split(" ")[0]}
                 <button onClick={() => toggle(u)} style={{
                   background: "none", border: "none", cursor: "pointer",
@@ -378,7 +378,7 @@ export function NewChatModal({
                 onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "var(--bg-hover, rgba(255,255,255,0.04))"; }}
                 onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
               >
-                <UserAvatar user={{ name: user.name, photo: user.photo }} size={36} />
+                <UserAvatar user={{ name: user.name }} userId={user.id} size={36} />
                 <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                   <div style={{
                     fontSize: 13, fontWeight: 600,

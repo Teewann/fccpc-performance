@@ -3,13 +3,21 @@ import { useState } from "react";
 
 export default function UserAvatar({
   user,
+  userId,
   size = 32,
 }: {
   user?: { photo?: string | null; name?: string | null; image?: string | null };
+  userId?: string | null;
   size?: number;
 }) {
   const [zoom, setZoom] = useState(false);
-  const photo = user?.photo || user?.image || null;
+
+  // Priority:
+  // 1. If a photo string was explicitly passed, use it (upload previews, legacy callers)
+  // 2. Otherwise, if userId is given, use the fast avatar endpoint
+  // 3. Otherwise, show initials
+  const photoFromProp = user?.photo || user?.image || null;
+  const photo = photoFromProp || (userId ? `/api/users/avatar/${userId}` : null);
 
   const initials = (user?.name || "?")
     .split(" ")
@@ -40,6 +48,7 @@ export default function UserAvatar({
           <img
             src={photo}
             alt="avatar"
+            loading="lazy"
             style={{ width: "100%", height: "100%", objectFit: "cover" }}
           />
         ) : (

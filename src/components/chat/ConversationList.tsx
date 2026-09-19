@@ -148,8 +148,7 @@ export function ConversationList({ conversations, activeConvId, currentUserId, l
                     outline: conv.isOnline ? "2.5px solid #25D366" : "none",
                     outlineOffset: 2,
                   }}>
-                    <UserAvatar user={{ name: other?.name ?? "?", photo: other?.photo }} size={46} />
-                  </div>
+                  <UserAvatar user={{ name: other?.name ?? "?" }} userId={other?.id} size={46} />                  </div>
                 )}
                 {conv.isOnline && !conv.isGroup && (
                   <span style={{

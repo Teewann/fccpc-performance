@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-
+import { LogStatus } from "@prisma/client";
 const REVIEW_CAPABLE_ROLES = ["DIRECTOR", "SUPERVISOR", "HR", "ADMIN", "EXECUTIVE"];
 
 export async function POST(
@@ -60,8 +60,11 @@ export async function POST(
       return NextResponse.json({ error: "A score from 1 to 10 is required to approve" }, { status: 400 });
     }
 
-    const statusMap: Record<string, string> = { APPROVE: "APPROVED", REJECT: "REJECTED", QUERY: "QUERIED" };
-
+const statusMap: Record<string, LogStatus> = {
+  APPROVE: "APPROVED" as LogStatus,
+  REJECT: "REJECTED" as LogStatus,
+  QUERY: "QUERIED" as LogStatus,
+};
     const updated = await prisma.dailyLog.update({
       where: { id: params.id },
       data: {

@@ -32,23 +32,40 @@ const STATUS_STYLE: Record<string, { bg: string; color: string; border: string; 
   DISMISSED:    { bg: "#1a1d28", color: "#6b7280", border: "#374151", label: "Dismissed" },
 };
 
+/** Build the YYYY-MM string for N months back from today */
+function monthKey(monthsBack: number) {
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - monthsBack);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Human label for a YYYY-MM key, e.g. "September 2026" */
+function monthLabel(key: string) {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+}
+
+/** How many months back to offer in the picker */
+const MONTH_OPTIONS = [0, 1, 2, 3, 4, 5, 6];
+
 export default function IncentivesPage() {
   const { showToast } = useToast();
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [month, setMonth] = useState("");
+  const [month, setMonth] = useState(monthKey(0));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [actingOn, setActingOn] = useState<string | null>(null);
 
-  async function load() {
+  async function load(monthKey: string) {
     setLoading(true);
     try {
-      const res = await fetch("/api/incentive-recommendations");
+      const res = await fetch(`/api/incentive-recommendations?month=${monthKey}`);
       const data = await res.json();
       if (res.ok) {
         setRecommendations(data.recommendations || []);
-        setMonth(data.month || "");
+        setMonth(data.month || monthKey);
       } else {
         showToast(data.error || "Couldn't load recommendations.", false);
       }
@@ -57,13 +74,23 @@ export default function IncentivesPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(month); }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function changeMonth(newMonth: string) {
+    setMonth(newMonth);
+    setNoteDrafts({});
+    await load(newMonth);
+  }
 
   async function refresh() {
     setRefreshing(true);
     try {
-      await fetch("/api/incentive-recommendations", { method: "POST" });
-      await load();
+      await fetch("/api/incentive-recommendations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month }),
+      });
+      await load(month);
       showToast("Refreshed with the latest data.");
     } finally {
       setRefreshing(false);
@@ -81,7 +108,7 @@ export default function IncentivesPage() {
       const data = await res.json();
       if (res.ok) {
         showToast("Updated.");
-        load();
+        load(month);
       } else {
         showToast(data.error || "Something went wrong on our end. Try again shortly.", false);
       }
@@ -102,13 +129,13 @@ export default function IncentivesPage() {
     <div className="flex min-h-screen" style={{ background: "var(--bg-page)" }}>
       <Sidebar />
       <main className="flex-1 p-6 min-w-0">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
           <div>
             <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
               Incentive Recommendations
             </h1>
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 4 }}>
-              {month ? `For ${month}` : "Loading…"} · top 10% per segment, based on verified logged work
+              For {monthLabel(month)} · top 10% per segment, based on verified logged work
             </p>
           </div>
           <div style={{ display: "flex", gap: 10 }}>
@@ -118,6 +145,33 @@ export default function IncentivesPage() {
             </button>
             <ThemeToggleButton />
           </div>
+        </div>
+
+        {/* ── Month picker ── */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+          {MONTH_OPTIONS.map((back) => {
+            const key = monthKey(back);
+            const active = month === key;
+            return (
+              <button
+                key={key}
+                onClick={() => changeMonth(key)}
+                style={{
+                  padding: "9px 20px",
+                  borderRadius: 9,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: active ? "1.5px solid #22c55e" : "0.5px solid var(--border)",
+                  background: active ? "#052e16" : "var(--bg-card)",
+                  color: active ? "#4ade80" : "var(--text-muted)",
+                  transition: "all 0.15s",
+                }}
+              >
+                {back === 0 ? "This month" : monthLabel(key)}
+              </button>
+            );
+          })}
         </div>
 
         <div style={{ background: "var(--accent-bg)", border: "0.5px solid var(--accent-border)", borderRadius: 10, padding: "12px 16px", marginBottom: 24, fontSize: 13, color: "var(--accent-text)", lineHeight: 1.5 }}>
@@ -130,7 +184,7 @@ export default function IncentivesPage() {
           <div style={{ textAlign: "center", padding: 60, color: "var(--text-muted)" }}>Loading…</div>
         ) : recommendations.length === 0 ? (
           <div className="card-bg" style={{ borderRadius: 14, padding: 56, textAlign: "center" }}>
-            <div style={{ fontSize: 17, fontWeight: 500, color: "var(--text-primary)" }}>Nothing to recommend yet this month</div>
+            <div style={{ fontSize: 17, fontWeight: 500, color: "var(--text-primary)" }}>Nothing to recommend for {monthLabel(month)}</div>
             <div style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 6 }}>Recommendations build up as staff log and get their work scored</div>
           </div>
         ) : (
