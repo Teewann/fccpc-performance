@@ -5,9 +5,12 @@ import { signOut } from "next-auth/react";
 const STORAGE_KEY = "fccpc-session-timeout";
 const DEFAULT_MINUTES = 30;
 
+export const AUTO_LOGOUT_WARNING_EVENT = "fccpc-autologout-warning";
+export const AUTO_LOGOUT_RESET_EVENT   = "fccpc-autologout-reset";
+
 export function useAutoLogout() {
-  const timerRef    = useRef<NodeJS.Timeout | null>(null);
-  const warningRef  = useRef<NodeJS.Timeout | null>(null);
+  const timerRef   = useRef<NodeJS.Timeout | null>(null);
+  const warningRef = useRef<NodeJS.Timeout | null>(null);
 
   const getTimeout = useCallback(() => {
     if (typeof window === "undefined") return DEFAULT_MINUTES;
@@ -16,24 +19,28 @@ export function useAutoLogout() {
   }, []);
 
   const logout = useCallback(() => {
-    signOut({ callbackUrl: "/login" });
+    // Leading slash is required — otherwise NextAuth resolves it as a
+    // relative path and redirects to /<current-path>/auth/login → 404.
+    signOut({ callbackUrl: "/auth/login" });
   }, []);
 
   const resetTimer = useCallback(() => {
     const minutes = getTimeout();
     const ms      = minutes * 60 * 1000;
-    const warnMs  = ms - 60_000; // warn 1 minute before
+    const warnMs  = Math.max(ms - 60_000, 0);
 
     if (timerRef.current)   clearTimeout(timerRef.current);
     if (warningRef.current) clearTimeout(warningRef.current);
 
-    // Show warning 1 minute before logout
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(AUTO_LOGOUT_RESET_EVENT));
+    }
+
     if (warnMs > 0) {
       warningRef.current = setTimeout(() => {
-        const stay = window.confirm(
-          `Your session will expire in 1 minute due to inactivity.\n\nClick OK to stay logged in.`
-        );
-        if (stay) resetTimer();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent(AUTO_LOGOUT_WARNING_EVENT));
+        }
       }, warnMs);
     }
 
@@ -44,11 +51,10 @@ export function useAutoLogout() {
 
   useEffect(() => {
     const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart", "click"];
-
     const handleActivity = () => resetTimer();
 
     events.forEach((e) => window.addEventListener(e, handleActivity, { passive: true }));
-    resetTimer(); // start on mount
+    resetTimer();
 
     return () => {
       events.forEach((e) => window.removeEventListener(e, handleActivity));
@@ -56,16 +62,20 @@ export function useAutoLogout() {
       if (warningRef.current) clearTimeout(warningRef.current);
     };
   }, [resetTimer]);
+
+  const stayLoggedIn = useCallback(() => {
+    resetTimer();
+  }, [resetTimer]);
+
+  return { stayLoggedIn };
 }
 
-// Utility - get current timeout setting
 export function getSessionTimeout(): number {
   if (typeof window === "undefined") return DEFAULT_MINUTES;
   const saved = localStorage.getItem(STORAGE_KEY);
   return saved ? parseInt(saved) : DEFAULT_MINUTES;
 }
 
-// Utility - save timeout setting
 export function setSessionTimeout(minutes: number): void {
   localStorage.setItem(STORAGE_KEY, String(minutes));
 }

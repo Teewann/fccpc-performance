@@ -19,7 +19,6 @@ type NavLink = {
   badgeGreen?: boolean;
   icon: string;
   iconColor: string;
-  // If omitted, visible to every role. Otherwise, only these roles see it.
   allowedRoles?: string[];
 };
 
@@ -52,24 +51,23 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
-    section: "Management",
+    section: "Intelligence",
     links: [
-      { label: "Departments",      href: "/departments",       icon: "🏢", iconColor: "#60a5fa", allowedRoles: DIRECTOR_OR_UNIT_HEAD },
-      { label: "KPI Manager",      href: "/kpi",               icon: "📊", iconColor: "#f472b6" },
-      { label: "Appraisals",       href: "/appraisals",        icon: "⭐", iconColor: "#fbbf24", allowedRoles: HR_ONLY },
-      { label: "EVC Directives",   href: "/evc-directives",    icon: "📌", iconColor: "#f87171", allowedRoles: NOT_STAFF_FACING },
-      { label: "Leave",            href: "/leave",             icon: "🏖", iconColor: "#34d399" },
-      { label: "Payment Workflow", href: "/payment-workflow",  icon: "💳", iconColor: "#34d399" },
+      { label: "KPI Manager",     href: "/kpi",            icon: "📊", iconColor: "#f472b6" },
+      { label: "Reports",         href: "/reports",        icon: "📈", iconColor: "#60a5fa" },
+      { label: "Communications",  href: "/announcements",  icon: "📢", iconColor: "#fb923c" },
     ],
   },
   {
-    section: "Intelligence",
+    section: "Management",
     links: [
-      { label: "Reports",             href: "/reports",            icon: "📈", iconColor: "#60a5fa" },
-      { label: "Communications",      href: "/announcements",      icon: "📢", iconColor: "#fb923c" },
-      { label: "Promotion Exams",     href: "/exams",              icon: "🎓", iconColor: "#a78bfa" },
-      { label: "Incentives",          href: "/incentives",         icon: "🎯", iconColor: "#f472b6", badge: "HR", badgeGreen: true, allowedRoles: HR_ONLY },
-      { label: "HR Oversight",        href: "/hr-oversight",       icon: "👁", iconColor: "#c084fc", allowedRoles: HR_ONLY },
+      { label: "HR Oversight",     href: "/hr-oversight",      icon: "👁", iconColor: "#c084fc", allowedRoles: HR_ONLY },
+      { label: "Incentives",       href: "/incentives",        icon: "🎯", iconColor: "#f472b6", badge: "HR", badgeGreen: true, allowedRoles: HR_ONLY },
+      { label: "Appraisals",       href: "/appraisals",        icon: "⭐", iconColor: "#fbbf24", allowedRoles: HR_ONLY },
+      { label: "EVC Directives",   href: "/evc-directives",    icon: "📌", iconColor: "#f87171", allowedRoles: NOT_STAFF_FACING },
+      { label: "Leave",            href: "/leave",             icon: "🏖", iconColor: "#34d399" },
+      { label: "Promotion Exams",  href: "/exams",             icon: "🎓", iconColor: "#a78bfa" },
+      { label: "Payment Workflow", href: "/payment-workflow",  icon: "💳", iconColor: "#34d399" },
     ],
   },
   {
@@ -102,8 +100,8 @@ const TOP_ICONS = [
 
 const SECTION_COLORS: Record<string, string> = {
   Core:         "#60a5fa",
-  Management:   "#f59e0b",
   Intelligence: "#e879f9",
+  Management:   "#f59e0b",
   System:       "#34d399",
 };
 
@@ -182,7 +180,6 @@ export default function Sidebar() {
     if (p) setUserPhoto(p);
   }, [session]);
 
-  // Preserve scroll position across navigations
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
