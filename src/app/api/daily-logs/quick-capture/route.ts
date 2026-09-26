@@ -1,26 +1,33 @@
 // src/app/api/daily-logs/quick-capture/route.ts
 //
 // Staff paste one rough block of text describing everything they did.
-// This route asks Google Gemini to split it into structured daily-log drafts.
-// Nothing is saved here — it only returns drafts for the staff member to
-// review and edit before the existing POST /api/daily-logs endpoint saves
-// them for real. This keeps the "record of truth" write path unchanged.
+// This route asks an AI provider to split it into structured daily-log
+// drafts. Nothing is saved here — it only returns drafts for the staff
+// member to review and edit before the existing POST /api/daily-logs
+// endpoint saves them for real. This keeps the "record of truth" write
+// path unchanged.
+//
+// AI providers (in order of preference):
+//   1. Google Gemini 3.6 Flash (primary)
+//   2. Groq (silent fallback if Gemini fails or is rate-limited)
+//
+// If GROQ_API_KEY is not set, Groq is skipped entirely and only Gemini
+// is used — safe to deploy before you add the key.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth"; // REQUIRED
+import { authOptions } from "@/lib/auth";
 import { TASK_TYPE_GROUPS } from "@/config/taskTypes";
 import prisma from "@/lib/prisma";
 
-// Flatten your existing task type config into a list the model can choose from,
-// so quick-capture output always matches valid categories in your system —
-// it never invents a taskType that doesn't exist in your dropdown.
+// ─── Task type whitelist ─────────────────────────────────────────────
 function allowedTaskTypes(): string[] {
   return Object.values(TASK_TYPE_GROUPS)
     .flat()
     .map((t: any) => t.value);
 }
 
+// ─── Shared prompt ───────────────────────────────────────────────────
 const SYSTEM_PROMPT = (validTypes: string[]) => `
 You convert a staff member's rough, informal description of their work day
 into structured daily work log entries for a Nigerian federal government
@@ -57,12 +64,199 @@ Output shape per entry:
 }
 `;
 
+// ─── Timeout wrapper (10 seconds, not 20) ────────────────────────────
+async function fetchWithTimeout(url: string, options: RequestInit, ms = 10_000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ─── Gemini (with retry) ─────────────────────────────────────────────
+async function callGemini(
+  userText: string,
+  systemPrompt: string,
+  maxRetries = 3
+): Promise<string | null> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn("[quick-capture] GEMINI_API_KEY missing");
+    return null;
+  }
+
+  // Default to the model that's been working for you. Override with
+  // GEMINI_MODEL env var if you ever want to pin a different version.
+  const MODEL = process.env.GEMINI_MODEL || "gemini-3.6-flash";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(
+        url,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: userText }] }],
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            // NOTE: temperature/top_p/top_k are deprecated in Gemini 3.x
+            // and may cause errors — don't send them. Only ask for JSON output.
+            generationConfig: {
+              responseMimeType: "application/json",
+            },
+          }),
+        },
+        10_000
+      );
+
+      const data = await response.json();
+      const errMsg: string | undefined = data?.error?.message;
+
+      const isTransient =
+        response.status === 429 ||
+        response.status === 503 ||
+        response.status === 504 ||
+        (errMsg &&
+          (errMsg.includes("high demand") ||
+            errMsg.includes("quota") ||
+            errMsg.includes("overloaded") ||
+            errMsg.includes("rate limit")));
+
+      if (!isTransient) {
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) return text;
+        console.warn(`[quick-capture] Gemini returned no text (status ${response.status}):`, errMsg);
+        return null;
+      }
+
+      console.warn(
+        `[quick-capture] Gemini transient error (attempt ${attempt}/${maxRetries}):`,
+        errMsg || response.status
+      );
+
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, attempt * 1500));
+        continue;
+      }
+      return null;
+    } catch (err: any) {
+      const isAbort = err?.name === "AbortError";
+      console.warn(
+        `[quick-capture] Gemini call failed (attempt ${attempt}/${maxRetries}):`,
+        isAbort ? "timeout" : err?.message
+      );
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+// ─── Groq (fallback) ─────────────────────────────────────────────────
+async function callGroq(userText: string, systemPrompt: string): Promise<string | null> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    return null;
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      "https://api.groq.com/openai/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-20b",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userText },
+          ],
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+        }),
+      },
+      10_000
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.warn("[quick-capture] Groq error:", data?.error?.message || response.status);
+      return null;
+    }
+
+    const text = data?.choices?.[0]?.message?.content;
+    if (!text) {
+      console.warn("[quick-capture] Groq returned no text");
+      return null;
+    }
+
+    return text;
+  } catch (err: any) {
+    const isAbort = err?.name === "AbortError";
+    console.warn(
+      "[quick-capture] Groq call failed:",
+      isAbort ? "timeout" : err?.message
+    );
+    return null;
+  }
+}
+
+// ─── Parse drafts from a raw model output string ─────────────────────
+function parseDraftsFromModelOutput(textBlock: string, validTypes: string[]) {
+  const cleaned = textBlock.replace(/```json|```/g, "").trim();
+
+  let drafts: any[];
+  try {
+    drafts = JSON.parse(cleaned);
+  } catch {
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error("Model output contained no JSON array");
+    drafts = JSON.parse(match[0]);
+  }
+
+  if (!Array.isArray(drafts)) {
+    throw new Error("Model output was not an array");
+  }
+
+  const safeDrafts = drafts
+    .filter((d) => d && typeof d.title === "string")
+    .map((d) => ({
+      title: String(d.title).slice(0, 200),
+      taskCategory: String(d.taskCategory || "General").slice(0, 100),
+      taskType: validTypes.includes(d.taskType) ? d.taskType : validTypes[0],
+      description: String(d.description || "").slice(0, 1000),
+      timeSpent: Math.min(12, Math.max(0.5, Number(d.timeSpent) || 1)),
+      priority: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(d.priority)
+        ? d.priority
+        : "MEDIUM",
+      crossDepartment:
+        typeof d.crossDepartment === "string" ? d.crossDepartment : null,
+    }));
+
+  return safeDrafts;
+}
+
+// ─── POST handler ────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const requester = await prisma.user.findUnique({ where: { email: session.user.email } });
+
+  const requester = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    select: { id: true },
+  });
   if (!requester) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
@@ -76,87 +270,51 @@ export async function POST(req: NextRequest) {
   }
   if (rawText.length > 4000) {
     return NextResponse.json(
-      { error: "That's a lot of text — try splitting it into two batches." },
+      { error: "That's a lot of text, try splitting it into two batches." },
       { status: 400 }
     );
   }
 
   const validTypes = allowedTaskTypes();
+  const systemPrompt = SYSTEM_PROMPT(validTypes);
+  const userText = `STAFF INPUT:\n${rawText}`;
+
+  // ── Provider 1: Gemini 3.6 Flash ─────────────────────────────────
+  console.log("[quick-capture] Trying Gemini 3.6 Flash...");
+  let textBlock = await callGemini(userText, systemPrompt);
+  let providerUsed = "gemini";
+
+  // ── Provider 2: Groq fallback ───────────────────────────────────
+  if (!textBlock && process.env.GROQ_API_KEY) {
+    console.warn("[quick-capture] Gemini unavailable, falling back to Groq");
+    textBlock = await callGroq(userText, systemPrompt);
+    providerUsed = "groq";
+  }
+
+  if (!textBlock) {
+    console.error("[quick-capture] All providers failed");
+    return NextResponse.json(
+      { error: "AI parsing is temporarily unavailable. You can still log manually below." },
+      { status: 503 }
+    );
+  }
 
   try {
-    // ✅ Switch to Google Gemini (Free)
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("Missing GEMINI_API_KEY in .env.local");
-    }
-
-    // ✅ UPDATED: Using the newest free model gemini-3.6-flash
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: SYSTEM_PROMPT(validTypes) + "\n\nSTAFF INPUT:\n" + rawText }] }]
-        })
-      }
-    );
-
-    const data = await response.json();
-    const textBlock = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!textBlock) {
-      // If there is an error from Google, show it clearly
-      const geminiError = data?.error?.message || "Unknown API error";
-      throw new Error(`No text returned from model. API Error: ${geminiError}`);
-    }
-
-    // Model is instructed to return raw JSON, but strip fences defensively
-    // in case it wraps the output anyway.
-    const cleaned = textBlock.replace(/```json|```/g, "").trim();
-    let drafts: any[];
-    try {
-      drafts = JSON.parse(cleaned);
-    } catch {
-      // Sometimes Gemini adds extra text around the JSON, try extracting the array
-      const match = cleaned.match(/\[[\s\S]*\]/);
-      if (match) drafts = JSON.parse(match[0]);
-      else throw new Error("Model did not return valid JSON");
-    }
-
-    if (!Array.isArray(drafts)) {
-      throw new Error("Expected an array of draft entries");
-    }
-
-    // Defensive validation — never trust model output blindly, even though
-    // we constrained it heavily in the prompt.
-    const safeDrafts = drafts
-      .filter((d) => d && typeof d.title === "string")
-      .map((d) => ({
-        title: String(d.title).slice(0, 200),
-        taskCategory: String(d.taskCategory || "General").slice(0, 100),
-        taskType: validTypes.includes(d.taskType) ? d.taskType : validTypes[0],
-        description: String(d.description || "").slice(0, 1000),
-        timeSpent: Math.min(12, Math.max(0.5, Number(d.timeSpent) || 1)),
-        priority: ["LOW", "MEDIUM", "HIGH", "CRITICAL"].includes(d.priority)
-          ? d.priority
-          : "MEDIUM",
-        crossDepartment:
-          typeof d.crossDepartment === "string" ? d.crossDepartment : null,
-      }));
+    const safeDrafts = parseDraftsFromModelOutput(textBlock, validTypes);
 
     if (safeDrafts.length === 0) {
       return NextResponse.json(
-        { error: "Couldn't identify any distinct tasks in that text — try adding a bit more detail." },
+        { error: "Couldn't identify any distinct tasks in that text, try adding a bit more detail." },
         { status: 422 }
       );
     }
 
+    console.log(`[quick-capture] Success via ${providerUsed}, ${safeDrafts.length} drafts`);
     return NextResponse.json({ drafts: safeDrafts });
   } catch (err) {
-    console.error("Quick capture parse error:", err);
+    console.error("[quick-capture] Parse error from", providerUsed, ":", err);
     return NextResponse.json(
-      { error: "AI parsing failed. You can still log manually below." },
+      { error: "AI returned an unexpected format. You can still log manually below." },
       { status: 500 }
     );
   }

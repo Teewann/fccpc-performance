@@ -938,6 +938,7 @@ enum Role {
   SUPERVISOR
   HR
   DIRECTOR
+  HEAD_OF_DEPARTMENT   // ← new
   ADMIN
   EXECUTIVE
   INTERN
@@ -946,7 +947,7 @@ enum Role {
   CONTRACT
   CONSULTANT
   OTHER
-  CHIEF   // ✅ ADD THIS
+  CHIEF
 }
 
 enum Priority {
